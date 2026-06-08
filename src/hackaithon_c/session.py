@@ -13,6 +13,8 @@ class RunSession:
     output_dir: Path
     trace_dir: Path
     report_path: Path
+    review_tasks_json_path: Path
+    review_tasks_markdown_path: Path
 
 
 def prepare_run_session(
@@ -26,6 +28,8 @@ def prepare_run_session(
         output_dir=output_dir or run_dir / "output",
         trace_dir=trace_dir or run_dir / "traces",
         report_path=run_dir / "run-report.md",
+        review_tasks_json_path=run_dir / "review-tasks.json",
+        review_tasks_markdown_path=run_dir / "review-tasks.md",
     )
 
 
@@ -42,6 +46,7 @@ def write_run_report(
     model: str,
     summary: RunSummary,
     review: TraceReview | None = None,
+    review_tasks_path: Path | None = None,
 ) -> None:
     lines = [
         "# Neko Core Run Report",
@@ -80,6 +85,8 @@ def write_run_report(
                 f"- Findings: {len(review.findings)}",
             ]
         )
+        if review_tasks_path is not None:
+            lines.append(f"- Review tasks: {review_tasks_path}")
         for finding in review.findings[:10]:
             qid = f" [{finding.qid}]" if finding.qid else ""
             lines.append(

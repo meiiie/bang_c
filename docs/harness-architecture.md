@@ -91,10 +91,14 @@ so experiments can be compared without relying on memory or hidden local state.
 changed answers, input/config drift, confidence drift, and fallback drift.
 
 `--run-dir <path>` creates a development run session. The CLI writes
-`output/pred.csv`, `traces/`, and `run-report.md` under that directory, then
-runs the trace reviewer against the session trace. This gives the team one
-portable folder per experiment while keeping the final `/data` to `/output`
-contest contract unchanged.
+`output/pred.csv`, `traces/`, `run-report.md`, `review-tasks.md`, and
+`review-tasks.json` under that directory, then runs the trace reviewer against
+the session trace. This gives the team one portable folder per experiment while
+keeping the final `/data` to `/output` contest contract unchanged.
+
+`--review-tasks <trace-dir>` turns trace-review findings into an action queue.
+It is intentionally deterministic and model-free: subagents or teammates can
+pick up those tasks later, while the submission artifact stays unchanged.
 
 `scripts/evaluate.ps1` composes those run sessions into a higher-level eval
 session. Each workflow repeat gets its own run folder, then the eval report

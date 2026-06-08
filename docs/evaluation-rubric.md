@@ -69,6 +69,8 @@ Run `neko-core --review-trace <trace-dir>` after experiments to get a compact
 reviewer verdict. A `WARN` verdict is expected for heuristic or low-confidence
 development runs; a `FAIL` verdict means trace artifacts are missing, counts do
 not match, the prediction contract is invalid, or a trace step is blocked.
+Run `neko-core --review-tasks <trace-dir> --run-dir <path>` to convert those
+findings into a queue of concrete follow-up tasks.
 Use `run-manifest.json` in the same trace directory to compare config/input
 hashes before trusting differences between two runs.
 Use `neko-core --compare-traces <left> <right>` to separate real answer changes

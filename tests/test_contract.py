@@ -26,6 +26,11 @@ from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
 from hackaithon_c.project import init_project
 from hackaithon_c.review import render_trace_review, review_trace_dir
+from hackaithon_c.review_tasks import (
+    build_review_tasks,
+    render_review_tasks,
+    write_review_tasks_json,
+)
 from hackaithon_c.schema import Prediction, TraceStep
 from hackaithon_c.session import prepare_run_session, write_run_report
 from hackaithon_c.solver import solve_problem
@@ -262,6 +267,7 @@ class ContestContractTest(unittest.TestCase):
                 model="heuristic",
                 summary=summary,
                 review=review_trace_dir(session.trace_dir),
+                review_tasks_path=session.review_tasks_markdown_path,
             )
             report = session.report_path.read_text(encoding="utf-8")
 
@@ -270,6 +276,7 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("# Neko Core Run Report", report)
         self.assertIn("- Workflow: quick-dry-run", report)
         self.assertIn("- Verdict: FAIL", report)
+        self.assertIn("- Review tasks:", report)
 
     def test_doctor_reports_contract_without_requiring_input(self) -> None:
         checks = collect_doctor_checks(
@@ -541,6 +548,52 @@ class ContestContractTest(unittest.TestCase):
 
         self.assertEqual(review.verdict, "warn")
         self.assertIn("low_confidence", rendered)
+
+    def test_review_tasks_turn_trace_findings_into_action_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0013",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+            prediction = Prediction(
+                qid=problem.qid,
+                answer="A",
+                model="heuristic",
+                raw_answer="A",
+                strategy="fallback_overlap",
+                confidence=0.2,
+                trace=(
+                    TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                    TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True", "A"),
+                ),
+            )
+            trace_dir = Path(temp_dir) / "traces"
+            write_trace(trace_dir, [prediction])
+            write_summary(
+                trace_dir / "run-summary.json",
+                validate_predictions([problem], [prediction], self.config, trace_enabled=True),
+            )
+            review = review_trace_dir(trace_dir)
+            tasks = build_review_tasks(review)
+            rendered = render_review_tasks(tasks)
+            tasks_path = Path(temp_dir) / "review-tasks.json"
+            write_review_tasks_json(tasks_path, tasks)
+            payload = json.loads(tasks_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(tasks)
+        self.assertEqual(payload["schema_version"], "neko_core.review_tasks.v1")
+        self.assertIn("test_0013", rendered)
+        self.assertTrue(any(task.finding_code == "low_confidence" for task in tasks))
 
     def test_run_manifest_records_reproducible_run_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

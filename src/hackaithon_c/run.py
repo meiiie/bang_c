@@ -17,6 +17,12 @@ from .model_inventory import collect_model_inventory, render_model_inventory
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
 from .project import init_project
 from .review import render_trace_review, review_trace_dir
+from .review_tasks import (
+    build_review_tasks,
+    render_review_tasks,
+    write_review_tasks_json,
+    write_review_tasks_markdown,
+)
 from .session import prepare_run_session, write_run_report
 from .solver import solve_problem
 from .workflows import list_workflows, render_workflows, resolve_workflow
@@ -38,6 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
     parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
+    parser.add_argument("--review-tasks", default=None, help="Create reviewer task queue from a trace directory")
     parser.add_argument(
         "--compare-traces",
         nargs=2,
@@ -99,6 +106,18 @@ def main() -> int:
     if args.review_trace:
         review = review_trace_dir(Path(args.review_trace))
         print(render_trace_review(review))
+        return 1 if review.verdict == "fail" else 0
+
+    if args.review_tasks:
+        review = review_trace_dir(Path(args.review_tasks))
+        tasks = build_review_tasks(review)
+        rendered = render_review_tasks(tasks)
+        if args.run_dir:
+            session = prepare_run_session(Path(args.run_dir))
+            write_review_tasks_json(session.review_tasks_json_path, tasks)
+            write_review_tasks_markdown(session.review_tasks_markdown_path, tasks)
+            print(f"Review tasks: {session.review_tasks_markdown_path}")
+        print(rendered)
         return 1 if review.verdict == "fail" else 0
 
     if args.compare_traces:
@@ -199,6 +218,9 @@ def main() -> int:
         )
         if run_session is not None:
             review = review_trace_dir(trace_dir)
+            tasks = build_review_tasks(review)
+            write_review_tasks_json(run_session.review_tasks_json_path, tasks)
+            write_review_tasks_markdown(run_session.review_tasks_markdown_path, tasks)
             write_run_report(
                 run_session.report_path,
                 input_path=input_path,
@@ -211,6 +233,7 @@ def main() -> int:
                 model=client.model if client else "heuristic",
                 summary=summary,
                 review=review,
+                review_tasks_path=run_session.review_tasks_markdown_path,
             )
 
     print(f"Loaded {len(problems)} problems from {input_path}")

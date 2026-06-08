@@ -103,8 +103,9 @@ Configured workflow examples:
 ```
 
 `--run-dir` is a development session path. It writes `output/pred.csv`,
-`traces/`, and `run-report.md` together so experiments can be reviewed without
-remembering separate output and trace paths.
+`traces/`, `run-report.md`, `review-tasks.md`, and `review-tasks.json`
+together so experiments can be reviewed without remembering separate output and
+trace paths.
 
 Verification report inspired by Claude Code's verification-agent pattern:
 
@@ -134,6 +135,7 @@ Trace review:
 
 ```powershell
 .\neko-core.ps1 --review-trace traces-verify
+.\neko-core.ps1 --review-tasks traces-verify --run-dir run-review-tasks
 .\neko-core.ps1 --compare-traces traces-before traces-after
 ```
 
@@ -143,6 +145,8 @@ warnings, missing roles, and blocked steps without touching `pred.csv`.
 Trace comparison is also development-only; it compares manifest hashes,
 prediction counts, changed answers, confidence drift, and fallback drift between
 two runs.
+Review tasks convert non-info findings into an action queue that another agent
+or team member can work through without changing the contest artifact.
 
 Dry-run smoke test without API:
 

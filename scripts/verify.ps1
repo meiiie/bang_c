@@ -149,7 +149,16 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
             if (-not (Test-Path -LiteralPath "run-verify\output\pred.csv")) { throw "missing run output" }
             if (-not (Test-Path -LiteralPath "run-verify\traces\predictions.trace.jsonl")) { throw "missing run trace" }
             if (-not (Test-Path -LiteralPath "run-verify\run-report.md")) { throw "missing run report" }
+            if (-not (Test-Path -LiteralPath "run-verify\review-tasks.md")) { throw "missing review tasks markdown" }
+            if (-not (Test-Path -LiteralPath "run-verify\review-tasks.json")) { throw "missing review tasks json" }
             Get-Content -LiteralPath "run-verify\run-report.md" -TotalCount 20
+        }
+
+    Invoke-NekoCheck "Review task queue reads quick workflow artifacts" `
+        ".\neko-core.ps1 --review-tasks run-verify\traces --run-dir run-review-tasks" `
+        {
+            & ".\neko-core.ps1" --review-tasks "run-verify\traces" --run-dir "run-review-tasks"
+            if (-not (Test-Path -LiteralPath "run-review-tasks\review-tasks.md")) { throw "missing review task queue" }
         }
 
     Invoke-NekoCheck "Trace reviewer reads quick workflow artifacts" `
