@@ -49,8 +49,42 @@ function Count-ChangedAnswers {
     return $changed
 }
 
+function Invoke-NekoTextCommand {
+    param(
+        [string[]]$Arguments,
+        [string]$OutputPath
+    )
+
+    $global:LASTEXITCODE = 0
+    $output = (
+        & ".\neko-core.ps1" @Arguments 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $_.Exception.Message
+            } else {
+                $_.ToString()
+            }
+        } | Out-String
+    ).TrimEnd()
+    $exitCode = [int]$global:LASTEXITCODE
+    Set-Content -LiteralPath $OutputPath -Value $output -Encoding UTF8
+    return [pscustomobject]@{
+        output = $output
+        exit_code = $exitCode
+    }
+}
+
+function Read-Verdict {
+    param([string]$Text)
+
+    if ($Text -match 'Verdict:\s*([A-Za-z]+)') {
+        return $Matches[1].ToUpperInvariant()
+    }
+    return "UNKNOWN"
+}
+
 $results = New-Object System.Collections.Generic.List[object]
 $baselinePredictions = $null
+$baselineTraceDir = $null
 
 foreach ($workflow in $Workflows) {
     for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
@@ -83,7 +117,22 @@ foreach ($workflow in $Workflows) {
         if ($null -eq $baselinePredictions) {
             $baselinePredictions = $predictions
         }
+        if ($null -eq $baselineTraceDir) {
+            $baselineTraceDir = $traceDir
+        }
         $changed = Count-ChangedAnswers -Baseline $baselinePredictions -Current $predictions
+
+        $reviewReportPath = Join-Path $caseDir "review.txt"
+        $review = Invoke-NekoTextCommand `
+            -Arguments @("--review-trace", $traceDir) `
+            -OutputPath $reviewReportPath
+        $reviewVerdict = Read-Verdict $review.output
+
+        $compareReportPath = Join-Path $caseDir "compare-to-first.txt"
+        $compare = Invoke-NekoTextCommand `
+            -Arguments @("--compare-traces", $baselineTraceDir, $traceDir) `
+            -OutputPath $compareReportPath
+        $compareVerdict = Read-Verdict $compare.output
 
         $results.Add([pscustomobject]@{
             workflow = $workflow
@@ -94,8 +143,12 @@ foreach ($workflow in $Workflows) {
             confidence = [double]$summary.average_confidence
             fallbacks = [int]$summary.fallbacks
             changed_vs_first = $changed
+            review = $reviewVerdict
+            compare = $compareVerdict
             output = $predPath
             trace = $traceDir
+            review_report = $reviewReportPath
+            compare_report = $compareReportPath
         }) | Out-Null
     }
 }
@@ -103,9 +156,11 @@ foreach ($workflow in $Workflows) {
 Write-Output ""
 Write-Output "Neko Core Eval Report"
 Write-Output "Run directory: $runDir"
-$results | Format-Table workflow, run, valid, total, score, confidence, fallbacks, changed_vs_first -AutoSize | Out-String | Write-Output
+$results | Format-Table workflow, run, valid, total, score, confidence, fallbacks, changed_vs_first, review, compare -AutoSize | Out-String | Write-Output
 
 $invalid = @($results | Where-Object { -not $_.valid })
+$reviewFailures = @($results | Where-Object { $_.review -eq "FAIL" -or $_.review -eq "UNKNOWN" })
+$comparisonFailures = @($results | Where-Object { $_.compare -eq "FAIL" -or $_.compare -eq "UNKNOWN" })
 $unstable = @(
     $results |
         Group-Object workflow |
@@ -116,6 +171,16 @@ $unstable = @(
 )
 
 if ($invalid.Count -gt 0) {
+    Write-Output "EVAL VERDICT: FAIL"
+    exit 1
+}
+
+if ($reviewFailures.Count -gt 0) {
+    Write-Output "EVAL VERDICT: FAIL"
+    exit 1
+}
+
+if ($comparisonFailures.Count -gt 0) {
     Write-Output "EVAL VERDICT: FAIL"
     exit 1
 }

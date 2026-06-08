@@ -55,6 +55,7 @@ and reports:
 - average confidence;
 - fallback count;
 - answer changes compared with the first run.
+- reviewer verdict and trace-comparison verdict for each run.
 
 Inspect `predictions.trace.jsonl` for each changed or low-confidence answer.
 The `trace` field records the agent-style path that produced the answer, which

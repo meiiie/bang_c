@@ -50,8 +50,8 @@ Runtime modules:
 - `workflows.py`: resolves named workflow profiles from config.
 - `scripts/verify.ps1`: dev-only verification runner that emits
   command/output/result evidence and a final verdict.
-- `scripts/evaluate.ps1`: dev-only workflow comparison runner for stability
-  and harness-score review.
+- `scripts/evaluate.ps1`: dev-only workflow comparison runner for stability,
+  trace review, trace comparison, and harness-score review.
 - `compare.py`: compares two trace-enabled runs using manifests and prediction
   trace rows.
 - `config.py`: loads schema-versioned harness config.
