@@ -3,7 +3,7 @@
 [![CI](https://github.com/meiiie/bang_c/actions/workflows/ci.yml/badge.svg)](https://github.com/meiiie/bang_c/actions/workflows/ci.yml)
 [![Release](https://github.com/meiiie/bang_c/actions/workflows/release.yml/badge.svg)](https://github.com/meiiie/bang_c/actions/workflows/release.yml)
 
-![Neko Core banner](docs/assets/neko-core-banner.png)
+![Neko Core banner](docs/assets/neko-core-banner-left-logo.png)
 
 Status: draft competition harness
 

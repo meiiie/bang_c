@@ -22,12 +22,16 @@ to web hosting.
 
 ## Routing Policy
 
-Prefer immutable release tags for the public install endpoints:
+Prefer immutable release tags for stable public install endpoints:
 
 ```text
 /install.ps1 -> https://raw.githubusercontent.com/meiiie/bang_c/v0.3.1/install.ps1
 /install.sh  -> https://raw.githubusercontent.com/meiiie/bang_c/v0.3.1/install.sh
 ```
+
+The current deployed domain uses `main` while installer polish is still moving
+quickly. After the next release tag, set `NEKO_RELEASE_TAG` in
+`deploy/cloudflare/wrangler.jsonc` to that tag and redeploy.
 
 Use explicit development endpoints for `main`:
 
@@ -41,18 +45,25 @@ testing.
 
 ## Cloudflare Worker Plan
 
-Deploy `deploy/cloudflare/install-router.js` as a small redirect worker on
-`neko.holilihu.online/*`.
+Deploy `deploy/cloudflare/install-router.js` with
+`deploy/cloudflare/wrangler.jsonc` as a small redirect worker on
+`neko.holilihu.online`.
 
 Required Cloudflare settings:
 
-- route or custom domain: `neko.holilihu.online/*`
+- custom domain: `neko.holilihu.online`
 - `NEKO_RELEASE_TAG`: current stable tag, for example `v0.3.1`
 - `NEKO_REPO_RAW_BASE`: `https://raw.githubusercontent.com/meiiie/bang_c`
 - `NEKO_GITHUB_URL`: `https://github.com/meiiie/bang_c`
 
 The worker should only redirect installer assets and the project home page. It
 must not proxy API keys, model calls, contest data, or Docker scoring traffic.
+
+Deploy command:
+
+```powershell
+npx --yes wrangler deploy --config deploy/cloudflare/wrangler.jsonc
+```
 
 ## Why Domain Is Optional
 

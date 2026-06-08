@@ -1,0 +1,17 @@
+{
+  "name": "neko-core-install-router",
+  "main": "install-router.js",
+  "compatibility_date": "2026-06-08",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "neko.holilihu.online",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "NEKO_RELEASE_TAG": "main",
+    "NEKO_REPO_RAW_BASE": "https://raw.githubusercontent.com/meiiie/bang_c",
+    "NEKO_GITHUB_URL": "https://github.com/meiiie/bang_c"
+  }
+}
