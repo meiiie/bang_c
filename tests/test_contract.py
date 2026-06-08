@@ -848,6 +848,67 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(prediction.trace[-1].role, "evidence-adjudicator")
         self.assertIn("direct passage evidence favored A", prediction.trace[-1].detail)
 
+    def test_calculation_adjudicator_overrides_gdp_inflation_drift(self) -> None:
+        problem = Problem(
+            qid="test_gdp_inflation",
+            question=(
+                "Trong mot nam nhat dinh, GDP danh nghia cua mot quoc gia la 500 ty USD "
+                "va GDP thuc te la 400 ty USD. Neu chi so gia GDP cua nam truoc la 100, "
+                "thi ty le lam phat cho nam hien tai la bao nhieu?"
+            ),
+            choices=("20%", "25%", "30%", "15%"),
+        )
+        client = FakeClient(["A", "A"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.strategy, "gemma_verified_calculation")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("gdp inflation calculation favored B", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_overrides_cylinder_rate_repair(self) -> None:
+        problem = Problem(
+            qid="test_cylinder_rate",
+            question=(
+                "Một bể chứa hình trụ đang được đổ đầy nước với tốc độ không đổi là "
+                "50 centimet khối mỗi giây. Khi độ cao của nước trong bể là 10 cm, "
+                "bán kính của bể là 5 cm. Hỏi tốc độ tăng của độ cao nước là bao nhiêu?"
+            ),
+            choices=(
+                "0.2 cm/giay",
+                "0.4 cm/giay",
+                "0.6 cm/giay",
+                "0.8 cm/giay",
+                "1.0 cm/giay",
+                "1.2 cm/giay",
+                "1.4 cm/giay",
+                "1.6 cm/giay",
+                "1.8 cm/giay",
+                "2.0 cm/giay",
+            ),
+        )
+        client = FakeClient(["The volume of a cylinder is V = pi r^2 h.", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "C")
+        self.assertEqual(prediction.strategy, "gemma_repaired_calculation")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("cylinder fill rate calculation favored C", prediction.trace[-1].detail)
+
     def test_solver_repairs_invalid_model_output_before_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "public_test.json"

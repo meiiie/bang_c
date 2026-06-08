@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import replace
 
+from .calculation import adjudicate_calculation
 from .classifier import classify_problem
 from .config import HarnessConfig
 from .evidence import adjudicate_direct_evidence
@@ -164,6 +165,75 @@ def _solve_direct(
                     answer=repaired_answer,
                 )
             )
+            calculation_decision = adjudicate_calculation(problem)
+            if calculation_decision is not None:
+                trace_steps.append(
+                    TraceStep(
+                        role="calculation-adjudicator",
+                        action="deterministic_formula_check",
+                        status="warning"
+                        if calculation_decision.answer != repaired_answer
+                        else "completed",
+                        detail=calculation_decision.detail,
+                        answer=calculation_decision.answer,
+                    )
+                )
+                return Prediction(
+                    qid=problem.qid,
+                    answer=calculation_decision.answer,
+                    model=client.model,
+                    raw_answer=(
+                        f"{prompt.variant}={raw_answer.strip()} | "
+                        f"repair={raw_repair.strip()} | "
+                        f"calculation={calculation_decision.answer}"
+                    ),
+                    strategy="gemma_repaired_calculation",
+                    confidence=0.82,
+                    question_kind=profile.kind,
+                    prompt_variant=prompt.variant,
+                    attempts=2,
+                    trace=tuple(trace_steps),
+                )
+            if verify:
+                raw_verifier, verified = _verify(
+                    problem,
+                    client,
+                    repaired_answer,
+                    config=config,
+                )
+                if verified is not None:
+                    trace_steps.append(
+                        TraceStep(
+                            role="verifier",
+                            action="answer_only_check",
+                            status="completed",
+                            detail=_verification_detail(raw_verifier),
+                            answer=verified,
+                        )
+                    )
+                    return Prediction(
+                        qid=problem.qid,
+                        answer=verified,
+                        model=client.model,
+                        raw_answer=(
+                            f"{prompt.variant}={raw_answer.strip()} | "
+                            f"repair={raw_repair.strip()} | verifier={raw_verifier.strip()}"
+                        ),
+                        strategy="gemma_repaired_verified",
+                        confidence=0.74 if verified != repaired_answer else 0.78,
+                        question_kind=profile.kind,
+                        prompt_variant=prompt.variant,
+                        attempts=3,
+                        trace=tuple(trace_steps),
+                    )
+                trace_steps.append(
+                    TraceStep(
+                        role="verifier",
+                        action="answer_only_check",
+                        status="warning",
+                        detail="verifier output was not a valid answer letter",
+                    )
+                )
             return Prediction(
                 qid=problem.qid,
                 answer=repaired_answer,
@@ -206,6 +276,37 @@ def _solve_direct(
                     answer=verified,
                 )
             )
+            calculation_decision = adjudicate_calculation(problem)
+            if calculation_decision is not None:
+                trace_steps.append(
+                    TraceStep(
+                        role="calculation-adjudicator",
+                        action="deterministic_formula_check",
+                        status="warning"
+                        if calculation_decision.answer != verified
+                        else "completed",
+                        detail=calculation_decision.detail,
+                        answer=calculation_decision.answer,
+                    )
+                )
+                return Prediction(
+                    qid=problem.qid,
+                    answer=calculation_decision.answer,
+                    model=client.model,
+                    raw_answer=(
+                        f"{prompt.variant}={raw_answer.strip()} | "
+                        f"verifier={raw_verifier.strip()} | "
+                        f"calculation={calculation_decision.answer}"
+                    ),
+                    strategy="gemma_verified_calculation",
+                    confidence=0.86
+                    if calculation_decision.answer == verified
+                    else 0.76,
+                    question_kind=profile.kind,
+                    prompt_variant=prompt.variant,
+                    attempts=2,
+                    trace=tuple(trace_steps),
+                )
             evidence_decision = adjudicate_direct_evidence(problem, verified, config)
             if evidence_decision is not None:
                 trace_steps.append(
@@ -237,7 +338,10 @@ def _solve_direct(
                 qid=problem.qid,
                 answer=verified,
                 model=client.model,
-                raw_answer=f"{prompt.variant}={raw_answer.strip()} | verifier={raw_verifier.strip()}",
+                raw_answer=(
+                    f"{prompt.variant}={raw_answer.strip()} | "
+                    f"verifier={raw_verifier.strip()}"
+                ),
                 strategy="gemma_verified",
                 confidence=0.88 if verified == normalized else 0.72,
                 question_kind=profile.kind,
@@ -252,6 +356,34 @@ def _solve_direct(
                 status="warning",
                 detail="verifier output was not a valid answer letter",
             )
+        )
+
+    calculation_decision = adjudicate_calculation(problem)
+    if calculation_decision is not None:
+        trace_steps.append(
+            TraceStep(
+                role="calculation-adjudicator",
+                action="deterministic_formula_check",
+                status="warning"
+                if calculation_decision.answer != normalized
+                else "completed",
+                detail=calculation_decision.detail,
+                answer=calculation_decision.answer,
+            )
+        )
+        return Prediction(
+            qid=problem.qid,
+            answer=calculation_decision.answer,
+            model=client.model,
+            raw_answer=(
+                f"{prompt.variant}={raw_answer.strip()} | "
+                f"calculation={calculation_decision.answer}"
+            ),
+            strategy="gemma_direct_calculation",
+            confidence=0.80 if calculation_decision.answer == normalized else 0.70,
+            question_kind=profile.kind,
+            prompt_variant=prompt.variant,
+            trace=tuple(trace_steps),
         )
 
     return Prediction(
