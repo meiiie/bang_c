@@ -70,6 +70,8 @@ Runtime modules:
 - `classifier.py`: profiles item shape using config markers and thresholds.
 - `prompting.py`: builds prompt variants from the profile.
 - `nvidia_client.py`: provider boundary.
+- `policy.py`: audits runtime/development boundaries across command, tool, and
+  agent registries.
 - `solver.py`: strategy orchestration.
 - `tool_registry.py`: documents named tool contracts, permission class,
   inputs, outputs, and safety guardrails.
@@ -138,6 +140,13 @@ operate the harness: identity checks, local config, diagnostics, registries,
 runtime solving, run sessions, trace review, task resolution, verification, and
 evals. It gives contributors a stable command vocabulary before the project
 adds heavier interactive or subagent orchestration.
+
+`--policy` audits the registry boundary itself. It verifies that runtime tools
+are not external or quarantined, development-only outputs do not leak into
+runtime tools, web research and subagent review remain quarantined, and the run
+command/exporter preserve the contest artifact contract. This is the first
+Claude Code-style permission layer: read-only today, a future enforcement gate
+for richer workflows.
 
 `scripts/evaluate.ps1` composes those run sessions into a higher-level eval
 session. Each workflow repeat gets its own run folder, then the eval report
@@ -219,13 +228,13 @@ Useful patterns from the local Claude Code snapshot:
 
 For Neko Core, the first adapted slices are `--doctor`, `--capabilities`,
 `--agents`, `--agent`, `--tools`, `--tool`, `--commands`, `--command`,
-`--list-workflows`, `scripts/verify.ps1`, and `scripts/evaluate.ps1`. They
-prove config, contract, model, key presence, input discovery, the
+`--policy`, `--list-workflows`, `scripts/verify.ps1`, and `scripts/evaluate.ps1`.
+They prove config, contract, model, key presence, input discovery, the
 runtime/development boundary, role handoffs, tool guardrails, command
-guardrails, verification evidence, and workflow stability without running
-inference unless explicitly requested. Future work should add subagent-style
-evaluation reviewers in the same style, while keeping the final Docker contract
-narrow.
+guardrails, policy boundaries, verification evidence, and workflow stability
+without running inference unless explicitly requested. Future work should add
+subagent-style evaluation reviewers in the same style, while keeping the final
+Docker contract narrow.
 
 ## Wiii Reuse Path
 

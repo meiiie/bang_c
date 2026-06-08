@@ -92,6 +92,15 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             guardrail="Read-only command registry; useful before running heavier workflows.",
         ),
         CommandSpec(
+            name="policy",
+            phase="cli",
+            category="diagnostics",
+            option="--policy",
+            description="Audit runtime/development boundaries across commands, tools, and agents.",
+            example=".\\neko-core.ps1 --policy",
+            guardrail="Read-only policy audit; fails when a dev-only surface leaks into runtime.",
+        ),
+        CommandSpec(
             name="workflows",
             phase="cli",
             category="registry",

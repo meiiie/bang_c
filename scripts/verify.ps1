@@ -138,6 +138,10 @@ Invoke-NekoCheck "Command registry fast path" `
         & ".\neko-core.ps1" --command "run"
     }
 
+Invoke-NekoCheck "Policy audit fast path" `
+    ".\neko-core.ps1 --policy" `
+    { & ".\neko-core.ps1" --policy }
+
 Invoke-NekoCheck "Model inventory fast path without API key" `
     ".\neko-core.ps1 --model-inventory --run-dir run-model-inventory with NVIDIA_API_KEY cleared" `
     {

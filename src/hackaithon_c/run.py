@@ -23,6 +23,7 @@ from .loader import filter_problems_by_qids, find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
 from .model_inventory import collect_model_inventory, render_model_inventory
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
+from .policy import evaluate_policy, render_policy_report
 from .project import init_project
 from .review import render_trace_review, review_trace_dir
 from .review_tasks import (
@@ -63,6 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tool", default=None, help="Print one harness tool contract")
     parser.add_argument("--commands", action="store_true", help="Print harness command registry")
     parser.add_argument("--command", default=None, help="Print one harness command contract")
+    parser.add_argument("--policy", action="store_true", help="Audit harness runtime/development policy")
     parser.add_argument("--model-inventory", action="store_true", help="Probe provider models and Bang C eligibility")
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
@@ -156,6 +158,11 @@ def main() -> int:
             print(f"Error: {error}", file=sys.stderr)
             return 2
         return 0
+
+    if args.policy:
+        report = evaluate_policy(config)
+        print(render_policy_report(report))
+        return 1 if report.verdict == "fail" else 0
 
     if args.model_inventory:
         report = collect_model_inventory(config)

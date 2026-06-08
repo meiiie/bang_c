@@ -31,6 +31,7 @@ from hackaithon_c.model_inventory import (
     render_model_inventory,
 )
 from hackaithon_c.normalize import normalize_answer
+from hackaithon_c.policy import evaluate_policy, render_policy_report
 from hackaithon_c.prompting import build_prompt
 from hackaithon_c.project import init_project
 from hackaithon_c.review import render_trace_review, review_trace_dir
@@ -467,6 +468,7 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("agent_registry", report)
         self.assertIn("tool_registry", report)
         self.assertIn("command_registry", report)
+        self.assertIn("policy_audit", report)
         self.assertIn("model_inventory", report)
         self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
         self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
@@ -513,10 +515,20 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(run.phase, "runtime")
         self.assertIn("contest-auto", run.example)
         self.assertIn("pred.csv", detail)
+        self.assertEqual(resolve_command(self.config, "policy").phase, "cli")
         self.assertEqual(trace_review.phase, "development")
         self.assertIn("do not mutate pred.csv", trace_review.guardrail)
         with self.assertRaises(ValueError):
             resolve_command(self.config, "missing-command")
+
+    def test_policy_audit_keeps_development_tools_quarantined(self) -> None:
+        report = evaluate_policy(self.config)
+        rendered = render_policy_report(report)
+
+        self.assertEqual(report.verdict, "pass")
+        self.assertFalse(report.findings)
+        self.assertIn("Neko Core policy", rendered)
+        self.assertIn("runtime/development boundaries are consistent", rendered)
 
     def test_model_inventory_filters_bang_c_allowed_models(self) -> None:
         payload = {
