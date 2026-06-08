@@ -19,16 +19,23 @@ class NvidiaConfig:
     max_retries: int = 2
 
     @classmethod
-    def from_env(cls) -> "NvidiaConfig":
+    def from_env(
+        cls,
+        *,
+        default_base_url: str = DEFAULT_BASE_URL,
+        default_model: str = DEFAULT_MODEL,
+        default_timeout_seconds: int = 90,
+        default_max_retries: int = 2,
+    ) -> "NvidiaConfig":
         api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("NVIDIA_API_KEY is required unless --dry-run is used")
         return cls(
             api_key=api_key,
-            base_url=os.environ.get("NVIDIA_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
-            model=os.environ.get("HACKC_LLM_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL,
-            timeout_seconds=int(os.environ.get("HACKC_TIMEOUT_SECONDS", "90")),
-            max_retries=int(os.environ.get("HACKC_MAX_RETRIES", "2")),
+            base_url=os.environ.get("NVIDIA_BASE_URL", default_base_url).rstrip("/"),
+            model=os.environ.get("HACKC_LLM_MODEL", default_model).strip() or default_model,
+            timeout_seconds=int(os.environ.get("HACKC_TIMEOUT_SECONDS", str(default_timeout_seconds))),
+            max_retries=int(os.environ.get("HACKC_MAX_RETRIES", str(default_max_retries))),
         )
 
 

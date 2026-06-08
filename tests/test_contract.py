@@ -7,15 +7,32 @@ import unittest
 from pathlib import Path
 
 from hackaithon_c.classifier import classify_problem
+from hackaithon_c.config import load_config
 from hackaithon_c.evaluation import validate_predictions
 from hackaithon_c.exporter import write_predictions
 from hackaithon_c.loader import load_problems
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
 from hackaithon_c.schema import Prediction
+from hackaithon_c.solver import solve_problem
+
+
+class FakeClient:
+    model = "fake/gemma-4"
+
+    def __init__(self, answers: list[str]) -> None:
+        self.answers = answers
+        self.calls: list[tuple[str, str, int]] = []
+
+    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
+        self.calls.append((system_prompt, user_prompt, max_tokens))
+        return self.answers.pop(0)
 
 
 class ContestContractTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.config = load_config()
+
     def test_json_loader_supports_public_test_shape(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "public_test.json"
@@ -74,11 +91,39 @@ class ContestContractTest(unittest.TestCase):
             )
             problem = load_problems(path)[0]
 
-        profile = classify_problem(problem)
+        profile = classify_problem(problem, self.config)
 
         self.assertEqual(profile.kind, "many_choice")
         self.assertTrue(profile.should_tournament)
-        self.assertEqual(build_prompt(problem, profile).variant, "elimination")
+        self.assertEqual(build_prompt(problem, profile, config=self.config).variant, "elimination")
+
+    def test_classifier_handles_translated_negative_question(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "private_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "private_0001",
+                            "question": "Texto: La capital es Paris.\nPregunta: Cual opcion no es correcta?",
+                            "choices": ["Paris es capital", "Berlin es capital", "Francia esta en Europa", "Paris esta en Francia"],
+                        }
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+
+        profile = classify_problem(problem, self.config)
+
+        self.assertEqual(profile.kind, "negative")
+        self.assertEqual(profile.prompt_variant, "elimination")
+
+    def test_default_config_has_expected_contract_shape(self) -> None:
+        self.assertEqual(self.config.output_columns, ("qid", "answer"))
+        self.assertIn("private_test.csv", self.config.input_candidates)
+        self.assertGreater(self.config.rubric["contract"], 0)
 
     def test_normalize_answer_prefers_last_visible_valid_letter(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -149,10 +194,38 @@ class ContestContractTest(unittest.TestCase):
                     confidence=1.0,
                 )
             ],
+            self.config,
         )
 
         self.assertFalse(summary.valid)
         self.assertEqual(summary.issues[0].code, "invalid_answer_letter")
+
+    def test_solver_direct_uses_configured_prompt_without_runtime_name_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0006",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+
+        prediction = solve_problem(
+            problem,
+            FakeClient(["B"]),  # type: ignore[arg-type]
+            strategy="direct",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.strategy, "gemma_direct")
 
 
 if __name__ == "__main__":

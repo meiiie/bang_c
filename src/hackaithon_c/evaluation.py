@@ -5,6 +5,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .config import HarnessConfig
 from .schema import Prediction, Problem
 
 
@@ -25,11 +26,15 @@ class RunSummary:
     question_kinds: dict[str, int]
     fallbacks: int
     average_confidence: float
+    harness_score: dict[str, float]
 
 
 def validate_predictions(
     problems: list[Problem],
     predictions: list[Prediction],
+    config: HarnessConfig,
+    *,
+    trace_enabled: bool = False,
 ) -> RunSummary:
     issues: list[ValidationIssue] = []
     problem_by_qid = {problem.qid: problem for problem in problems}
@@ -72,16 +77,53 @@ def validate_predictions(
             sum(prediction.confidence for prediction in predictions) / len(predictions),
             4,
         )
-    return RunSummary(
+    fallbacks = sum(1 for prediction in predictions if prediction.fallback_reason)
+    base = RunSummary(
         total_problems=len(problems),
         total_predictions=len(predictions),
         valid=not issues,
         issues=tuple(issues),
         strategies=dict(sorted(strategies.items())),
         question_kinds=dict(sorted(question_kinds.items())),
-        fallbacks=sum(1 for prediction in predictions if prediction.fallback_reason),
+        fallbacks=fallbacks,
         average_confidence=average_confidence,
+        harness_score={},
     )
+    return RunSummary(
+        total_problems=base.total_problems,
+        total_predictions=base.total_predictions,
+        valid=base.valid,
+        issues=base.issues,
+        strategies=base.strategies,
+        question_kinds=base.question_kinds,
+        fallbacks=base.fallbacks,
+        average_confidence=base.average_confidence,
+        harness_score=score_harness(base, config, trace_enabled=trace_enabled),
+    )
+
+
+def score_harness(
+    summary: RunSummary,
+    config: HarnessConfig,
+    *,
+    trace_enabled: bool,
+) -> dict[str, float]:
+    weights = config.rubric
+    contract = float(weights["contract"] if summary.valid else 0)
+    reproducibility = float(weights["reproducibility"])
+    fallback_ratio = summary.fallbacks / max(1, summary.total_predictions)
+    robustness = float(weights["robustness"] * max(0.0, 1.0 - fallback_ratio))
+    runtime_discipline = float(weights["runtime_discipline"])
+    traceability = float(weights["traceability"] if trace_enabled else 0)
+    total = contract + reproducibility + robustness + runtime_discipline + traceability
+    return {
+        "total": round(total, 2),
+        "contract": round(contract, 2),
+        "reproducibility": round(reproducibility, 2),
+        "robustness": round(robustness, 2),
+        "runtime_discipline": round(runtime_discipline, 2),
+        "traceability": round(traceability, 2),
+    }
 
 
 def write_summary(path: Path, summary: RunSummary) -> None:

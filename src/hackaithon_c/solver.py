@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 
 from .classifier import classify_problem
+from .config import HarnessConfig
 from .heuristic import fallback_answer
 from .normalize import normalize_answer
 from .nvidia_client import NvidiaChatClient
@@ -21,8 +22,13 @@ def solve_problem(
     verify: bool = False,
     strategy: SolverStrategy = "auto",
     fail_fast: bool = False,
+    config: HarnessConfig | None = None,
 ) -> Prediction:
-    profile = classify_problem(problem)
+    if config is None:
+        from .config import load_config
+
+        config = load_config()
+    profile = classify_problem(problem, config)
     if dry_run or client is None:
         answer, confidence, strategy = fallback_answer(problem)
         return Prediction(
@@ -38,12 +44,12 @@ def solve_problem(
 
     try:
         if strategy == "direct":
-            return _solve_direct(problem, profile, client, verify=verify)
+            return _solve_direct(problem, profile, client, config=config, verify=verify)
         if strategy == "verify":
-            return _solve_direct(problem, profile, client, verify=True)
+            return _solve_direct(problem, profile, client, config=config, verify=True)
         if strategy == "tournament":
-            return _solve_tournament(problem, profile, client, verify=verify)
-        return _solve_auto(problem, profile, client, force_verify=verify)
+            return _solve_tournament(problem, profile, client, config=config, verify=verify)
+        return _solve_auto(problem, profile, client, config=config, force_verify=verify)
     except Exception as error:  # noqa: BLE001 - keep pred.csv complete by default
         if fail_fast:
             raise
@@ -66,14 +72,16 @@ def _solve_auto(
     profile: ProblemProfile,
     client: NvidiaChatClient,
     *,
+    config: HarnessConfig,
     force_verify: bool,
 ) -> Prediction:
     if profile.should_tournament:
-        return _solve_tournament(problem, profile, client, verify=True)
+        return _solve_tournament(problem, profile, client, config=config, verify=True)
     return _solve_direct(
         problem,
         profile,
         client,
+        config=config,
         verify=force_verify or profile.should_verify,
     )
 
@@ -83,9 +91,10 @@ def _solve_direct(
     profile: ProblemProfile,
     client: NvidiaChatClient,
     *,
+    config: HarnessConfig,
     verify: bool,
 ) -> Prediction:
-    prompt = build_prompt(problem, profile)
+    prompt = build_prompt(problem, profile, config=config)
     raw_answer = client.complete(
         prompt.system_prompt,
         prompt.user_prompt,
@@ -133,11 +142,12 @@ def _solve_tournament(
     profile: ProblemProfile,
     client: NvidiaChatClient,
     *,
+    config: HarnessConfig,
     verify: bool,
 ) -> Prediction:
     attempts: list[tuple[str, str, str | None]] = []
     for variant in tournament_variants(profile):
-        prompt = build_prompt(problem, profile, variant)
+        prompt = build_prompt(problem, profile, config=config, variant=variant)
         raw_answer = client.complete(
             prompt.system_prompt,
             prompt.user_prompt,

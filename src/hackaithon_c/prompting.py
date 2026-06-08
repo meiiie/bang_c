@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .config import HarnessConfig
 from .schema import Problem, ProblemProfile
 
 
@@ -22,7 +23,13 @@ class PromptBundle:
     max_tokens: int = 12
 
 
-def build_prompt(problem: Problem, profile: ProblemProfile, variant: str | None = None) -> PromptBundle:
+def build_prompt(
+    problem: Problem,
+    profile: ProblemProfile,
+    *,
+    config: HarnessConfig,
+    variant: str | None = None,
+) -> PromptBundle:
     selected_variant = variant or profile.prompt_variant
     builder = {
         "direct": _direct_prompt,
@@ -32,7 +39,7 @@ def build_prompt(problem: Problem, profile: ProblemProfile, variant: str | None 
     }.get(selected_variant, _direct_prompt)
     return PromptBundle(
         system_prompt=SYSTEM_PROMPT,
-        user_prompt=builder(problem),
+        user_prompt=builder(problem, config),
         variant=selected_variant,
     )
 
@@ -63,7 +70,7 @@ def tournament_variants(profile: ProblemProfile) -> tuple[str, ...]:
     return ("direct", "evidence")
 
 
-def _direct_prompt(problem: Problem) -> str:
+def _direct_prompt(problem: Problem, config: HarnessConfig) -> str:
     return (
         "Choose the best answer.\n\n"
         f"{_format_problem(problem)}\n\n"
@@ -71,8 +78,8 @@ def _direct_prompt(problem: Problem) -> str:
     )
 
 
-def _evidence_prompt(problem: Problem) -> str:
-    context, query = _split_context_and_query(problem.question)
+def _evidence_prompt(problem: Problem, config: HarnessConfig) -> str:
+    context, query = _split_context_and_query(problem.question, config.markers["question"])
     if context:
         body = (
             "Read the context, then answer the question using only evidence in the context.\n\n"
@@ -88,7 +95,7 @@ def _evidence_prompt(problem: Problem) -> str:
     return body + f"Return exactly one letter from: {_letters(problem)}"
 
 
-def _elimination_prompt(problem: Problem) -> str:
+def _elimination_prompt(problem: Problem, config: HarnessConfig) -> str:
     return (
         "Choose by elimination. Pay close attention to negative wording such as "
         "'khong dung', 'khong phai', 'ngoai tru', and 'sai'.\n\n"
@@ -97,7 +104,7 @@ def _elimination_prompt(problem: Problem) -> str:
     )
 
 
-def _calculation_prompt(problem: Problem) -> str:
+def _calculation_prompt(problem: Problem, config: HarnessConfig) -> str:
     return (
         "Solve the quantitative or logical question carefully. Use the numbers "
         "in the prompt, compare with the options, then return the matching letter.\n\n"
@@ -121,14 +128,18 @@ def _letters(problem: Problem) -> str:
     return ", ".join(problem.allowed_letters)
 
 
-def _split_context_and_query(question: str) -> tuple[str, str]:
-    markers = (
-        r"\n\s*Cau hoi\s*:",
-        r"\n\s*Câu hỏi\s*:",
-        r"\n\s*Question\s*:",
+def _split_context_and_query(question: str, markers: tuple[str, ...]) -> tuple[str, str]:
+    patterns = [rf"\n\s*{re.escape(marker)}" for marker in markers]
+    patterns.extend(
+        (
+            r"\n\s*Câu hỏi\s*:",
+            r"\n\s*Question\s*:",
+            r"\n\s*Pregunta\s*:",
+            r"\n\s*Question\s*:",
+        )
     )
-    for marker in markers:
-        match = re.search(marker, question, flags=re.IGNORECASE)
+    for pattern in patterns:
+        match = re.search(pattern, question, flags=re.IGNORECASE)
         if match:
             context = question[: match.start()].strip()
             query = question[match.end() :].strip()

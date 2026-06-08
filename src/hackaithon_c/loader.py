@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .config import HarnessConfig
 from .schema import Problem
 
 
@@ -19,18 +20,8 @@ _CHOICE_KEYS = (
 _LETTER_KEYS = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 
-def find_input_file(data_dir: Path) -> Path:
-    candidates = (
-        "private_test.csv",
-        "public_test.csv",
-        "private-test.csv",
-        "public-test.csv",
-        "private_test.json",
-        "public_test.json",
-        "private-test.json",
-        "public-test.json",
-    )
-    for name in candidates:
+def find_input_file(data_dir: Path, config: HarnessConfig) -> Path:
+    for name in config.input_candidates:
         path = data_dir / name
         if path.exists():
             return path

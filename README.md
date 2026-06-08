@@ -20,6 +20,21 @@ container stays small and reproducible.
   - `BGE-M3`
   - `Qwen-Rerank`
 
+## Config-First Harness
+
+Runtime behavior is configured through `configs/default.json`:
+
+- input file candidates;
+- output filename and columns;
+- default model and NVIDIA base URL;
+- retry/timeout policy;
+- multilingual profiling markers;
+- classifier thresholds;
+- harness rubric weights.
+
+Use `--config path\to\config.json` to run a different profile. The goal is to
+adapt to private-test variation without editing source code.
+
 ## Current Local NVIDIA Probe
 
 The local Wiii NVIDIA key can list models through
@@ -76,7 +91,7 @@ Trace mode writes:
 - `predictions.trace.jsonl`: raw model answer, normalized answer, strategy,
   question kind, confidence, fallback reason.
 - `run-summary.json`: contract validation, strategy counts, question-kind
-  counts, fallback count, average confidence.
+  counts, fallback count, average confidence, harness score.
 ```
 
 ## Docker
@@ -120,3 +135,8 @@ The harness borrows product discipline from Wiii, Codex, Odysseus, and Goose:
 - small workflow modules instead of one prompt blob;
 - explicit trace/eval artifacts for development;
 - final container path kept independent of UI, browser, database, and web tools.
+
+Detailed architecture and scoring notes:
+
+- `docs/harness-architecture.md`
+- `docs/evaluation-rubric.md`
