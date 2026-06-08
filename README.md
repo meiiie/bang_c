@@ -163,6 +163,8 @@ Trace mode writes:
   as `classifier`, `solver`, `repair`, `verifier`, or `synthesizer`.
 - `run-summary.json`: contract validation, strategy counts, question-kind
   counts, fallback count, average confidence, harness score.
+- `run-manifest.json`: reproducibility metadata including config/input hashes,
+  selected workflow, strategy, model, output path, trace path, and CLI args.
 
 ## Docker
 

@@ -29,6 +29,7 @@ class TraceReview:
 def review_trace_dir(trace_dir: Path, *, low_confidence_threshold: float = 0.5) -> TraceReview:
     summary_path = trace_dir / "run-summary.json"
     trace_path = trace_dir / "predictions.trace.jsonl"
+    manifest_path = trace_dir / "run-manifest.json"
     findings: list[ReviewFinding] = []
 
     if not summary_path.exists():
@@ -53,6 +54,43 @@ def review_trace_dir(trace_dir: Path, *, low_confidence_threshold: float = 0.5) 
 
     summary = _read_json(summary_path)
     predictions = _read_trace_jsonl(trace_path)
+    if manifest_path.exists():
+        manifest = _read_json(manifest_path)
+        if manifest.get("schema_version") != "neko_core.run_manifest.v1":
+            findings.append(
+                ReviewFinding(
+                    severity="fail",
+                    code="invalid_manifest_schema",
+                    message="Run manifest schema is not supported.",
+                )
+            )
+        if int(manifest.get("total_predictions", -1)) != int(
+            summary.get("total_predictions", 0)
+        ):
+            findings.append(
+                ReviewFinding(
+                    severity="fail",
+                    code="manifest_count_mismatch",
+                    message="Run manifest prediction count does not match run summary.",
+                )
+            )
+        if len(str(manifest.get("input_sha256", ""))) != 64:
+            findings.append(
+                ReviewFinding(
+                    severity="warn",
+                    code="manifest_missing_input_hash",
+                    message="Run manifest does not include a valid input hash.",
+                )
+            )
+    else:
+        findings.append(
+            ReviewFinding(
+                severity="warn",
+                code="missing_manifest",
+                message=f"Missing run manifest: {manifest_path}",
+            )
+        )
+
     if not bool(summary.get("valid", False)):
         findings.append(
             ReviewFinding(

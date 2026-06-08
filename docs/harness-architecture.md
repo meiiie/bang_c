@@ -37,6 +37,7 @@ configs/default.json
   -> optional verifier/tournament
   -> validation summary
   -> pred.csv
+  -> dev trace/session artifacts
 ```
 
 Runtime modules:
@@ -53,6 +54,7 @@ Runtime modules:
   and harness-score review.
 - `config.py`: loads schema-versioned harness config.
 - `loader.py`: reads CSV/JSON input and maps it to `Problem`.
+- `manifest.py`: writes reproducible run metadata for trace-enabled runs.
 - `schema.py`: owns shared dataclasses.
 - `classifier.py`: profiles item shape using config markers and thresholds.
 - `prompting.py`: builds prompt variants from the profile.
@@ -74,6 +76,10 @@ run after any trace-enabled workflow to catch low confidence, fallback paths,
 trace warnings, missing roles, and blocked steps. This mirrors the
 execute-then-verify split from coding agents while keeping the contest runtime
 simple.
+
+Run manifests are written as `run-manifest.json` only for trace-enabled
+development runs. They capture config/input hashes and selected runtime options,
+so experiments can be compared without relying on memory or hidden local state.
 
 ## Why Config First
 

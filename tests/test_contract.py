@@ -14,6 +14,7 @@ from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions, write_summary
 from hackaithon_c.exporter import write_predictions, write_trace
 from hackaithon_c.loader import load_problems
+from hackaithon_c.manifest import build_run_manifest, write_run_manifest
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
 from hackaithon_c.review import render_trace_review, review_trace_dir
@@ -375,6 +376,71 @@ class ContestContractTest(unittest.TestCase):
 
         self.assertEqual(review.verdict, "warn")
         self.assertIn("low_confidence", rendered)
+
+    def test_run_manifest_records_reproducible_run_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0010",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+            prediction = Prediction(
+                qid=problem.qid,
+                answer="A",
+                model="heuristic",
+                raw_answer="A",
+                strategy="fallback_overlap",
+                confidence=0.8,
+                trace=(
+                    TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                    TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True", "A"),
+                ),
+            )
+            trace_dir = Path(temp_dir) / "traces"
+            output_path = Path(temp_dir) / "output" / "pred.csv"
+            summary = validate_predictions(
+                [problem],
+                [prediction],
+                self.config,
+                trace_enabled=True,
+            )
+            write_trace(trace_dir, [prediction])
+            write_summary(trace_dir / "run-summary.json", summary)
+            write_run_manifest(
+                trace_dir / "run-manifest.json",
+                build_run_manifest(
+                    config=self.config,
+                    input_path=path,
+                    output_path=output_path,
+                    trace_dir=trace_dir,
+                    workflow="quick-dry-run",
+                    strategy="auto",
+                    dry_run=True,
+                    verify=False,
+                    model="heuristic",
+                    limit=1,
+                    summary=summary,
+                    argv=("--workflow", "quick-dry-run"),
+                ),
+            )
+            manifest = json.loads(
+                (trace_dir / "run-manifest.json").read_text(encoding="utf-8")
+            )
+            review = review_trace_dir(trace_dir)
+
+        self.assertEqual(manifest["schema_version"], "neko_core.run_manifest.v1")
+        self.assertEqual(manifest["workflow"], "quick-dry-run")
+        self.assertEqual(len(manifest["input_sha256"]), 64)
+        self.assertFalse(any(finding.code == "missing_manifest" for finding in review.findings))
 
     def test_trace_review_fails_when_trace_artifact_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

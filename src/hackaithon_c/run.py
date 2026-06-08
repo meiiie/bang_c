@@ -11,6 +11,7 @@ from .doctor import collect_doctor_checks, render_doctor_report
 from .evaluation import validate_predictions, write_summary
 from .exporter import write_predictions, write_trace
 from .loader import find_input_file, load_problems
+from .manifest import build_run_manifest, write_run_manifest
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
 from .review import render_trace_review, review_trace_dir
 from .solver import solve_problem
@@ -130,6 +131,23 @@ def main() -> int:
         trace_dir = Path(args.trace_dir)
         write_trace(trace_dir, predictions)
         write_summary(trace_dir / "run-summary.json", summary)
+        write_run_manifest(
+            trace_dir / "run-manifest.json",
+            build_run_manifest(
+                config=config,
+                input_path=input_path,
+                output_path=output_path,
+                trace_dir=trace_dir,
+                workflow=workflow.name if workflow else None,
+                strategy=strategy,
+                dry_run=dry_run,
+                verify=verify,
+                model=client.model if client else "heuristic",
+                limit=args.limit,
+                summary=summary,
+                argv=tuple(sys.argv[1:]),
+            ),
+        )
 
     print(f"Loaded {len(problems)} problems from {input_path}")
     if workflow is not None:
