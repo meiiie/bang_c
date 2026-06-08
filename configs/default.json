@@ -20,7 +20,8 @@
     "allowed_model_families": ["gemma-4", "qwen3.5"],
     "default_strategy": "auto",
     "max_retries": 2,
-    "timeout_seconds": 90
+    "timeout_seconds": 90,
+    "repair_invalid_output": true
   },
   "profiling": {
     "thresholds": {

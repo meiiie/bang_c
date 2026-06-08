@@ -60,6 +60,17 @@ def build_verifier_prompt(problem: Problem, candidate_answer: str) -> PromptBund
     return PromptBundle(SYSTEM_PROMPT, user_prompt, "verifier")
 
 
+def build_repair_prompt(problem: Problem, invalid_answer: str) -> PromptBundle:
+    user_prompt = (
+        "Your previous response did not follow the required format.\n"
+        "Return only the single best option letter. No words. No explanation.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Previous invalid response:\n{invalid_answer[:600]}\n\n"
+        f"Valid letters: {_letters(problem)}"
+    )
+    return PromptBundle(SYSTEM_PROMPT, user_prompt, "repair", max_tokens=4)
+
+
 def tournament_variants(profile: ProblemProfile) -> tuple[str, ...]:
     if profile.kind == "calculation":
         return ("calculation", "direct")

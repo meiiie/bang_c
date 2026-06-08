@@ -227,6 +227,34 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(prediction.answer, "B")
         self.assertEqual(prediction.strategy, "gemma_direct")
 
+    def test_solver_repairs_invalid_model_output_before_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0007",
+                            "question": "Question: calculate the answer.",
+                            "choices": ["One", "Two", "Three", "Four"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+
+        prediction = solve_problem(
+            problem,
+            FakeClient(["I need to calculate this carefully first.", "C"]),  # type: ignore[arg-type]
+            strategy="direct",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "C")
+        self.assertEqual(prediction.strategy, "gemma_repaired")
+        self.assertEqual(prediction.attempts, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

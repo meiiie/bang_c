@@ -7,7 +7,7 @@ from .config import HarnessConfig
 from .heuristic import fallback_answer
 from .normalize import normalize_answer
 from .nvidia_client import NvidiaChatClient
-from .prompting import build_prompt, build_verifier_prompt, tournament_variants
+from .prompting import build_prompt, build_repair_prompt, build_verifier_prompt, tournament_variants
 from .schema import Prediction, Problem, ProblemProfile
 
 
@@ -102,6 +102,20 @@ def _solve_direct(
     )
     normalized = normalize_answer(raw_answer, problem)
     if normalized is None:
+        repaired = _repair_invalid_answer(problem, client, raw_answer, config=config)
+        if repaired is not None:
+            raw_repair, repaired_answer = repaired
+            return Prediction(
+                qid=problem.qid,
+                answer=repaired_answer,
+                model=client.model,
+                raw_answer=f"{prompt.variant}={raw_answer.strip()} | repair={raw_repair.strip()}",
+                strategy="gemma_repaired",
+                confidence=0.68,
+                question_kind=profile.kind,
+                prompt_variant=prompt.variant,
+                attempts=2,
+            )
         return _fallback_prediction(
             problem,
             profile,
@@ -200,6 +214,27 @@ def _verify(
         max_tokens=prompt.max_tokens,
     )
     return raw_verifier, normalize_answer(raw_verifier, problem)
+
+
+def _repair_invalid_answer(
+    problem: Problem,
+    client: NvidiaChatClient,
+    invalid_answer: str,
+    *,
+    config: HarnessConfig,
+) -> tuple[str, str] | None:
+    if not config.repair_invalid_output:
+        return None
+    prompt = build_repair_prompt(problem, invalid_answer)
+    raw_repair = client.complete(
+        prompt.system_prompt,
+        prompt.user_prompt,
+        max_tokens=prompt.max_tokens,
+    )
+    repaired = normalize_answer(raw_repair, problem)
+    if repaired is None:
+        return None
+    return raw_repair, repaired
 
 
 def _fallback_prediction(

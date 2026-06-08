@@ -1,6 +1,8 @@
 output*/
 traces*/
 data/
+.venv/
+*.egg-info/
 *.log
 *.trace.jsonl
 __pycache__/

@@ -51,11 +51,26 @@ an adapter boundary until an available endpoint is confirmed.
 
 From this folder:
 
+One-command local install:
+
+```powershell
+.\scripts\bootstrap.ps1
+.\bang-c.ps1 --help
+```
+
+Or install manually:
+
 ```powershell
 $env:NVIDIA_API_KEY = "<set outside git>"
 python -m pip install -r requirements.txt
 $env:PYTHONPATH = "$PWD/src"
 python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+```
+
+After bootstrap, use the local CLI shim:
+
+```powershell
+.\bang-c.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
 ```
 
 Dry-run smoke test without API:
@@ -86,13 +101,16 @@ Strategies:
 - `tournament`: multiple prompt variants, majority vote, then optional verifier.
 - `auto`: classifier decides when to verify or tournament. This is the default.
 
+If a model returns explanation instead of a letter, the harness can run one
+configured repair pass before falling back to heuristic overlap. This is
+controlled by `runtime.repair_invalid_output` in `configs/default.json`.
+
 Trace mode writes:
 
 - `predictions.trace.jsonl`: raw model answer, normalized answer, strategy,
   question kind, confidence, fallback reason.
 - `run-summary.json`: contract validation, strategy counts, question-kind
   counts, fallback count, average confidence, harness score.
-```
 
 ## Docker
 

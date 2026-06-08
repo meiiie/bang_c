@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "default.json"
+DEFAULT_CONFIG_NAME = "default.json"
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,10 @@ class HarnessConfig:
         return int(self.raw["runtime"].get("timeout_seconds", 90))
 
     @property
+    def repair_invalid_output(self) -> bool:
+        return bool(self.raw["runtime"].get("repair_invalid_output", True))
+
+    @property
     def thresholds(self) -> dict[str, int]:
         return {
             str(key): int(value)
@@ -70,10 +74,23 @@ class HarnessConfig:
 
 
 def load_config(path: str | Path | None = None) -> HarnessConfig:
-    config_path = Path(path) if path else DEFAULT_CONFIG_PATH
+    config_path = Path(path) if path else _default_config_path()
     raw = json.loads(config_path.read_text(encoding="utf-8"))
     _validate_config(raw, config_path)
     return HarnessConfig(raw=raw, path=config_path)
+
+
+def _default_config_path() -> Path:
+    candidates = (
+        Path.cwd() / "configs" / DEFAULT_CONFIG_NAME,
+        Path(__file__).resolve().parents[2] / "configs" / DEFAULT_CONFIG_NAME,
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        "Default config not found. Run from the repository root or pass --config."
+    )
 
 
 def _validate_config(raw: dict[str, Any], path: Path) -> None:

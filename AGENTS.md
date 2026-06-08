@@ -63,9 +63,10 @@ entry, not changing unrelated layers.
 $env:PYTHONPATH = "$PWD/src"
 python -m unittest discover -s tests -v
 python -m compileall -q src
-python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output-dryrun --trace-dir traces-dryrun --dry-run
+.\scripts\bootstrap.ps1
+.\bang-c.ps1 --help
+.\bang-c.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output-dryrun --trace-dir traces-dryrun --dry-run
 docker build -t bang-c:dev .
 ```
 
 For model smoke tests, set `NVIDIA_API_KEY` outside git first.
-
