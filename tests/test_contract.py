@@ -22,6 +22,7 @@ from hackaithon_c.prompting import build_prompt
 from hackaithon_c.project import init_project
 from hackaithon_c.review import render_trace_review, review_trace_dir
 from hackaithon_c.schema import Prediction, TraceStep
+from hackaithon_c.session import prepare_run_session, write_run_report
 from hackaithon_c.solver import solve_problem
 from hackaithon_c.workflows import list_workflows, render_workflows, resolve_workflow
 
@@ -231,6 +232,37 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(kept_raw["brand"]["name"], "Edited Neko")
         self.assertTrue(third.created)
         self.assertEqual(reset_raw["brand"]["name"], self.config.brand_name)
+
+    def test_run_session_report_records_artifacts_and_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "run"
+            session = prepare_run_session(root)
+            summary = validate_predictions(
+                [],
+                [],
+                self.config,
+                trace_enabled=True,
+            )
+            write_run_report(
+                session.report_path,
+                input_path=Path("input.json"),
+                output_path=session.output_dir / "pred.csv",
+                trace_dir=session.trace_dir,
+                workflow="quick-dry-run",
+                strategy="auto",
+                dry_run=True,
+                verify=False,
+                model="heuristic",
+                summary=summary,
+                review=review_trace_dir(session.trace_dir),
+            )
+            report = session.report_path.read_text(encoding="utf-8")
+
+        self.assertEqual(session.output_dir, root / "output")
+        self.assertEqual(session.trace_dir, root / "traces")
+        self.assertIn("# Neko Core Run Report", report)
+        self.assertIn("- Workflow: quick-dry-run", report)
+        self.assertIn("- Verdict: FAIL", report)
 
     def test_doctor_reports_contract_without_requiring_input(self) -> None:
         checks = collect_doctor_checks(

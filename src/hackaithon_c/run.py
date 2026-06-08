@@ -16,6 +16,7 @@ from .manifest import build_run_manifest, write_run_manifest
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
 from .project import init_project
 from .review import render_trace_review, review_trace_dir
+from .session import prepare_run_session, write_run_report
 from .solver import solve_problem
 from .workflows import list_workflows, render_workflows, resolve_workflow
 
@@ -24,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Neko Core inference harness")
     parser.add_argument("--config", default=None, help="Harness config JSON path")
     parser.add_argument("--data-dir", default="/data", help="Contest input directory")
-    parser.add_argument("--output-dir", default="/output", help="Contest output directory")
+    parser.add_argument("--output-dir", default=None, help="Contest output directory")
     parser.add_argument("--input", default=None, help="Explicit input JSON/CSV for local dev")
     parser.add_argument("--limit", type=int, default=None, help="Optional local dev limit")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
@@ -52,6 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--verify", action="store_true", help="Force a second Gemma pass when supported")
     parser.add_argument("--fail-fast", action="store_true", help="Stop on the first model/API error")
     parser.add_argument("--trace-dir", default=None, help="Optional dev trace directory")
+    parser.add_argument("--run-dir", default=None, help="Create a local run session with output, traces, and report")
     return parser.parse_args()
 
 
@@ -110,7 +112,18 @@ def main() -> int:
     strategy = args.strategy or (workflow.strategy if workflow else config.default_strategy)
 
     input_path = Path(args.input) if args.input else find_input_file(Path(args.data_dir), config)
-    output_dir = Path(args.output_dir)
+    run_session = None
+    trace_dir = Path(args.trace_dir) if args.trace_dir else None
+    if args.run_dir:
+        run_session = prepare_run_session(
+            Path(args.run_dir),
+            output_dir=Path(args.output_dir) if args.output_dir else None,
+            trace_dir=trace_dir,
+        )
+        output_dir = run_session.output_dir
+        trace_dir = run_session.trace_dir
+    else:
+        output_dir = Path(args.output_dir or "/output")
     output_path = output_dir / config.output_file
 
     problems = load_problems(input_path)
@@ -144,15 +157,14 @@ def main() -> int:
         problems,
         predictions,
         config,
-        trace_enabled=bool(args.trace_dir),
+        trace_enabled=bool(trace_dir),
     )
     if not summary.valid:
         messages = "; ".join(issue.code for issue in summary.issues[:5])
         raise RuntimeError(f"Invalid prediction contract: {messages}")
 
     write_predictions(output_path, predictions)
-    if args.trace_dir:
-        trace_dir = Path(args.trace_dir)
+    if trace_dir:
         write_trace(trace_dir, predictions)
         write_summary(trace_dir / "run-summary.json", summary)
         write_run_manifest(
@@ -172,11 +184,28 @@ def main() -> int:
                 argv=tuple(sys.argv[1:]),
             ),
         )
+        if run_session is not None:
+            review = review_trace_dir(trace_dir)
+            write_run_report(
+                run_session.report_path,
+                input_path=input_path,
+                output_path=output_path,
+                trace_dir=trace_dir,
+                workflow=workflow.name if workflow else None,
+                strategy=strategy,
+                dry_run=dry_run,
+                verify=verify,
+                model=client.model if client else "heuristic",
+                summary=summary,
+                review=review,
+            )
 
     print(f"Loaded {len(problems)} problems from {input_path}")
     if workflow is not None:
         print(f"Workflow: {workflow.name}")
     print(f"Wrote predictions to {output_path}")
+    if run_session is not None:
+        print(f"Run report: {run_session.report_path}")
     print(
         "Summary: "
         f"valid={summary.valid} "

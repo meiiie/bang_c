@@ -88,6 +88,12 @@ so experiments can be compared without relying on memory or hidden local state.
 `--compare-traces` uses those manifests plus prediction trace rows to flag
 changed answers, input/config drift, confidence drift, and fallback drift.
 
+`--run-dir <path>` creates a development run session. The CLI writes
+`output/pred.csv`, `traces/`, and `run-report.md` under that directory, then
+runs the trace reviewer against the session trace. This gives the team one
+portable folder per experiment while keeping the final `/data` to `/output`
+contest contract unchanged.
+
 ## Why Config First
 
 Public test data is not the real problem. Private test can vary by language,

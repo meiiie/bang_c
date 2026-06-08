@@ -127,6 +127,16 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
         ".\neko-core.ps1 --workflow quick-dry-run --input `"$InputPath`" --output-dir output-verify --trace-dir traces-verify --limit 3" `
         { & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --output-dir "output-verify" --trace-dir "traces-verify" --limit 3 }
 
+    Invoke-NekoCheck "Run session writes output trace and report" `
+        ".\neko-core.ps1 --workflow quick-dry-run --input `"$InputPath`" --run-dir run-verify --limit 3" `
+        {
+            & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --run-dir "run-verify" --limit 3
+            if (-not (Test-Path -LiteralPath "run-verify\output\pred.csv")) { throw "missing run output" }
+            if (-not (Test-Path -LiteralPath "run-verify\traces\predictions.trace.jsonl")) { throw "missing run trace" }
+            if (-not (Test-Path -LiteralPath "run-verify\run-report.md")) { throw "missing run report" }
+            Get-Content -LiteralPath "run-verify\run-report.md" -TotalCount 20
+        }
+
     Invoke-NekoCheck "Trace reviewer reads quick workflow artifacts" `
         ".\neko-core.ps1 --review-trace traces-verify" `
         { & ".\neko-core.ps1" --review-trace "traces-verify" }

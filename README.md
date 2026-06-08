@@ -95,7 +95,12 @@ Configured workflow examples:
 ```powershell
 .\neko-core.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
 .\neko-core.ps1 --workflow verify-all --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+.\neko-core.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-smoke --limit 5
 ```
+
+`--run-dir` is a development session path. It writes `output/pred.csv`,
+`traces/`, and `run-report.md` together so experiments can be reviewed without
+remembering separate output and trace paths.
 
 Verification report inspired by Claude Code's verification-agent pattern:
 
