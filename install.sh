@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE="${1:-git+https://github.com/meiiie/bang_c.git}"
+DEFAULT_SOURCE="git+https://github.com/meiiie/bang_c.git"
+SOURCE="${NEKO_INSTALL_SOURCE:-${1:-${DEFAULT_SOURCE}}}"
+
+if [[ "${NEKO_NON_INTERACTIVE:-}" == "1" ]]; then
+  export PIP_NO_INPUT=1
+  export PIP_DISABLE_PIP_VERSION_CHECK=1
+  echo "Neko Core installer: non-interactive mode enabled."
+fi
 
 resolve_python() {
   for candidate in python3.11 python3 python; do

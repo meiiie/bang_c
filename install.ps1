@@ -4,6 +4,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if (-not $PSBoundParameters.ContainsKey("Source") -and $env:NEKO_INSTALL_SOURCE) {
+    $Source = $env:NEKO_INSTALL_SOURCE
+}
+
+if ($env:NEKO_NON_INTERACTIVE -eq "1") {
+    $env:PIP_NO_INPUT = "1"
+    $env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
+    Write-Host "Neko Core installer: non-interactive mode enabled."
+}
+
 function Resolve-Python {
     $candidates = @(
         @{ Command = "py"; Args = @("-3.11") },

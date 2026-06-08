@@ -12,6 +12,59 @@ folder is intentionally separate from Wiii Core. It reuses Wiii's harness
 mindset, model-routing discipline, and verification loop, but the final
 container stays small and reproducible.
 
+## Install Neko Core
+
+Windows PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/meiiie/bang_c/main/install.ps1 | iex"
+neko-core --doctor
+```
+
+Linux/macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh | bash
+neko-core --doctor
+```
+
+The installer uses `pipx`, so the `neko-core` command is isolated from system
+Python packages. If the command is not visible immediately, open a new terminal
+or add the pipx app path shown by the installer to `PATH`.
+
+For CI, scripts, or repeatable machine setup:
+
+```powershell
+$env:NEKO_NON_INTERACTIVE = "1"
+$env:NEKO_INSTALL_SOURCE = "git+https://github.com/meiiie/bang_c.git"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/meiiie/bang_c/main/install.ps1 | iex"
+```
+
+```bash
+export NEKO_NON_INTERACTIVE=1
+export NEKO_INSTALL_SOURCE="git+https://github.com/meiiie/bang_c.git"
+curl -fsSL https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh | bash
+```
+
+Upgrade or uninstall:
+
+```powershell
+python -m pipx upgrade neko-core
+python -m pipx uninstall neko-core
+```
+
+A branded install domain can be added later without changing the package:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://neko.holilihu.online/install.ps1 | iex"
+```
+
+```bash
+curl -fsSL https://neko.holilihu.online/install.sh | bash
+```
+
+See `docs/distribution-domain.md` for the Cloudflare routing plan.
+
 ## Contest Contract
 
 - Input: `/data/public_test.csv` or `/data/private_test.csv`
@@ -57,30 +110,7 @@ an adapter boundary until an available endpoint is confirmed.
 
 From this folder:
 
-One-command global install from GitHub:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/meiiie/bang_c/main/install.ps1 | iex"
-neko-core --doctor
-```
-
-Linux/macOS:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh | bash
-neko-core --doctor
-```
-
-The global installer uses `pipx`, so the `neko-core` command is isolated from
-your system Python packages. If the command is not visible immediately, open a
-new terminal or add the pipx app path shown by the installer to `PATH`.
-
-Upgrade or uninstall:
-
-```powershell
-python -m pipx upgrade neko-core
-python -m pipx uninstall neko-core
-```
+For global installation, use the `Install Neko Core` section above.
 
 One-command local install:
 
