@@ -5,6 +5,7 @@ from dataclasses import replace
 
 from .classifier import classify_problem
 from .config import HarnessConfig
+from .evidence import adjudicate_direct_evidence
 from .heuristic import fallback_answer
 from .normalize import normalize_answer
 from .nvidia_client import NvidiaChatClient
@@ -205,6 +206,33 @@ def _solve_direct(
                     answer=verified,
                 )
             )
+            evidence_decision = adjudicate_direct_evidence(problem, verified, config)
+            if evidence_decision is not None:
+                trace_steps.append(
+                    TraceStep(
+                        role="evidence-adjudicator",
+                        action="direct_passage_support",
+                        status="warning",
+                        detail=evidence_decision.detail,
+                        answer=evidence_decision.answer,
+                    )
+                )
+                return Prediction(
+                    qid=problem.qid,
+                    answer=evidence_decision.answer,
+                    model=client.model,
+                    raw_answer=(
+                        f"{prompt.variant}={raw_answer.strip()} | "
+                        f"verifier={raw_verifier.strip()} | "
+                        f"direct_evidence={evidence_decision.answer}"
+                    ),
+                    strategy="gemma_verified_direct_evidence",
+                    confidence=0.74,
+                    question_kind=profile.kind,
+                    prompt_variant=prompt.variant,
+                    attempts=2,
+                    trace=tuple(trace_steps),
+                )
             return Prediction(
                 qid=problem.qid,
                 answer=verified,

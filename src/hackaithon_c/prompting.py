@@ -11,6 +11,10 @@ SYSTEM_PROMPT = """You solve Vietnamese multiple-choice questions.
 Rules:
 - Use only the provided question and options.
 - Select the best answer among the options.
+- For passage questions, prefer the option with the strongest direct evidence
+  in the provided passage, not outside knowledge.
+- If multiple options are factually true, choose the one whose full claim is
+  explicitly supported by the passage text.
 - Return exactly one uppercase option letter.
 - Do not include explanation, punctuation, or markdown."""
 
@@ -50,9 +54,16 @@ def build_verifier_prompt(problem: Problem, candidate_answer: str) -> PromptBund
         index = problem.allowed_letters.index(candidate_answer)
         candidate_text = problem.choices[index]
     user_prompt = (
-        "Verify the candidate answer for this Vietnamese multiple-choice item.\n"
-        "Compare the candidate against every option. If it is correct, keep it. "
-        "If another option is clearly better, return that other letter.\n\n"
+        "Verify the candidate answer for this Vietnamese multiple-choice item as a "
+        "passage-grounded adjudicator.\n"
+        "Compare the candidate against every option using only the supplied question, "
+        "context, and options.\n"
+        "If more than one option is factually true, prefer the option whose complete "
+        "claim is stated most directly in the provided passage.\n"
+        "Do not reward an option that requires outside knowledge, cross-section "
+        "wording, or inference when another option has a clearer evidence span.\n"
+        "If the candidate is correct by background knowledge but another option is "
+        "better supported by the passage wording, return the better-supported letter.\n\n"
         f"{_format_problem(problem)}\n\n"
         f"Candidate answer: {candidate_answer}. {candidate_text}\n\n"
         f"Return exactly one letter from: {_letters(problem)}"
@@ -93,14 +104,20 @@ def _evidence_prompt(problem: Problem, config: HarnessConfig) -> str:
     context, query = _split_context_and_query(problem.question, config.markers["question"])
     if context:
         body = (
-            "Read the context, then answer the question using only evidence in the context.\n\n"
+            "Read the context, then answer the question using only evidence in the context.\n"
+            "If several options are true in general, choose the option whose full claim "
+            "has the clearest direct evidence span in the context.\n"
+            "Avoid choosing an option that needs outside knowledge or combines wording "
+            "from different sections when another option is directly stated.\n\n"
             f"Context:\n{context}\n\n"
             f"Question:\n{query}\n\n"
             f"Options:\n{_format_options(problem)}\n\n"
         )
     else:
         body = (
-            "Find the option that is best supported by the question text.\n\n"
+            "Find the option that is best supported by the question text.\n"
+            "If several options are true in general, choose the one most directly "
+            "supported by the supplied text.\n\n"
             f"{_format_problem(problem)}\n\n"
         )
     return body + f"Return exactly one letter from: {_letters(problem)}"

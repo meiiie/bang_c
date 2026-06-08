@@ -39,7 +39,7 @@ from hackaithon_c.model_inventory import (
 )
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.policy import evaluate_policy, evaluate_policy_specs, render_policy_report
-from hackaithon_c.prompting import build_prompt
+from hackaithon_c.prompting import build_prompt, build_verifier_prompt
 from hackaithon_c.project import init_project
 from hackaithon_c.review import render_trace_review, review_trace_dir
 from hackaithon_c.review_tasks import (
@@ -48,7 +48,7 @@ from hackaithon_c.review_tasks import (
     write_review_tasks_json,
 )
 from hackaithon_c.run import validate_runtime_model
-from hackaithon_c.schema import Prediction, TraceStep
+from hackaithon_c.schema import Prediction, Problem, TraceStep
 from hackaithon_c.session import (
     discover_run_sessions,
     load_run_session_record,
@@ -800,6 +800,54 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(prediction.strategy, "gemma_direct")
         self.assertEqual([step.role for step in prediction.trace], ["classifier", "solver"])
 
+    def test_evidence_prompt_prefers_direct_passage_support(self) -> None:
+        problem = self._ambiguous_deuteronomy_problem()
+        profile = classify_problem(problem, self.config)
+
+        prompt = build_prompt(problem, profile, config=self.config)
+        verifier = build_verifier_prompt(problem, "D")
+
+        self.assertEqual(profile.kind, "reading")
+        self.assertIn("clearest direct evidence span", prompt.user_prompt)
+        self.assertIn("outside knowledge", prompt.user_prompt)
+        self.assertIn("passage-grounded adjudicator", verifier.user_prompt)
+        self.assertIn("better supported by the passage wording", verifier.user_prompt)
+
+    def test_verifier_can_override_background_true_answer_for_direct_evidence(self) -> None:
+        problem = self._ambiguous_deuteronomy_problem()
+        client = FakeClient(["D", "A"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "A")
+        self.assertEqual(prediction.strategy, "gemma_verified")
+        self.assertEqual(prediction.confidence, 0.72)
+        self.assertIn("passage-grounded adjudicator", client.calls[1][1])
+
+    def test_direct_evidence_adjudicator_overrides_ambiguous_verified_answer(self) -> None:
+        problem = self._ambiguous_deuteronomy_problem()
+        client = FakeClient(["D", "D"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "A")
+        self.assertEqual(prediction.strategy, "gemma_verified_direct_evidence")
+        self.assertEqual(prediction.confidence, 0.74)
+        self.assertEqual(prediction.trace[-1].role, "evidence-adjudicator")
+        self.assertIn("direct passage evidence favored A", prediction.trace[-1].detail)
+
     def test_solver_repairs_invalid_model_output_before_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "public_test.json"
@@ -828,6 +876,32 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(prediction.strategy, "gemma_repaired")
         self.assertEqual(prediction.attempts, 2)
         self.assertEqual([step.role for step in prediction.trace], ["classifier", "solver", "repair"])
+
+    def _ambiguous_deuteronomy_problem(self) -> Problem:
+        question = (
+            "Doan thong tin:\n"
+            "1.1 Torah\n"
+            "Noi loan chong lai cha me Deuteronomy 21:18-21.\n"
+            "Quan he tinh duc giua mot nguoi dan ong va mot nguoi phu nu da dinh hon "
+            "voi mot nguoi dan ong khac trong thi tran, vi co ay khong het len bao "
+            "dong, Deuteronomy 22:23-24; ca hai nguoi nen bi nem da den chet.\n"
+            "1.2 Mishna\n"
+            "Mot nguoi da hanh hung mot co gai da hua hon; mot dua con trai buong "
+            "binh va noi loan.\n"
+            "Cau hoi: Theo noi dung duoc cung cap, trong cac toi danh sau day, "
+            "toi nao duoc quy dinh trong Torah, cu the la Deuteronomy, la bi xu tu "
+            "bang hinh thuc nem da?"
+        )
+        return Problem(
+            qid="test_ambiguous_deuteronomy",
+            question=question,
+            choices=(
+                "Quan he tinh duc voi mot nguoi phu nu da dinh hon voi nguoi khac ma khong co tieng keu cuu (Deuteronomy 22:23-24)",
+                "Giao cau voi gia suc (duoc quy dinh trong Mishna)",
+                "Nguyen rua cha hoac me (duoc quy dinh trong Mishna)",
+                "Con trai buong binh va noi loan (Deuteronomy 21:18-21)",
+            ),
+        )
 
     def test_trace_export_contains_structured_agent_steps(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
