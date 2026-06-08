@@ -67,6 +67,13 @@ class HarnessConfig:
         return bool(self.raw["runtime"].get("repair_invalid_output", True))
 
     @property
+    def workflows(self) -> dict[str, dict[str, Any]]:
+        return {
+            str(name): dict(value)
+            for name, value in self.raw.get("workflows", {}).items()
+        }
+
+    @property
     def thresholds(self) -> dict[str, int]:
         return {
             str(key): int(value)
@@ -126,3 +133,10 @@ def _validate_config(raw: dict[str, Any], path: Path) -> None:
     for key in ("question", "context", "negative", "calculation"):
         if not markers.get(key):
             raise ValueError(f"Config {path} missing profiling markers: {key}")
+
+    valid_strategies = {"auto", "direct", "verify", "tournament"}
+    for name, workflow in raw.get("workflows", {}).items():
+        if workflow.get("strategy") not in valid_strategies:
+            raise ValueError(f"Config {path} workflow {name} has invalid strategy")
+        if workflow.get("phase") not in {"runtime", "development"}:
+            raise ValueError(f"Config {path} workflow {name} has invalid phase")

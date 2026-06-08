@@ -68,6 +68,7 @@ python -m compileall -q src
 .\neko-core.ps1 --help
 .\neko-core.ps1 --doctor
 .\neko-core.ps1 --capabilities
+.\neko-core.ps1 --list-workflows
 .\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output-dryrun --trace-dir traces-dryrun --dry-run
 docker build -t neko-core:dev .
 ```

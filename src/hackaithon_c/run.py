@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from .branding import render_banner, version_line
@@ -12,6 +13,7 @@ from .exporter import write_predictions, write_trace
 from .loader import find_input_file, load_problems
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
 from .solver import solve_problem
+from .workflows import list_workflows, render_workflows, resolve_workflow
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,6 +26,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     parser.add_argument("--doctor", action="store_true", help="Run environment and contract diagnostics")
     parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
+    parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
+    parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
     parser.add_argument("--banner", action="store_true", help="Print the ASCII Neko Core banner")
     parser.add_argument("--dry-run", action="store_true", help="Use deterministic heuristic only")
     parser.add_argument(
@@ -54,11 +58,24 @@ def main() -> int:
         print(render_capabilities(collect_capabilities(config)))
         return 0
 
+    if args.list_workflows:
+        print(render_workflows(list_workflows(config)))
+        return 0
+
     if args.doctor:
         input_path = Path(args.input) if args.input else None
         checks = collect_doctor_checks(config, data_dir=Path(args.data_dir), input_path=input_path)
         print(render_doctor_report(checks))
         return 0
+
+    try:
+        workflow = resolve_workflow(config, args.workflow)
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
+    dry_run = args.dry_run or bool(workflow and workflow.dry_run)
+    verify = args.verify or bool(workflow and workflow.verify)
+    strategy = args.strategy or (workflow.strategy if workflow else config.default_strategy)
 
     input_path = Path(args.input) if args.input else find_input_file(Path(args.data_dir), config)
     output_dir = Path(args.output_dir)
@@ -69,7 +86,7 @@ def main() -> int:
         problems = problems[: args.limit]
 
     client = None
-    if not args.dry_run:
+    if not dry_run:
         client = NvidiaChatClient(
             NvidiaConfig.from_env(
                 default_base_url=config.base_url,
@@ -83,9 +100,9 @@ def main() -> int:
         solve_problem(
             problem,
             client,
-            dry_run=args.dry_run,
-            verify=args.verify,
-            strategy=args.strategy or config.default_strategy,
+            dry_run=dry_run,
+            verify=verify,
+            strategy=strategy,
             fail_fast=args.fail_fast,
             config=config,
         )
@@ -108,6 +125,8 @@ def main() -> int:
         write_summary(trace_dir / "run-summary.json", summary)
 
     print(f"Loaded {len(problems)} problems from {input_path}")
+    if workflow is not None:
+        print(f"Workflow: {workflow.name}")
     print(f"Wrote predictions to {output_path}")
     print(
         "Summary: "

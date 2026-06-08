@@ -34,6 +34,36 @@
     "timeout_seconds": 90,
     "repair_invalid_output": true
   },
+  "workflows": {
+    "contest-auto": {
+      "description": "Final contest path: model auto strategy, no dev-only assumptions.",
+      "strategy": "auto",
+      "verify": false,
+      "dry_run": false,
+      "phase": "runtime"
+    },
+    "quick-dry-run": {
+      "description": "Contract smoke without API calls.",
+      "strategy": "auto",
+      "verify": false,
+      "dry_run": true,
+      "phase": "development"
+    },
+    "verify-all": {
+      "description": "Force a second answer-only pass for every item.",
+      "strategy": "verify",
+      "verify": true,
+      "dry_run": false,
+      "phase": "development"
+    },
+    "tournament": {
+      "description": "Use multiple prompt variants and vote synthesis.",
+      "strategy": "tournament",
+      "verify": true,
+      "dry_run": false,
+      "phase": "development"
+    }
+  },
   "profiling": {
     "thresholds": {
       "many_choice_min": 5,

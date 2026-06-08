@@ -42,6 +42,7 @@ def collect_capabilities(config: HarnessConfig) -> tuple[Capability, ...]:
             "Multiple prompt variants with vote synthesis",
         ),
         Capability("doctor", "cli", "enabled", "Environment and contest-contract diagnostics"),
+        Capability("workflow_registry", "cli", "enabled", "Named runtime and development workflows"),
         Capability(
             "web_research",
             "development",

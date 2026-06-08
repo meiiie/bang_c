@@ -46,6 +46,7 @@ Runtime modules:
   registry.
 - `doctor.py`: runs lightweight diagnostics similar to CLI doctor/status
   workflows.
+- `workflows.py`: resolves named workflow profiles from config.
 - `config.py`: loads schema-versioned harness config.
 - `loader.py`: reads CSV/JSON input and maps it to `Problem`.
 - `schema.py`: owns shared dataclasses.
@@ -124,11 +125,11 @@ Useful patterns from the local Claude Code snapshot:
 - Use feature/config gates for optional capabilities instead of hard-coding
   private-test assumptions.
 
-For Neko Core, the first adapted slices are `--doctor` and `--capabilities`.
-They prove config, contract, model, key presence, input discovery, and the
-runtime/development boundary without running inference. Future work should add
-subworkflow manifests in the same style, while keeping the final Docker
-contract narrow.
+For Neko Core, the first adapted slices are `--doctor`, `--capabilities`, and
+`--list-workflows`. They prove config, contract, model, key presence, input
+discovery, and the runtime/development boundary without running inference.
+Future work should add verification-agent style evals in the same style, while
+keeping the final Docker contract narrow.
 
 ## Wiii Reuse Path
 

@@ -18,6 +18,7 @@ from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
 from hackaithon_c.schema import Prediction
 from hackaithon_c.solver import solve_problem
+from hackaithon_c.workflows import list_workflows, render_workflows, resolve_workflow
 
 
 class FakeClient:
@@ -149,6 +150,21 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("contest_io", report)
         self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
         self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
+
+    def test_workflow_registry_resolves_named_profiles(self) -> None:
+        workflows = list_workflows(self.config)
+        report = render_workflows(workflows)
+        quick = resolve_workflow(self.config, "quick-dry-run")
+        contest = resolve_workflow(self.config, "contest-auto")
+
+        self.assertIn("Neko Core workflows", report)
+        self.assertTrue(quick.dry_run)
+        self.assertEqual(contest.phase, "runtime")
+        self.assertEqual(contest.strategy, "auto")
+
+    def test_workflow_registry_rejects_unknown_name(self) -> None:
+        with self.assertRaises(ValueError):
+            resolve_workflow(self.config, "missing-workflow")
 
     def test_normalize_answer_prefers_last_visible_valid_letter(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

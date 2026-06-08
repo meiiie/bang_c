@@ -59,6 +59,7 @@ One-command local install:
 .\neko-core.ps1 --help
 .\neko-core.ps1 --doctor
 .\neko-core.ps1 --capabilities
+.\neko-core.ps1 --list-workflows
 ```
 
 Or install manually:
@@ -84,6 +85,14 @@ CLI fast paths inspired by Claude Code:
 - `--banner`: ASCII brand preview.
 - `--doctor`: local environment and contest-contract diagnostics.
 - `--capabilities`: explicit runtime/development capability registry.
+- `--list-workflows`: named runtime/development workflow registry.
+
+Configured workflow examples:
+
+```powershell
+.\neko-core.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+.\neko-core.ps1 --workflow verify-all --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+```
 
 Dry-run smoke test without API:
 
