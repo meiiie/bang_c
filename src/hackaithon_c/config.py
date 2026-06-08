@@ -7,6 +7,8 @@ from typing import Any
 
 
 DEFAULT_CONFIG_NAME = "default.json"
+LOCAL_CONFIG_DIR = ".neko-core"
+LOCAL_CONFIG_NAME = "config.json"
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,7 @@ def load_config(path: str | Path | None = None) -> HarnessConfig:
 
 def _default_config_path() -> Path:
     candidates = (
+        Path.cwd() / LOCAL_CONFIG_DIR / LOCAL_CONFIG_NAME,
         Path.cwd() / "configs" / DEFAULT_CONFIG_NAME,
         Path(__file__).resolve().parents[2] / "configs" / DEFAULT_CONFIG_NAME,
     )

@@ -47,6 +47,8 @@ Runtime modules:
   registry.
 - `doctor.py`: runs lightweight diagnostics similar to CLI doctor/status
   workflows.
+- `project.py`: initializes project-local configuration under `.neko-core/`
+  so teams can tune workflows and markers without editing source files.
 - `workflows.py`: resolves named workflow profiles from config.
 - `scripts/verify.ps1`: dev-only verification runner that emits
   command/output/result evidence and a final verdict.
@@ -101,6 +103,11 @@ The config layer stores:
 - multilingual profiling markers;
 - classifier thresholds;
 - harness scoring weights.
+
+`neko-core --init` copies the canonical config to `.neko-core/config.json`.
+When no `--config` path is provided, the loader checks this project-local
+config before `configs/default.json`. This mirrors agent CLI practice: runtime
+source stays stable while a team can tune local harness profiles.
 
 When a new language or question marker appears, update config first. Only change
 code when the runtime contract itself needs a new capability.

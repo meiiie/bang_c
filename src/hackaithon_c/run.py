@@ -14,6 +14,7 @@ from .exporter import write_predictions, write_trace
 from .loader import find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
+from .project import init_project
 from .review import render_trace_review, review_trace_dir
 from .solver import solve_problem
 from .workflows import list_workflows, render_workflows, resolve_workflow
@@ -27,6 +28,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default=None, help="Explicit input JSON/CSV for local dev")
     parser.add_argument("--limit", type=int, default=None, help="Optional local dev limit")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
+    parser.add_argument("--init", action="store_true", help="Create a project-local .neko-core/config.json")
+    parser.add_argument("--force", action="store_true", help="Overwrite files for commands that support it")
     parser.add_argument("--doctor", action="store_true", help="Run environment and contract diagnostics")
     parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
@@ -54,6 +57,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+
+    if args.init:
+        result = init_project(Path.cwd(), force=args.force)
+        print(result.message)
+        return 0
+
     config = load_config(args.config)
 
     if args.version:

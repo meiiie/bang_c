@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,7 +11,7 @@ from hackaithon_c.branding import ascii_logo, version_line
 from hackaithon_c.capabilities import collect_capabilities, render_capabilities
 from hackaithon_c.classifier import classify_problem
 from hackaithon_c.compare import compare_trace_dirs, render_trace_comparison
-from hackaithon_c.config import load_config
+from hackaithon_c.config import LOCAL_CONFIG_DIR, LOCAL_CONFIG_NAME, load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions, write_summary
 from hackaithon_c.exporter import write_predictions, write_trace
@@ -18,6 +19,7 @@ from hackaithon_c.loader import load_problems
 from hackaithon_c.manifest import build_run_manifest, write_run_manifest
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
+from hackaithon_c.project import init_project
 from hackaithon_c.review import render_trace_review, review_trace_dir
 from hackaithon_c.schema import Prediction, TraceStep
 from hackaithon_c.solver import solve_problem
@@ -185,6 +187,50 @@ class ContestContractTest(unittest.TestCase):
         self.assertGreater(self.config.rubric["contract"], 0)
         self.assertTrue(ascii_logo(self.config))
         self.assertIn("Neko Core", version_line(self.config))
+
+    def test_local_project_config_is_preferred_from_current_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            local_dir = root / LOCAL_CONFIG_DIR
+            local_dir.mkdir()
+            local_config = json.loads(json.dumps(self.config.raw))
+            local_config["brand"]["name"] = "Local Neko"
+            (local_dir / LOCAL_CONFIG_NAME).write_text(
+                json.dumps(local_config),
+                encoding="utf-8",
+            )
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                loaded = load_config()
+            finally:
+                os.chdir(previous_cwd)
+
+        self.assertEqual(loaded.brand_name, "Local Neko")
+        self.assertEqual(loaded.path.name, LOCAL_CONFIG_NAME)
+
+    def test_project_init_creates_local_config_and_respects_force(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = init_project(root)
+            first_raw = json.loads(first.config_path.read_text(encoding="utf-8"))
+
+            edited_raw = json.loads(json.dumps(first_raw))
+            edited_raw["brand"]["name"] = "Edited Neko"
+            first.config_path.write_text(json.dumps(edited_raw), encoding="utf-8")
+
+            second = init_project(root)
+            kept_raw = json.loads(second.config_path.read_text(encoding="utf-8"))
+
+            third = init_project(root, force=True)
+            reset_raw = json.loads(third.config_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(first.created)
+        self.assertFalse(second.created)
+        self.assertEqual(kept_raw["brand"]["name"], "Edited Neko")
+        self.assertTrue(third.created)
+        self.assertEqual(reset_raw["brand"]["name"], self.config.brand_name)
 
     def test_doctor_reports_contract_without_requiring_input(self) -> None:
         checks = collect_doctor_checks(

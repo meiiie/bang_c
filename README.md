@@ -60,6 +60,7 @@ One-command local install:
 .\neko-core.ps1 --doctor
 .\neko-core.ps1 --capabilities
 .\neko-core.ps1 --list-workflows
+.\neko-core.ps1 --init
 ```
 
 Or install manually:
@@ -84,6 +85,8 @@ CLI fast paths inspired by Claude Code:
 - `--version`: identity check without running inference.
 - `--banner`: ASCII brand preview.
 - `--doctor`: local environment and contest-contract diagnostics.
+- `--init`: create `.neko-core/config.json` for project-local workflow/model
+  tuning without editing source files.
 - `--capabilities`: explicit runtime/development capability registry.
 - `--list-workflows`: named runtime/development workflow registry.
 

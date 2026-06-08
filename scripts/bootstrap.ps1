@@ -22,6 +22,7 @@ $localShim = Join-Path $repoRoot "neko-core.ps1"
 Write-Host "Installed Neko Core CLI in .venv."
 Write-Host "Try: .\neko-core.ps1 --help"
 Write-Host "Doctor: .\neko-core.ps1 --doctor"
+Write-Host "Init workspace config: .\neko-core.ps1 --init"
 Write-Host "Dry-run: .\neko-core.ps1 --input `"C:\Users\Admin\Downloads\public-test_1780368312.json`" --output-dir output --dry-run --limit 5"
 if (Test-Path -LiteralPath $localShim) {
     Write-Host "Local shim: $localShim"
