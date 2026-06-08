@@ -17,6 +17,11 @@ from hackaithon_c.evaluation import validate_predictions, write_summary
 from hackaithon_c.exporter import write_predictions, write_trace
 from hackaithon_c.loader import load_problems
 from hackaithon_c.manifest import build_run_manifest, write_run_manifest
+from hackaithon_c.model_inventory import (
+    classify_model,
+    collect_model_inventory,
+    render_model_inventory,
+)
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
 from hackaithon_c.project import init_project
@@ -185,6 +190,8 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(self.config.brand_name, "Neko Core")
         self.assertEqual(self.config.output_columns, ("qid", "answer"))
         self.assertIn("private_test.csv", self.config.input_candidates)
+        self.assertIn("gemma-4", self.config.allowed_model_families)
+        self.assertIn("bge-m3", self.config.allowed_embedding_families)
         self.assertGreater(self.config.rubric["contract"], 0)
         self.assertTrue(ascii_logo(self.config))
         self.assertIn("Neko Core", version_line(self.config))
@@ -280,8 +287,36 @@ class ContestContractTest(unittest.TestCase):
         report = render_capabilities(capabilities)
 
         self.assertIn("contest_io", report)
+        self.assertIn("model_inventory", report)
         self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
         self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
+
+    def test_model_inventory_filters_bang_c_allowed_models(self) -> None:
+        payload = {
+            "data": [
+                {"id": "google/gemma-4-31b-it"},
+                {"id": "qwen/qwen3.5-8b-instruct"},
+                {"id": "qwen/qwen3.5-14b-instruct"},
+                {"id": "baai/bge-m3"},
+                {"id": "qwen/qwen-rerank"},
+                {"id": "nvidia/nv-embed-v1"},
+            ]
+        }
+
+        report = collect_model_inventory(self.config, payload=payload)
+        rendered = render_model_inventory(report)
+        allowed_ids = {item.model_id for item in report.items if item.allowed}
+        blocked = classify_model("qwen/qwen3.5-14b-instruct")
+
+        self.assertEqual(report.status, "ok")
+        self.assertTrue(report.selected_model_allowed)
+        self.assertIn("google/gemma-4-31b-it", allowed_ids)
+        self.assertIn("qwen/qwen3.5-8b-instruct", allowed_ids)
+        self.assertIn("baai/bge-m3", allowed_ids)
+        self.assertIn("qwen/qwen-rerank", allowed_ids)
+        self.assertFalse(blocked.allowed)
+        self.assertIn("Allowed LLM models", rendered)
+        self.assertNotIn("nvidia/nv-embed-v1: ", rendered)
 
     def test_workflow_registry_resolves_named_profiles(self) -> None:
         workflows = list_workflows(self.config)

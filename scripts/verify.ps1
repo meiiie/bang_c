@@ -117,6 +117,21 @@ Invoke-NekoCheck "Workflow registry fast path" `
     ".\neko-core.ps1 --list-workflows" `
     { & ".\neko-core.ps1" --list-workflows }
 
+Invoke-NekoCheck "Model inventory fast path without API key" `
+    ".\neko-core.ps1 --model-inventory --run-dir run-model-inventory with NVIDIA_API_KEY cleared" `
+    {
+        $previousKey = $env:NVIDIA_API_KEY
+        try {
+            $env:NVIDIA_API_KEY = ""
+            & ".\neko-core.ps1" --model-inventory --run-dir "run-model-inventory"
+            if (-not (Test-Path -LiteralPath "run-model-inventory\model-inventory.txt")) {
+                throw "missing model inventory report"
+            }
+        } finally {
+            $env:NVIDIA_API_KEY = $previousKey
+        }
+    }
+
 Invoke-NekoCheck "Unknown workflow returns friendly CLI error" `
     "powershell -NoProfile -ExecutionPolicy Bypass -File .\neko-core.ps1 --workflow missing-workflow --output-dir output-verify-missing --limit 1" `
     { & powershell -NoProfile -ExecutionPolicy Bypass -File ".\neko-core.ps1" --workflow "missing-workflow" --output-dir "output-verify-missing" --limit 1 } `

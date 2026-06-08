@@ -53,6 +53,23 @@ class HarnessConfig:
         return str(self.raw["runtime"]["base_url"])
 
     @property
+    def allowed_model_families(self) -> tuple[str, ...]:
+        return tuple(
+            str(item)
+            for item in self.raw["runtime"].get("allowed_model_families", ())
+        )
+
+    @property
+    def allowed_embedding_families(self) -> tuple[str, ...]:
+        return tuple(
+            str(item)
+            for item in self.raw["runtime"].get(
+                "allowed_embedding_families",
+                ("bge-m3", "qwen-rerank"),
+            )
+        )
+
+    @property
     def default_strategy(self) -> str:
         return str(self.raw["runtime"].get("default_strategy", "auto"))
 
@@ -126,6 +143,9 @@ def _validate_config(raw: dict[str, Any], path: Path) -> None:
 
     if raw["contest"].get("output_columns") != ["qid", "answer"]:
         raise ValueError("Contest output columns must be exactly ['qid', 'answer']")
+
+    if not raw["runtime"].get("allowed_model_families"):
+        raise ValueError(f"Config {path} missing runtime.allowed_model_families")
 
     thresholds = raw["profiling"].get("thresholds", {})
     for key in ("many_choice_min", "long_context_chars", "short_question_chars", "focus_tail_chars"):

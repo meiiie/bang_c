@@ -60,6 +60,8 @@ Runtime modules:
 - `config.py`: loads schema-versioned harness config.
 - `loader.py`: reads CSV/JSON input and maps it to `Problem`.
 - `manifest.py`: writes reproducible run metadata for trace-enabled runs.
+- `model_inventory.py`: probes provider model inventory and filters Bang C
+  eligible LLM plus embedding/rerank models from config.
 - `schema.py`: owns shared dataclasses.
 - `classifier.py`: profiles item shape using config markers and thresholds.
 - `prompting.py`: builds prompt variants from the profile.
@@ -110,6 +112,7 @@ The config layer stores:
 - input filename candidates;
 - output contract;
 - model defaults;
+- allowed LLM and embedding/rerank families;
 - retry/timeout policy;
 - multilingual profiling markers;
 - classifier thresholds;

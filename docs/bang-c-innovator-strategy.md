@@ -40,6 +40,8 @@ answer letter and produced `pred.csv`.
 
 `qwen-rerank` was not visible in the local NVIDIA `/v1/models` response at the
 time of probing, so rerank should remain an adapter boundary until confirmed.
+Use `neko-core --model-inventory` to re-run this provider check without
+changing runtime source code.
 
 ## Development Workflow
 

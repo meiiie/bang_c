@@ -13,6 +13,7 @@ from .evaluation import validate_predictions, write_summary
 from .exporter import write_predictions, write_trace
 from .loader import find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
+from .model_inventory import collect_model_inventory, render_model_inventory
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
 from .project import init_project
 from .review import render_trace_review, review_trace_dir
@@ -33,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force", action="store_true", help="Overwrite files for commands that support it")
     parser.add_argument("--doctor", action="store_true", help="Run environment and contract diagnostics")
     parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
+    parser.add_argument("--model-inventory", action="store_true", help="Probe provider models and Bang C eligibility")
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
     parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
@@ -78,6 +80,17 @@ def main() -> int:
     if args.capabilities:
         print(render_capabilities(collect_capabilities(config)))
         return 0
+
+    if args.model_inventory:
+        report = collect_model_inventory(config)
+        rendered = render_model_inventory(report)
+        if args.run_dir:
+            report_path = Path(args.run_dir) / "model-inventory.txt"
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(rendered + "\n", encoding="utf-8")
+            print(f"Model inventory report: {report_path}")
+        print(rendered)
+        return 1 if report.status == "fail" else 0
 
     if args.list_workflows:
         print(render_workflows(list_workflows(config)))

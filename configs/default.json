@@ -29,6 +29,7 @@
     "default_model": "google/gemma-4-31b-it",
     "base_url": "https://integrate.api.nvidia.com/v1",
     "allowed_model_families": ["gemma-4", "qwen3.5"],
+    "allowed_embedding_families": ["bge-m3", "qwen-rerank"],
     "default_strategy": "auto",
     "max_retries": 2,
     "timeout_seconds": 90,
