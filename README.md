@@ -104,6 +104,16 @@ Verification report inspired by Claude Code's verification-agent pattern:
 The report prints command/output/result blocks and ends with `VERDICT: PASS`,
 `VERDICT: FAIL`, or `VERDICT: PARTIAL`.
 
+Workflow eval comparison:
+
+```powershell
+.\scripts\evaluate.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" -Limit 10
+.\scripts\evaluate.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" -Workflows quick-dry-run,contest-auto -Limit 10 -Repeat 1
+```
+
+The eval script runs selected workflows with trace enabled, compares
+`pred.csv` stability, and writes per-run artifacts under `eval-runs/`.
+
 Dry-run smoke test without API:
 
 ```powershell

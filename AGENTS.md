@@ -71,6 +71,7 @@ python -m compileall -q src
 .\neko-core.ps1 --list-workflows
 .\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output-dryrun --trace-dir traces-dryrun --dry-run
 .\scripts\verify.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json"
+.\scripts\evaluate.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" -Limit 10
 docker build -t neko-core:dev .
 ```
 

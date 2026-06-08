@@ -1,5 +1,6 @@
 output*/
 traces*/
+eval-runs/
 data/
 .venv/
 *.egg-info/

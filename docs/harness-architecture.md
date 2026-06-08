@@ -49,6 +49,8 @@ Runtime modules:
 - `workflows.py`: resolves named workflow profiles from config.
 - `scripts/verify.ps1`: dev-only verification runner that emits
   command/output/result evidence and a final verdict.
+- `scripts/evaluate.ps1`: dev-only workflow comparison runner for stability
+  and harness-score review.
 - `config.py`: loads schema-versioned harness config.
 - `loader.py`: reads CSV/JSON input and maps it to `Problem`.
 - `schema.py`: owns shared dataclasses.
@@ -128,11 +130,12 @@ Useful patterns from the local Claude Code snapshot:
   private-test assumptions.
 
 For Neko Core, the first adapted slices are `--doctor`, `--capabilities`,
-`--list-workflows`, and `scripts/verify.ps1`. They prove config, contract,
-model, key presence, input discovery, the runtime/development boundary, and
-verification evidence without running inference unless explicitly requested.
-Future work should add subagent-style eval comparison in the same style, while
-keeping the final Docker contract narrow.
+`--list-workflows`, `scripts/verify.ps1`, and `scripts/evaluate.ps1`. They prove
+config, contract, model, key presence, input discovery, the
+runtime/development boundary, verification evidence, and workflow stability
+without running inference unless explicitly requested. Future work should add
+subagent-style evaluation reviewers in the same style, while keeping the final
+Docker contract narrow.
 
 ## Wiii Reuse Path
 

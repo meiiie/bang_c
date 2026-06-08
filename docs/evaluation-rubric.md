@@ -44,3 +44,18 @@ Recommended accuracy loop:
 5. Change one technique at a time.
 6. Re-run the same sample and compare stability.
 
+## Workflow Comparison
+
+Use `scripts/evaluate.ps1` for development-only workflow comparison. The script
+runs selected workflows with trace enabled, stores artifacts under `eval-runs/`,
+and reports:
+
+- contract validity;
+- harness score;
+- average confidence;
+- fallback count;
+- answer changes compared with the first run.
+
+The default run repeats `quick-dry-run` twice to check reproducibility without
+requiring an API key. When model access is available, compare workflows such as
+`contest-auto`, `verify-all`, or `tournament` explicitly.
