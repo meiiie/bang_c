@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible Neko Core bug.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What failed, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include commands, input shape, workflow, and output/error.
+      placeholder: |
+        neko-core --workflow contest-strict --input public_test.csv --run-dir run-debug
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract impact
+      description: Does this affect /data input, /output/pred.csv, allowed models, Docker, or trace artifacts?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Docker version, and Neko Core version.
+

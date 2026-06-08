@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip build
+          python -m pip install -e .
+
+      - name: Run contract checks
+        run: |
+          python -m unittest discover -s tests -v
+          python -m compileall -q src
+          neko-core --version
+          neko-core --policy
+          neko-core --list-workflows
+
+      - name: Build Python artifacts
+        run: python -m build
+
+  docker:
+    name: Docker CSV contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t neko-core:ci .
+
+      - name: Verify /data to /output contract
+        run: |
+          mkdir -p /tmp/neko-data /tmp/neko-output
+          cat > /tmp/neko-data/public_test.csv <<'CSV'
+          qid,question,A,B,C,D
+          sample_001,"Which option is Alpha?",Alpha,Beta,Gamma,Delta
+          sample_002,"Which option is Delta?",Alpha,Beta,Gamma,Delta
+          CSV
+          docker run --rm \
+            -v /tmp/neko-data:/data \
+            -v /tmp/neko-output:/output \
+            neko-core:ci --workflow quick-dry-run --limit 2
+          test -f /tmp/neko-output/pred.csv
+          grep -q "qid,answer" /tmp/neko-output/pred.csv

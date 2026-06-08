@@ -1,0 +1,30 @@
+name: Improvement
+description: Propose a focused harness, model, retrieval, CLI, or release improvement.
+title: "[Improvement]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What limitation or risk does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the change and why it fits the Bang C contract.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: How should this be tested or evaluated?
+      placeholder: |
+        - Unit tests
+        - CSV + Docker contract
+        - Public-test eval comparison
+        - Real-model smoke
+
