@@ -94,6 +94,16 @@ Configured workflow examples:
 .\neko-core.ps1 --workflow verify-all --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
 ```
 
+Verification report inspired by Claude Code's verification-agent pattern:
+
+```powershell
+.\scripts\verify.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json"
+.\scripts\verify.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" -Docker
+```
+
+The report prints command/output/result blocks and ends with `VERDICT: PASS`,
+`VERDICT: FAIL`, or `VERDICT: PARTIAL`.
+
 Dry-run smoke test without API:
 
 ```powershell
