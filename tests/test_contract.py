@@ -731,6 +731,111 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(comparison.changed_answers, 1)
         self.assertIn("answer_changed", rendered)
 
+    def test_trace_comparison_can_scope_to_review_task_qids(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0014a",
+                            "question": "Question one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        },
+                        {
+                            "qid": "test_0014b",
+                            "question": "Question two.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        },
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problems = load_problems(path)
+            left_predictions = [
+                Prediction(
+                    qid=problems[0].qid,
+                    answer="A",
+                    model="heuristic",
+                    raw_answer="A",
+                    strategy="fallback_overlap",
+                    confidence=0.8,
+                    trace=(
+                        TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                        TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True"),
+                    ),
+                ),
+                Prediction(
+                    qid=problems[1].qid,
+                    answer="B",
+                    model="heuristic",
+                    raw_answer="B",
+                    strategy="fallback_overlap",
+                    confidence=0.8,
+                    trace=(
+                        TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                        TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True"),
+                    ),
+                ),
+            ]
+            right_predictions = [
+                left_predictions[0],
+                Prediction(
+                    qid=problems[1].qid,
+                    answer="C",
+                    model="heuristic",
+                    raw_answer="C",
+                    strategy="fallback_overlap",
+                    confidence=0.8,
+                    trace=(
+                        TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                        TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True"),
+                    ),
+                ),
+            ]
+            left_dir = Path(temp_dir) / "left"
+            right_dir = Path(temp_dir) / "right"
+            output_path = Path(temp_dir) / "output" / "pred.csv"
+            for trace_dir, predictions in (
+                (left_dir, left_predictions),
+                (right_dir, right_predictions),
+            ):
+                summary = validate_predictions(
+                    problems,
+                    predictions,
+                    self.config,
+                    trace_enabled=True,
+                )
+                write_trace(trace_dir, predictions)
+                write_summary(trace_dir / "run-summary.json", summary)
+                write_run_manifest(
+                    trace_dir / "run-manifest.json",
+                    build_run_manifest(
+                        config=self.config,
+                        input_path=path,
+                        output_path=output_path,
+                        trace_dir=trace_dir,
+                        workflow="quick-dry-run",
+                        strategy="auto",
+                        dry_run=True,
+                        verify=False,
+                        model="heuristic",
+                        limit=None,
+                        summary=summary,
+                        argv=("--workflow", "quick-dry-run"),
+                    ),
+                )
+
+            full = compare_trace_dirs(left_dir, right_dir)
+            scoped = compare_trace_dirs(left_dir, right_dir, qids=("test_0014a",))
+            missing = compare_trace_dirs(left_dir, right_dir, qids=("missing",))
+
+        self.assertEqual(full.changed_answers, 1)
+        self.assertEqual(scoped.verdict, "pass")
+        self.assertEqual(scoped.changed_answers, 0)
+        self.assertEqual(missing.verdict, "fail")
+        self.assertTrue(any(finding.code == "left_missing_selected_qid" for finding in missing.findings))
+
     def test_trace_review_fails_when_trace_artifact_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             review = review_trace_dir(Path(temp_dir) / "missing-traces")

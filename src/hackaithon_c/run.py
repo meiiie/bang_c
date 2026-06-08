@@ -52,6 +52,12 @@ def parse_args() -> argparse.Namespace:
         metavar=("LEFT", "RIGHT"),
         help="Compare two existing dev trace directories",
     )
+    parser.add_argument(
+        "--compare-qid",
+        action="append",
+        default=[],
+        help="Limit --compare-traces to this qid; repeat for multiple qids",
+    )
     parser.add_argument("--banner", action="store_true", help="Print the ASCII Neko Core banner")
     parser.add_argument("--dry-run", action="store_true", help="Use deterministic heuristic only")
     parser.add_argument(
@@ -125,6 +131,7 @@ def main() -> int:
         comparison = compare_trace_dirs(
             Path(args.compare_traces[0]),
             Path(args.compare_traces[1]),
+            qids=tuple(args.compare_qid),
         )
         print(render_trace_comparison(comparison))
         return 1 if comparison.verdict == "fail" else 0

@@ -138,6 +138,7 @@ Trace review:
 .\neko-core.ps1 --review-tasks traces-verify --run-dir run-review-tasks
 .\scripts\resolve-tasks.ps1 -TaskPath run-review-tasks\review-tasks.json -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" -Workflow verify-all
 .\neko-core.ps1 --compare-traces traces-before traces-after
+.\neko-core.ps1 --compare-traces traces-before traces-after --compare-qid test_0001
 ```
 
 The reviewer is development-only. It reads `run-summary.json` plus
@@ -149,7 +150,9 @@ two runs.
 Review tasks convert non-info findings into an action queue that another agent
 or team member can work through without changing the contest artifact.
 `scripts/resolve-tasks.ps1` reads that queue, reruns qid-scoped tasks with a
-selected workflow, and writes `task-resolution-report.md`.
+selected workflow, and writes `task-resolution-report.md`,
+`task-resolution.json`, command output, and a scoped trace comparison when the
+source run has a sibling `traces/` directory.
 
 Dry-run smoke test without API:
 

@@ -168,6 +168,16 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
                 -TaskPath "run-verify\review-tasks.json" `
                 -InputPath $InputPath `
                 -Workflow "quick-dry-run"
+            $latestTaskRun = Get-ChildItem -Directory "task-runs" |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1
+            if (-not $latestTaskRun) { throw "missing task resolution run" }
+            if (-not (Test-Path -LiteralPath (Join-Path $latestTaskRun.FullName "task-resolution.json"))) {
+                throw "missing task resolution json"
+            }
+            if (-not (Test-Path -LiteralPath (Join-Path $latestTaskRun.FullName "comparison.txt"))) {
+                throw "missing scoped comparison"
+            }
         }
 
     Invoke-NekoCheck "Trace reviewer reads quick workflow artifacts" `

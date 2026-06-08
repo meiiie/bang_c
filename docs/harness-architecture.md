@@ -100,8 +100,9 @@ keeping the final `/data` to `/output` contest contract unchanged.
 It is intentionally deterministic and model-free: subagents or teammates can
 pick up those tasks later, while the submission artifact stays unchanged.
 `scripts/resolve-tasks.ps1` is the first deterministic task runner: it reads
-that queue, reruns the qid-scoped tasks with a stronger workflow, and records a
-task-resolution report.
+that queue, reruns the qid-scoped tasks with a stronger workflow, records a
+task-resolution report plus JSON lifecycle artifact, and compares only the
+queued qids against the source run when baseline traces are available.
 
 `scripts/evaluate.ps1` composes those run sessions into a higher-level eval
 session. Each workflow repeat gets its own run folder, then the eval report

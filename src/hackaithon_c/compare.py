@@ -29,10 +29,16 @@ class TraceComparison:
     findings: tuple[CompareFinding, ...]
 
 
-def compare_trace_dirs(left_dir: Path, right_dir: Path) -> TraceComparison:
+def compare_trace_dirs(
+    left_dir: Path,
+    right_dir: Path,
+    *,
+    qids: tuple[str, ...] = (),
+) -> TraceComparison:
     findings: list[CompareFinding] = []
-    left = _load_bundle(left_dir, findings, side="left")
-    right = _load_bundle(right_dir, findings, side="right")
+    selected_qids = _dedupe_qids(qids)
+    left = _load_bundle(left_dir, findings, side="left", qids=selected_qids)
+    right = _load_bundle(right_dir, findings, side="right", qids=selected_qids)
     if left is None or right is None:
         return _comparison(
             left_dir,
@@ -91,6 +97,7 @@ def _load_bundle(
     findings: list[CompareFinding],
     *,
     side: str,
+    qids: tuple[str, ...],
 ) -> dict[str, Any] | None:
     trace_path = trace_dir / "predictions.trace.jsonl"
     summary_path = trace_dir / "run-summary.json"
@@ -139,8 +146,22 @@ def _load_bundle(
             )
         )
 
+    prediction_map = {str(row.get("qid")): row for row in predictions}
+    if qids:
+        for qid in qids:
+            if qid not in prediction_map:
+                findings.append(
+                    CompareFinding(
+                        severity="fail",
+                        code=f"{side}_missing_selected_qid",
+                        message="Selected qid is not present in this trace.",
+                        qid=qid,
+                    )
+                )
+        prediction_map = {qid: prediction_map[qid] for qid in qids if qid in prediction_map}
+
     return {
-        "predictions": {str(row.get("qid")): row for row in predictions},
+        "predictions": prediction_map,
         "summary": summary,
         "manifest": manifest,
     }
@@ -286,3 +307,7 @@ def _read_trace_jsonl(path: Path) -> list[dict[str, Any]]:
             raise ValueError(f"Expected object JSONL row in {path}")
         rows.append(value)
     return rows
+
+
+def _dedupe_qids(qids: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(qid.strip() for qid in qids if qid.strip()))
