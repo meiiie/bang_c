@@ -154,6 +154,13 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
             Get-Content -LiteralPath "run-verify\run-report.md" -TotalCount 20
         }
 
+    Invoke-NekoCheck "Session commands read resume-ready run artifacts" `
+        ".\neko-core.ps1 --list-runs --runs-root .; .\neko-core.ps1 --session run-verify" `
+        {
+            & ".\neko-core.ps1" --list-runs --runs-root "."
+            & ".\neko-core.ps1" --session "run-verify"
+        }
+
     Invoke-NekoCheck "Review task queue reads quick workflow artifacts" `
         ".\neko-core.ps1 --review-tasks run-verify\traces --run-dir run-review-tasks" `
         {

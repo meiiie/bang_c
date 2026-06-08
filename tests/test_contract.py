@@ -32,7 +32,14 @@ from hackaithon_c.review_tasks import (
     write_review_tasks_json,
 )
 from hackaithon_c.schema import Prediction, TraceStep
-from hackaithon_c.session import prepare_run_session, write_run_report
+from hackaithon_c.session import (
+    discover_run_sessions,
+    load_run_session_record,
+    prepare_run_session,
+    render_run_session_detail,
+    render_run_sessions,
+    write_run_report,
+)
 from hackaithon_c.solver import solve_problem
 from hackaithon_c.workflows import list_workflows, render_workflows, resolve_workflow
 
@@ -298,6 +305,93 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("- Workflow: quick-dry-run", report)
         self.assertIn("- Verdict: FAIL", report)
         self.assertIn("- Review tasks:", report)
+
+    def test_run_session_reader_lists_resume_ready_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "public_test.json"
+            input_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_session_1",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(input_path)[0]
+            prediction = Prediction(
+                qid=problem.qid,
+                answer="A",
+                model="heuristic",
+                raw_answer="A",
+                strategy="fallback_overlap",
+                confidence=0.2,
+                trace=(
+                    TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                    TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True", "A"),
+                ),
+            )
+            root = Path(temp_dir) / "run-session"
+            session = prepare_run_session(root)
+            output_path = session.output_dir / "pred.csv"
+            summary = validate_predictions(
+                [problem],
+                [prediction],
+                self.config,
+                trace_enabled=True,
+            )
+            write_trace(session.trace_dir, [prediction])
+            write_summary(session.trace_dir / "run-summary.json", summary)
+            write_run_manifest(
+                session.trace_dir / "run-manifest.json",
+                build_run_manifest(
+                    config=self.config,
+                    input_path=input_path,
+                    output_path=output_path,
+                    trace_dir=session.trace_dir,
+                    workflow="quick-dry-run",
+                    strategy="auto",
+                    dry_run=True,
+                    verify=False,
+                    model="heuristic",
+                    limit=1,
+                    summary=summary,
+                    argv=("--workflow", "quick-dry-run"),
+                ),
+            )
+            review = review_trace_dir(session.trace_dir)
+            tasks = build_review_tasks(review)
+            write_review_tasks_json(session.review_tasks_json_path, tasks)
+            write_run_report(
+                session.report_path,
+                input_path=input_path,
+                output_path=output_path,
+                trace_dir=session.trace_dir,
+                workflow="quick-dry-run",
+                strategy="auto",
+                dry_run=True,
+                verify=False,
+                model="heuristic",
+                summary=summary,
+                review=review,
+                review_tasks_path=session.review_tasks_markdown_path,
+            )
+
+            record = load_run_session_record(root)
+            records = discover_run_sessions(Path(temp_dir))
+            listing = render_run_sessions(records, root=Path(temp_dir))
+            detail = render_run_session_detail(record) if record else ""
+
+        self.assertIsNotNone(record)
+        self.assertEqual(record.workflow if record else "", "quick-dry-run")
+        self.assertEqual(record.review_task_count if record else 0, 1)
+        self.assertIn("Neko Core Run Sessions", listing)
+        self.assertIn("run-session", listing)
+        self.assertIn("Neko Core Session", detail)
+        self.assertIn("resolve-tasks.ps1", detail)
 
     def test_doctor_reports_contract_without_requiring_input(self) -> None:
         checks = collect_doctor_checks(

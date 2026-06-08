@@ -23,7 +23,14 @@ from .review_tasks import (
     write_review_tasks_json,
     write_review_tasks_markdown,
 )
-from .session import prepare_run_session, write_run_report
+from .session import (
+    discover_run_sessions,
+    load_run_session_record,
+    prepare_run_session,
+    render_run_session_detail,
+    render_run_sessions,
+    write_run_report,
+)
 from .solver import solve_problem
 from .workflows import list_workflows, render_workflows, resolve_workflow
 
@@ -46,6 +53,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
     parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
     parser.add_argument("--review-tasks", default=None, help="Create reviewer task queue from a trace directory")
+    parser.add_argument("--list-runs", action="store_true", help="List local run sessions")
+    parser.add_argument("--runs-root", default=".", help="Root directory for --list-runs")
+    parser.add_argument("--session", default=None, help="Show details for a local run session")
     parser.add_argument(
         "--compare-traces",
         nargs=2,
@@ -126,6 +136,19 @@ def main() -> int:
             print(f"Review tasks: {session.review_tasks_markdown_path}")
         print(rendered)
         return 1 if review.verdict == "fail" else 0
+
+    if args.list_runs:
+        root = Path(args.runs_root)
+        print(render_run_sessions(discover_run_sessions(root), root=root))
+        return 0
+
+    if args.session:
+        record = load_run_session_record(Path(args.session))
+        if record is None:
+            print(f"Error: run session not found: {args.session}", file=sys.stderr)
+            return 2
+        print(render_run_session_detail(record))
+        return 0
 
     if args.compare_traces:
         comparison = compare_trace_dirs(

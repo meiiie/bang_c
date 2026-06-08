@@ -107,6 +107,18 @@ Configured workflow examples:
 together so experiments can be reviewed without remembering separate output and
 trace paths.
 
+Session inspection, inspired by Claude Code's `/resume` and `/session`
+surfaces:
+
+```powershell
+.\neko-core.ps1 --list-runs --runs-root .
+.\neko-core.ps1 --session run-smoke
+```
+
+These commands only read local artifacts. They show workflow, model, contract
+status, trace review status, review-task count, and the next review/resolve
+commands for a run folder.
+
 Verification report inspired by Claude Code's verification-agent pattern:
 
 ```powershell
