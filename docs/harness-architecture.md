@@ -52,6 +52,8 @@ Runtime modules:
   command/output/result evidence and a final verdict.
 - `scripts/evaluate.ps1`: dev-only workflow comparison runner for stability
   and harness-score review.
+- `compare.py`: compares two trace-enabled runs using manifests and prediction
+  trace rows.
 - `config.py`: loads schema-versioned harness config.
 - `loader.py`: reads CSV/JSON input and maps it to `Problem`.
 - `manifest.py`: writes reproducible run metadata for trace-enabled runs.
@@ -80,6 +82,8 @@ simple.
 Run manifests are written as `run-manifest.json` only for trace-enabled
 development runs. They capture config/input hashes and selected runtime options,
 so experiments can be compared without relying on memory or hidden local state.
+`--compare-traces` uses those manifests plus prediction trace rows to flag
+changed answers, input/config drift, confidence drift, and fallback drift.
 
 ## Why Config First
 

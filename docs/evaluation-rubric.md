@@ -67,6 +67,8 @@ development runs; a `FAIL` verdict means trace artifacts are missing, counts do
 not match, the prediction contract is invalid, or a trace step is blocked.
 Use `run-manifest.json` in the same trace directory to compare config/input
 hashes before trusting differences between two runs.
+Use `neko-core --compare-traces <left> <right>` to separate real answer changes
+from config/input/model drift.
 
 The default run repeats `quick-dry-run` twice to check reproducibility without
 requiring an API key. When model access is available, compare workflows such as

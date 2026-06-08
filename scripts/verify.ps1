@@ -134,6 +134,10 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
     Invoke-NekoCheck "Run manifest is written with hashes" `
         "$pythonExe -c `"import json; m=json.load(open('traces-verify/run-manifest.json', encoding='utf-8')); assert m['schema_version']=='neko_core.run_manifest.v1'; assert len(m['input_sha256'])==64; print(m['workflow'], m['model'])`"" `
         { & $pythonExe -c "import json; m=json.load(open('traces-verify/run-manifest.json', encoding='utf-8')); assert m['schema_version']=='neko_core.run_manifest.v1'; assert len(m['input_sha256'])==64; print(m['workflow'], m['model'])" }
+
+    Invoke-NekoCheck "Trace comparison reads identical run artifacts" `
+        ".\neko-core.ps1 --compare-traces traces-verify traces-verify" `
+        { & ".\neko-core.ps1" --compare-traces "traces-verify" "traces-verify" }
 } else {
     Add-PartialCheck "Quick workflow produces pred.csv" "Input file not provided or not found. Pass -InputPath path\to\public_test.json."
 }

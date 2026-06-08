@@ -118,11 +118,15 @@ Trace review:
 
 ```powershell
 .\neko-core.ps1 --review-trace traces-verify
+.\neko-core.ps1 --compare-traces traces-before traces-after
 ```
 
 The reviewer is development-only. It reads `run-summary.json` plus
 `predictions.trace.jsonl`, then reports low confidence, fallback paths, trace
 warnings, missing roles, and blocked steps without touching `pred.csv`.
+Trace comparison is also development-only; it compares manifest hashes,
+prediction counts, changed answers, confidence drift, and fallback drift between
+two runs.
 
 Dry-run smoke test without API:
 

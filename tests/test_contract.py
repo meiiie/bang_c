@@ -9,6 +9,7 @@ from pathlib import Path
 from hackaithon_c.branding import ascii_logo, version_line
 from hackaithon_c.capabilities import collect_capabilities, render_capabilities
 from hackaithon_c.classifier import classify_problem
+from hackaithon_c.compare import compare_trace_dirs, render_trace_comparison
 from hackaithon_c.config import load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions, write_summary
@@ -38,6 +39,57 @@ class FakeClient:
 class ContestContractTest(unittest.TestCase):
     def setUp(self) -> None:
         self.config = load_config()
+
+    def _write_trace_bundle(
+        self,
+        temp_dir: str,
+        name: str,
+        input_path: Path,
+        *,
+        answer: str = "A",
+        confidence: float = 0.8,
+    ) -> Path:
+        problem = load_problems(input_path)[0]
+        prediction = Prediction(
+            qid=problem.qid,
+            answer=answer,
+            model="heuristic",
+            raw_answer=answer,
+            strategy="fallback_overlap",
+            confidence=confidence,
+            trace=(
+                TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True", answer),
+            ),
+        )
+        trace_dir = Path(temp_dir) / name
+        output_path = Path(temp_dir) / f"{name}-output" / "pred.csv"
+        summary = validate_predictions(
+            [problem],
+            [prediction],
+            self.config,
+            trace_enabled=True,
+        )
+        write_trace(trace_dir, [prediction])
+        write_summary(trace_dir / "run-summary.json", summary)
+        write_run_manifest(
+            trace_dir / "run-manifest.json",
+            build_run_manifest(
+                config=self.config,
+                input_path=input_path,
+                output_path=output_path,
+                trace_dir=trace_dir,
+                workflow="quick-dry-run",
+                strategy="auto",
+                dry_run=True,
+                verify=False,
+                model="heuristic",
+                limit=1,
+                summary=summary,
+                argv=("--workflow", "quick-dry-run"),
+            ),
+        )
+        return trace_dir
 
     def test_json_loader_supports_public_test_shape(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -441,6 +493,56 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(manifest["workflow"], "quick-dry-run")
         self.assertEqual(len(manifest["input_sha256"]), 64)
         self.assertFalse(any(finding.code == "missing_manifest" for finding in review.findings))
+
+    def test_trace_comparison_passes_for_identical_prediction_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0011",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            left = self._write_trace_bundle(temp_dir, "left", path, answer="A")
+            right = self._write_trace_bundle(temp_dir, "right", path, answer="A")
+
+            comparison = compare_trace_dirs(left, right)
+            rendered = render_trace_comparison(comparison)
+
+        self.assertEqual(comparison.verdict, "pass")
+        self.assertEqual(comparison.changed_answers, 0)
+        self.assertIn("trace_match", rendered)
+
+    def test_trace_comparison_warns_when_answers_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0012",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            left = self._write_trace_bundle(temp_dir, "left", path, answer="A")
+            right = self._write_trace_bundle(temp_dir, "right", path, answer="B")
+
+            comparison = compare_trace_dirs(left, right)
+            rendered = render_trace_comparison(comparison)
+
+        self.assertEqual(comparison.verdict, "warn")
+        self.assertEqual(comparison.changed_answers, 1)
+        self.assertIn("answer_changed", rendered)
 
     def test_trace_review_fails_when_trace_artifact_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

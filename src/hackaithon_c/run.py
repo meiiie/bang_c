@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .branding import render_banner, version_line
 from .capabilities import collect_capabilities, render_capabilities
+from .compare import compare_trace_dirs, render_trace_comparison
 from .config import load_config
 from .doctor import collect_doctor_checks, render_doctor_report
 from .evaluation import validate_predictions, write_summary
@@ -31,6 +32,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
     parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
+    parser.add_argument(
+        "--compare-traces",
+        nargs=2,
+        metavar=("LEFT", "RIGHT"),
+        help="Compare two existing dev trace directories",
+    )
     parser.add_argument("--banner", action="store_true", help="Print the ASCII Neko Core banner")
     parser.add_argument("--dry-run", action="store_true", help="Use deterministic heuristic only")
     parser.add_argument(
@@ -69,6 +76,14 @@ def main() -> int:
         review = review_trace_dir(Path(args.review_trace))
         print(render_trace_review(review))
         return 1 if review.verdict == "fail" else 0
+
+    if args.compare_traces:
+        comparison = compare_trace_dirs(
+            Path(args.compare_traces[0]),
+            Path(args.compare_traces[1]),
+        )
+        print(render_trace_comparison(comparison))
+        return 1 if comparison.verdict == "fail" else 0
 
     if args.doctor:
         input_path = Path(args.input) if args.input else None
