@@ -44,6 +44,7 @@ def collect_capabilities(config: HarnessConfig) -> tuple[Capability, ...]:
         Capability("doctor", "cli", "enabled", "Environment and contest-contract diagnostics"),
         Capability("agent_registry", "cli", "enabled", "Named harness agent roles and handoff boundaries"),
         Capability("tool_registry", "cli", "enabled", "Named tool contracts, permissions, and guardrails"),
+        Capability("command_registry", "cli", "enabled", "Named CLI command surface and guardrails"),
         Capability("model_inventory", "cli", "enabled", "Provider model probe and Bang C filtering"),
         Capability("workflow_registry", "cli", "enabled", "Named runtime and development workflows"),
         Capability(

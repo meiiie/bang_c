@@ -7,6 +7,12 @@ from pathlib import Path
 from .agents import list_agents, render_agent_detail, render_agents, resolve_agent
 from .branding import render_banner, version_line
 from .capabilities import collect_capabilities, render_capabilities
+from .command_registry import (
+    list_commands,
+    render_command_detail,
+    render_commands,
+    resolve_command,
+)
 from .compare import compare_trace_dirs, render_trace_comparison
 from .config import load_config
 from .doctor import collect_doctor_checks, render_doctor_report
@@ -55,6 +61,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--agent", default=None, help="Print one harness agent role")
     parser.add_argument("--tools", action="store_true", help="Print harness tool registry")
     parser.add_argument("--tool", default=None, help="Print one harness tool contract")
+    parser.add_argument("--commands", action="store_true", help="Print harness command registry")
+    parser.add_argument("--command", default=None, help="Print one harness command contract")
     parser.add_argument("--model-inventory", action="store_true", help="Probe provider models and Bang C eligibility")
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
@@ -132,6 +140,18 @@ def main() -> int:
     if args.tool:
         try:
             print(render_tool_detail(resolve_tool(config, args.tool)))
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
+        return 0
+
+    if args.commands:
+        print(render_commands(list_commands(config)))
+        return 0
+
+    if args.command:
+        try:
+            print(render_command_detail(resolve_command(config, args.command)))
         except ValueError as error:
             print(f"Error: {error}", file=sys.stderr)
             return 2

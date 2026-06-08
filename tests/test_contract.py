@@ -11,6 +11,12 @@ from hackaithon_c.agents import list_agents, render_agent_detail, render_agents,
 from hackaithon_c.branding import ascii_logo, version_line
 from hackaithon_c.capabilities import collect_capabilities, render_capabilities
 from hackaithon_c.classifier import classify_problem
+from hackaithon_c.command_registry import (
+    list_commands,
+    render_command_detail,
+    render_commands,
+    resolve_command,
+)
 from hackaithon_c.compare import compare_trace_dirs, render_trace_comparison
 from hackaithon_c.config import LOCAL_CONFIG_DIR, LOCAL_CONFIG_NAME, load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
@@ -460,6 +466,7 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("contest_io", report)
         self.assertIn("agent_registry", report)
         self.assertIn("tool_registry", report)
+        self.assertIn("command_registry", report)
         self.assertIn("model_inventory", report)
         self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
         self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
@@ -494,6 +501,22 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("cannot write pred.csv", detail)
         with self.assertRaises(ValueError):
             resolve_tool(self.config, "missing-tool")
+
+    def test_command_registry_documents_cli_surface(self) -> None:
+        commands = list_commands(self.config)
+        rendered = render_commands(commands)
+        run = resolve_command(self.config, "run")
+        trace_review = resolve_command(self.config, "trace-review")
+        detail = render_command_detail(run)
+
+        self.assertIn("Neko Core commands", rendered)
+        self.assertEqual(run.phase, "runtime")
+        self.assertIn("contest-auto", run.example)
+        self.assertIn("pred.csv", detail)
+        self.assertEqual(trace_review.phase, "development")
+        self.assertIn("do not mutate pred.csv", trace_review.guardrail)
+        with self.assertRaises(ValueError):
+            resolve_command(self.config, "missing-command")
 
     def test_model_inventory_filters_bang_c_allowed_models(self) -> None:
         payload = {

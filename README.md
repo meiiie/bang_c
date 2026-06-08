@@ -61,6 +61,7 @@ One-command local install:
 .\neko-core.ps1 --capabilities
 .\neko-core.ps1 --agents
 .\neko-core.ps1 --tools
+.\neko-core.ps1 --commands
 .\neko-core.ps1 --model-inventory
 .\neko-core.ps1 --list-workflows
 .\neko-core.ps1 --init
@@ -99,6 +100,10 @@ CLI fast paths inspired by Claude Code:
   permission class, inputs, outputs, and guardrails.
 - `--tool <name>`: inspect one tool contract, for example `--tool web-research`
   or `--tool exporter`.
+- `--commands`: command registry with phase, category, example, and guardrail
+  for each CLI or script surface.
+- `--command <name>`: inspect one command, for example `--command run` or
+  `--command trace-review`.
 - `--model-inventory`: probe NVIDIA `/models` and filter models by Bang C
   allowed LLM and embedding/rerank families. Combine with `--run-dir` to save
   `model-inventory.txt` before model experiments.

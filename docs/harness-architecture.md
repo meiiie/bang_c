@@ -47,6 +47,8 @@ Runtime modules:
 - `branding.py`: owns Neko Core identity, version string, and ASCII banner.
 - `capabilities.py`: lists runtime and development-only capabilities in one
   registry.
+- `command_registry.py`: documents CLI/script command surfaces, examples, and
+  guardrails.
 - `doctor.py`: runs lightweight diagnostics similar to CLI doctor/status
   workflows.
 - `project.py`: initializes project-local configuration under `.neko-core/`
@@ -130,6 +132,13 @@ web and subagent entries are intentionally marked external and quarantined:
 they may inform tests or config, but they cannot directly write the contest
 artifact or perform privileged actions.
 
+`--commands` and `--command <name>` expose a read-only command registry inspired
+by Claude Code's slash-command surface. This registry is the map of how humans
+operate the harness: identity checks, local config, diagnostics, registries,
+runtime solving, run sessions, trace review, task resolution, verification, and
+evals. It gives contributors a stable command vocabulary before the project
+adds heavier interactive or subagent orchestration.
+
 `scripts/evaluate.ps1` composes those run sessions into a higher-level eval
 session. Each workflow repeat gets its own run folder, then the eval report
 records trace review, trace comparison, and a selected candidate. This mirrors
@@ -209,13 +218,14 @@ Useful patterns from the local Claude Code snapshot:
   private-test assumptions.
 
 For Neko Core, the first adapted slices are `--doctor`, `--capabilities`,
-`--agents`, `--agent`, `--tools`, `--tool`, `--list-workflows`,
-`scripts/verify.ps1`, and `scripts/evaluate.ps1`. They prove config, contract,
-model, key presence, input discovery, the runtime/development boundary, role
-handoffs, tool guardrails, verification evidence, and workflow stability
-without running inference unless explicitly requested. Future work should add
-subagent-style evaluation reviewers in the same style, while keeping the final
-Docker contract narrow.
+`--agents`, `--agent`, `--tools`, `--tool`, `--commands`, `--command`,
+`--list-workflows`, `scripts/verify.ps1`, and `scripts/evaluate.ps1`. They
+prove config, contract, model, key presence, input discovery, the
+runtime/development boundary, role handoffs, tool guardrails, command
+guardrails, verification evidence, and workflow stability without running
+inference unless explicitly requested. Future work should add subagent-style
+evaluation reviewers in the same style, while keeping the final Docker contract
+narrow.
 
 ## Wiii Reuse Path
 

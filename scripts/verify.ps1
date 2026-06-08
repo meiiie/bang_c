@@ -131,6 +131,13 @@ Invoke-NekoCheck "Tool registry fast path" `
         & ".\neko-core.ps1" --tool "web-research"
     }
 
+Invoke-NekoCheck "Command registry fast path" `
+    ".\neko-core.ps1 --commands; .\neko-core.ps1 --command run" `
+    {
+        & ".\neko-core.ps1" --commands
+        & ".\neko-core.ps1" --command "run"
+    }
+
 Invoke-NekoCheck "Model inventory fast path without API key" `
     ".\neko-core.ps1 --model-inventory --run-dir run-model-inventory with NVIDIA_API_KEY cleared" `
     {
