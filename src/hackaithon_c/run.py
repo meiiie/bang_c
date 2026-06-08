@@ -34,6 +34,7 @@ from .session import (
     write_run_report,
 )
 from .solver import solve_problem
+from .tool_registry import list_tools, render_tool_detail, render_tools, resolve_tool
 from .workflows import list_workflows, render_workflows, resolve_workflow
 
 
@@ -52,6 +53,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
     parser.add_argument("--agents", action="store_true", help="Print harness agent role registry")
     parser.add_argument("--agent", default=None, help="Print one harness agent role")
+    parser.add_argument("--tools", action="store_true", help="Print harness tool registry")
+    parser.add_argument("--tool", default=None, help="Print one harness tool contract")
     parser.add_argument("--model-inventory", action="store_true", help="Probe provider models and Bang C eligibility")
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
@@ -117,6 +120,18 @@ def main() -> int:
     if args.agent:
         try:
             print(render_agent_detail(resolve_agent(config, args.agent)))
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
+        return 0
+
+    if args.tools:
+        print(render_tools(list_tools(config)))
+        return 0
+
+    if args.tool:
+        try:
+            print(render_tool_detail(resolve_tool(config, args.tool)))
         except ValueError as error:
             print(f"Error: {error}", file=sys.stderr)
             return 2

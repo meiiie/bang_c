@@ -43,6 +43,12 @@ from hackaithon_c.session import (
     write_run_report,
 )
 from hackaithon_c.solver import solve_problem
+from hackaithon_c.tool_registry import (
+    list_tools,
+    render_tool_detail,
+    render_tools,
+    resolve_tool,
+)
 from hackaithon_c.workflows import list_workflows, render_workflows, resolve_workflow
 
 
@@ -453,6 +459,7 @@ class ContestContractTest(unittest.TestCase):
 
         self.assertIn("contest_io", report)
         self.assertIn("agent_registry", report)
+        self.assertIn("tool_registry", report)
         self.assertIn("model_inventory", report)
         self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
         self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
@@ -470,6 +477,23 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("task-resolution.json", detail)
         with self.assertRaises(ValueError):
             resolve_agent(self.config, "missing-agent")
+
+    def test_tool_registry_documents_permissions_and_guardrails(self) -> None:
+        tools = list_tools(self.config)
+        rendered = render_tools(tools)
+        exporter = resolve_tool(self.config, "exporter")
+        web_research = resolve_tool(self.config, "web-research")
+        detail = render_tool_detail(web_research)
+
+        self.assertIn("Neko Core tools", rendered)
+        self.assertEqual(exporter.phase, "runtime")
+        self.assertIn("/output/pred.csv", exporter.outputs)
+        self.assertEqual(web_research.phase, "development")
+        self.assertEqual(web_research.status, "external")
+        self.assertIn("quarantined-read", detail)
+        self.assertIn("cannot write pred.csv", detail)
+        with self.assertRaises(ValueError):
+            resolve_tool(self.config, "missing-tool")
 
     def test_model_inventory_filters_bang_c_allowed_models(self) -> None:
         payload = {
