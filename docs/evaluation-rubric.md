@@ -47,16 +47,18 @@ Recommended accuracy loop:
 ## Workflow Comparison
 
 Use `scripts/evaluate.ps1` for development-only workflow comparison. The script
-runs selected workflows with trace enabled, stores artifacts under `eval-runs/`,
-and writes `eval-summary.json` plus `eval-report.md` for the whole eval run. It
-reports:
+runs selected workflows as `--run-dir` sessions, stores artifacts under
+`eval-runs/`, and writes `eval-summary.json` plus `eval-report.md` for the
+whole eval run. It reports:
 
 - contract validity;
 - harness score;
 - average confidence;
 - fallback count;
-- answer changes compared with the first run.
-- reviewer verdict and trace-comparison verdict for each run.
+- answer changes compared with the first run;
+- reviewer verdict and trace-comparison verdict for each run;
+- a selected candidate ranked by valid contract, stability, review verdict,
+  fallback count, harness score, and confidence.
 
 Inspect `predictions.trace.jsonl` for each changed or low-confidence answer.
 The `trace` field records the agent-style path that produced the answer, which

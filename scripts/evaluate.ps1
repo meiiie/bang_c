@@ -82,6 +82,38 @@ function Read-Verdict {
     return "UNKNOWN"
 }
 
+function Get-VerdictRank {
+    param([string]$Verdict)
+
+    switch ($Verdict) {
+        "PASS" { return 0 }
+        "WARN" { return 1 }
+        "FAIL" { return 2 }
+        default { return 3 }
+    }
+}
+
+function Select-EvalCandidate {
+    param([object[]]$Results)
+
+    $ordered = @(
+        $Results | Sort-Object `
+            @{ Expression = { if ($_.valid) { 0 } else { 1 } }; Ascending = $true }, `
+            @{ Expression = { [int]$_.changed_vs_first }; Ascending = $true }, `
+            @{ Expression = { Get-VerdictRank $_.compare }; Ascending = $true }, `
+            @{ Expression = { Get-VerdictRank $_.review }; Ascending = $true }, `
+            @{ Expression = { [int]$_.fallbacks }; Ascending = $true }, `
+            @{ Expression = { -[double]$_.score }; Ascending = $true }, `
+            @{ Expression = { -[double]$_.confidence }; Ascending = $true }, `
+            @{ Expression = { [string]$_.workflow }; Ascending = $true }, `
+            @{ Expression = { [int]$_.run }; Ascending = $true }
+    )
+    if ($ordered.Count -eq 0) {
+        return $null
+    }
+    return $ordered[0]
+}
+
 function Write-EvalArtifacts {
     param(
         [string]$RunDir,
@@ -90,6 +122,7 @@ function Write-EvalArtifacts {
         [int]$Limit,
         [int]$Repeat,
         [object[]]$Results,
+        [object]$Candidate,
         [string]$Verdict,
         [string[]]$FailureReasons
     )
@@ -107,6 +140,7 @@ function Write-EvalArtifacts {
         repeat = $Repeat
         verdict = $Verdict
         failure_reasons = $FailureReasons
+        selected_candidate = $Candidate
         results = $Results
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
 
@@ -122,12 +156,18 @@ function Write-EvalArtifacts {
     if ($FailureReasons.Count -gt 0) {
         $lines.Add("- Failure reasons: $($FailureReasons -join ', ')") | Out-Null
     }
+    if ($null -ne $Candidate) {
+        $lines.Add(
+            "- Selected candidate: $($Candidate.workflow) run $($Candidate.run) " +
+            "($($Candidate.output))"
+        ) | Out-Null
+    }
     $lines.Add("") | Out-Null
-    $lines.Add("| Workflow | Run | Valid | Score | Confidence | Fallbacks | Changed vs first | Review | Compare |") | Out-Null
-    $lines.Add("| --- | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |") | Out-Null
+    $lines.Add("| Workflow | Run | Valid | Score | Confidence | Fallbacks | Changed vs first | Review | Compare | Run report |") | Out-Null
+    $lines.Add("| --- | ---: | --- | ---: | ---: | ---: | ---: | --- | --- | --- |") | Out-Null
     foreach ($result in $Results) {
         $lines.Add(
-            "| $($result.workflow) | $($result.run) | $($result.valid) | $($result.score) | $($result.confidence) | $($result.fallbacks) | $($result.changed_vs_first) | $($result.review) | $($result.compare) |"
+            "| $($result.workflow) | $($result.run) | $($result.valid) | $($result.score) | $($result.confidence) | $($result.fallbacks) | $($result.changed_vs_first) | $($result.review) | $($result.compare) | $($result.run_report) |"
         ) | Out-Null
     }
     Set-Content -LiteralPath $reportPath -Value $lines -Encoding UTF8
@@ -149,12 +189,11 @@ foreach ($workflow in $Workflows) {
         $caseDir = Join-Path $runDir $caseName
         $outputDir = Join-Path $caseDir "output"
         $traceDir = Join-Path $caseDir "traces"
+        $runReportPath = Join-Path $caseDir "run-report.md"
 
-        New-Item -ItemType Directory -Path $outputDir, $traceDir | Out-Null
-
-        $commandText = ".\neko-core.ps1 --workflow $workflow --input `"$InputPath`" --output-dir `"$outputDir`" --trace-dir `"$traceDir`" --limit $Limit"
+        $commandText = ".\neko-core.ps1 --workflow $workflow --input `"$InputPath`" --run-dir `"$caseDir`" --limit $Limit"
         Write-Output "Running: $commandText"
-        & ".\neko-core.ps1" --workflow $workflow --input $InputPath --output-dir $outputDir --trace-dir $traceDir --limit $Limit
+        & ".\neko-core.ps1" --workflow $workflow --input $InputPath --run-dir $caseDir --limit $Limit
         if ($LASTEXITCODE -ne 0) {
             throw "Workflow failed: $workflow run $iteration"
         }
@@ -166,6 +205,9 @@ foreach ($workflow in $Workflows) {
         }
         if (-not (Test-Path -LiteralPath $predPath)) {
             throw "Missing predictions: $predPath"
+        }
+        if (-not (Test-Path -LiteralPath $runReportPath)) {
+            throw "Missing run report: $runReportPath"
         }
 
         $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
@@ -203,6 +245,7 @@ foreach ($workflow in $Workflows) {
             compare = $compareVerdict
             output = $predPath
             trace = $traceDir
+            run_report = $runReportPath
             review_report = $reviewReportPath
             compare_report = $compareReportPath
         }) | Out-Null
@@ -245,6 +288,8 @@ if ($failureReasons.Count -gt 0) {
     $verdict = "FAIL"
 }
 
+$candidate = Select-EvalCandidate -Results @($results | ForEach-Object { $_ })
+
 $artifactPaths = Write-EvalArtifacts `
     -RunDir $runDir `
     -InputPath $InputPath `
@@ -252,9 +297,13 @@ $artifactPaths = Write-EvalArtifacts `
     -Limit $Limit `
     -Repeat $Repeat `
     -Results @($results | ForEach-Object { $_ }) `
+    -Candidate $candidate `
     -Verdict $verdict `
     -FailureReasons @($failureReasons | ForEach-Object { $_ })
 
+if ($null -ne $candidate) {
+    Write-Output "Selected candidate: $($candidate.workflow) run $($candidate.run) -> $($candidate.output)"
+}
 Write-Output "Summary artifact: $($artifactPaths.summary)"
 Write-Output "Report artifact: $($artifactPaths.report)"
 Write-Output "EVAL VERDICT: $verdict"

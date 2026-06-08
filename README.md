@@ -119,11 +119,12 @@ Workflow eval comparison:
 .\scripts\evaluate.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" -Workflows quick-dry-run,contest-auto -Limit 10 -Repeat 1
 ```
 
-The eval script runs selected workflows with trace enabled, compares
+The eval script runs selected workflows as `--run-dir` sessions, compares
 `pred.csv` stability, runs trace review, compares each run to the first run,
-and writes per-run artifacts under `eval-runs/`, including `review.txt` and
-`compare-to-first.txt`. Each eval directory also includes `eval-summary.json`
-and `eval-report.md` for machine-readable and human-readable run history.
+and writes per-run artifacts under `eval-runs/`, including `run-report.md`,
+`review.txt`, and `compare-to-first.txt`. Each eval directory also includes
+`eval-summary.json` and `eval-report.md` with a selected candidate for
+machine-readable and human-readable run history.
 
 Trace review:
 

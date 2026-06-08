@@ -94,6 +94,11 @@ runs the trace reviewer against the session trace. This gives the team one
 portable folder per experiment while keeping the final `/data` to `/output`
 contest contract unchanged.
 
+`scripts/evaluate.ps1` composes those run sessions into a higher-level eval
+session. Each workflow repeat gets its own run folder, then the eval report
+records trace review, trace comparison, and a selected candidate. This mirrors
+the agent pattern of separating execution, verification, and synthesis.
+
 ## Why Config First
 
 Public test data is not the real problem. Private test can vary by language,
