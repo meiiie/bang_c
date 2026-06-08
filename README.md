@@ -106,7 +106,7 @@ CLI fast paths inspired by Claude Code:
 - `--command <name>`: inspect one command, for example `--command run` or
   `--command trace-review`.
 - `--policy`: audit runtime/development boundaries across registry surfaces.
-  It should pass before packaging or comparing serious runs.
+  The solve path also enforces this gate before loading input or model state.
 - `--model-inventory`: probe NVIDIA `/models` and filter models by Bang C
   allowed LLM and embedding/rerank families. Combine with `--run-dir` to save
   `model-inventory.txt` before model experiments.

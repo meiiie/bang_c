@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from hackaithon_c.agents import list_agents, render_agent_detail, render_agents, resolve_agent
@@ -31,7 +32,7 @@ from hackaithon_c.model_inventory import (
     render_model_inventory,
 )
 from hackaithon_c.normalize import normalize_answer
-from hackaithon_c.policy import evaluate_policy, render_policy_report
+from hackaithon_c.policy import evaluate_policy, evaluate_policy_specs, render_policy_report
 from hackaithon_c.prompting import build_prompt
 from hackaithon_c.project import init_project
 from hackaithon_c.review import render_trace_review, review_trace_dir
@@ -529,6 +530,24 @@ class ContestContractTest(unittest.TestCase):
         self.assertFalse(report.findings)
         self.assertIn("Neko Core policy", rendered)
         self.assertIn("runtime/development boundaries are consistent", rendered)
+
+    def test_policy_audit_fails_when_external_tool_leaks_into_runtime(self) -> None:
+        tools = tuple(
+            replace(tool, phase="runtime") if tool.name == "web-research" else tool
+            for tool in list_tools(self.config)
+        )
+
+        report = evaluate_policy_specs(
+            agents=list_agents(self.config),
+            tools=tools,
+            commands=list_commands(self.config),
+        )
+        codes = {finding.code for finding in report.findings}
+
+        self.assertEqual(report.verdict, "fail")
+        self.assertIn("runtime_external_tool", codes)
+        self.assertIn("runtime_quarantined_tool", codes)
+        self.assertIn("quarantine_boundary_broken", codes)
 
     def test_model_inventory_filters_bang_c_allowed_models(self) -> None:
         payload = {

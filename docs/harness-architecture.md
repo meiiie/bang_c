@@ -144,9 +144,10 @@ adds heavier interactive or subagent orchestration.
 `--policy` audits the registry boundary itself. It verifies that runtime tools
 are not external or quarantined, development-only outputs do not leak into
 runtime tools, web research and subagent review remain quarantined, and the run
-command/exporter preserve the contest artifact contract. This is the first
-Claude Code-style permission layer: read-only today, a future enforcement gate
-for richer workflows.
+command/exporter preserve the contest artifact contract. The command is
+read-only, and the solve path enforces the same policy before loading input or
+model state. This is the first Claude Code-style permission layer for richer
+workflows.
 
 `scripts/evaluate.ps1` composes those run sessions into a higher-level eval
 session. Each workflow repeat gets its own run folder, then the eval report

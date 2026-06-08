@@ -229,6 +229,11 @@ def main() -> int:
         print(render_doctor_report(checks))
         return 0
 
+    policy_report = evaluate_policy(config)
+    if policy_report.verdict == "fail":
+        print(render_policy_report(policy_report), file=sys.stderr)
+        return 1
+
     try:
         workflow = resolve_workflow(config, args.workflow)
     except ValueError as error:

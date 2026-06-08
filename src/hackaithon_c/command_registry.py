@@ -98,7 +98,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             option="--policy",
             description="Audit runtime/development boundaries across commands, tools, and agents.",
             example=".\\neko-core.ps1 --policy",
-            guardrail="Read-only policy audit; fails when a dev-only surface leaks into runtime.",
+            guardrail="Read-only audit command; the solve path enforces the same policy gate.",
         ),
         CommandSpec(
             name="workflows",

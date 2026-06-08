@@ -4,10 +4,10 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable
 
-from .agents import list_agents
-from .command_registry import list_commands
+from .agents import AgentSpec, list_agents
+from .command_registry import CommandSpec, list_commands
 from .config import HarnessConfig
-from .tool_registry import list_tools
+from .tool_registry import ToolSpec, list_tools
 
 
 @dataclass(frozen=True)
@@ -28,11 +28,20 @@ _DEV_OUTPUT_MARKERS = ("traces/", "run-report.md", "events.jsonl", "review", "ta
 
 
 def evaluate_policy(config: HarnessConfig) -> PolicyReport:
-    findings: list[PolicyFinding] = []
-    agents = list_agents(config)
-    tools = list_tools(config)
-    commands = list_commands(config)
+    return evaluate_policy_specs(
+        agents=list_agents(config),
+        tools=list_tools(config),
+        commands=list_commands(config),
+    )
 
+
+def evaluate_policy_specs(
+    *,
+    agents: tuple[AgentSpec, ...],
+    tools: tuple[ToolSpec, ...],
+    commands: tuple[CommandSpec, ...],
+) -> PolicyReport:
+    findings: list[PolicyFinding] = []
     _check_unique("agent", (agent.name for agent in agents), findings)
     _check_unique("tool", (tool.name for tool in tools), findings)
     _check_unique("command", (command.name for command in commands), findings)
