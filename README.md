@@ -130,6 +130,19 @@ Configured workflow examples:
 `events.jsonl` together so experiments can be reviewed without remembering
 separate output and trace paths.
 
+For large files, do not paste the whole dataset into an AI chat. Let the CLI
+iterate qid-by-qid and keep a checkpoint:
+
+```powershell
+.\neko-core.ps1 --workflow contest-auto --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-full --checkpoint-every 1
+.\neko-core.ps1 --workflow contest-auto --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-full --resume
+```
+
+`--resume` reuses qids already recorded in
+`traces/predictions.checkpoint.jsonl` after checking the input/config/workflow
+metadata. The final `pred.csv` is still written only after the full prediction
+set passes the contest contract validation.
+
 Session inspection, inspired by Claude Code's `/resume` and `/session`
 surfaces:
 

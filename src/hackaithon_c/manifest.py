@@ -52,9 +52,9 @@ def build_run_manifest(
         created_at_utc=datetime.now(UTC).isoformat(),
         brand=config.brand_name,
         config_path=str(config.path),
-        config_sha256=_sha256_file(config.path),
+        config_sha256=file_sha256(config.path),
         input_path=str(input_path),
-        input_sha256=_sha256_file(input_path),
+        input_sha256=file_sha256(input_path),
         output_path=str(output_path),
         trace_dir=str(trace_dir),
         workflow=workflow,
@@ -77,7 +77,7 @@ def write_run_manifest(path: Path, manifest: RunManifest) -> None:
     )
 
 
-def _sha256_file(path: Path) -> str:
+def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):

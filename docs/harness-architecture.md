@@ -59,6 +59,8 @@ Runtime modules:
 - `scripts/evaluate.ps1`: dev-only workflow comparison runner for stability,
   trace review, trace comparison, harness-score review, and eval summary
   artifacts.
+- `checkpoint.py`: writes qid-level checkpoints plus metadata so large runs can
+  resume without trusting stale input or config state.
 - `compare.py`: compares two trace-enabled runs using manifests and prediction
   trace rows.
 - `config.py`: loads schema-versioned harness config.
@@ -110,6 +112,12 @@ by Claude Code's `/resume` and `/session`: they rediscover run folders from
 disk, summarize workflow/model/contract/review state, and print the next
 review or resolve command without relying on hidden process state. `--events`
 renders the run's event log as a compact timeline.
+
+For larger public/private files, trace-enabled runs checkpoint each newly
+solved qid to `traces/predictions.checkpoint.jsonl`. `--resume` verifies the
+checkpoint metadata against the current input/config/workflow before reusing
+saved qids. The final `pred.csv` remains a validated full-run artifact, not a
+partial checkpoint.
 
 `--review-tasks <trace-dir>` turns trace-review findings into an action queue.
 It is intentionally deterministic and model-free: subagents or teammates can

@@ -7,6 +7,14 @@ from pathlib import Path
 from .agents import list_agents, render_agent_detail, render_agents, resolve_agent
 from .branding import render_banner, version_line
 from .capabilities import collect_capabilities, render_capabilities
+from .checkpoint import (
+    append_checkpoint,
+    clear_checkpoint,
+    load_checkpoint,
+    verify_checkpoint_meta,
+    write_checkpoint,
+    write_checkpoint_meta,
+)
 from .command_registry import (
     list_commands,
     render_command_detail,
@@ -98,6 +106,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fail-fast", action="store_true", help="Stop on the first model/API error")
     parser.add_argument("--trace-dir", default=None, help="Optional dev trace directory")
     parser.add_argument("--run-dir", default=None, help="Create a local run session with output, traces, and report")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reuse qid predictions from an existing run-dir/trace-dir checkpoint",
+    )
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=1,
+        help="Flush trace checkpoint after this many newly solved items; 0 disables checkpointing",
+    )
     return parser.parse_args()
 
 
@@ -258,6 +277,13 @@ def main() -> int:
         output_dir = Path(args.output_dir or "/output")
     output_path = output_dir / config.output_file
 
+    if args.resume and trace_dir is None:
+        print("Error: --resume requires --run-dir or --trace-dir", file=sys.stderr)
+        return 2
+    if args.checkpoint_every < 0:
+        print("Error: --checkpoint-every must be >= 0", file=sys.stderr)
+        return 2
+
     problems = load_problems(input_path)
     if args.qid:
         problems = filter_problems_by_qids(problems, tuple(args.qid))
@@ -275,6 +301,41 @@ def main() -> int:
             )
         )
 
+    resumed_predictions = {}
+    checkpoint_enabled = trace_dir is not None and args.checkpoint_every > 0
+    if trace_dir is not None:
+        if args.resume:
+            try:
+                verify_checkpoint_meta(
+                    trace_dir,
+                    config=config,
+                    input_path=input_path,
+                    workflow=workflow.name if workflow else None,
+                    strategy=strategy,
+                    dry_run=dry_run,
+                    verify=verify,
+                    model=client.model if client else "heuristic",
+                    total_problems=len(problems),
+                )
+            except ValueError as error:
+                print(f"Error: {error}", file=sys.stderr)
+                return 2
+            resumed_predictions = load_checkpoint(trace_dir)
+        else:
+            clear_checkpoint(trace_dir)
+        if checkpoint_enabled:
+            write_checkpoint_meta(
+                trace_dir,
+                config=config,
+                input_path=input_path,
+                workflow=workflow.name if workflow else None,
+                strategy=strategy,
+                dry_run=dry_run,
+                verify=verify,
+                model=client.model if client else "heuristic",
+                total_problems=len(problems),
+            )
+
     events = []
     if run_session is not None:
         events.append(
@@ -290,12 +351,34 @@ def main() -> int:
                     "input": str(input_path),
                     "output": str(output_path),
                     "total_problems": len(problems),
+                    "resume": args.resume,
+                    "resumed_predictions": len(resumed_predictions),
+                    "checkpoint_every": args.checkpoint_every,
                 },
             )
         )
 
     predictions = []
+    pending_checkpoint = []
     for problem in problems:
+        resumed = resumed_predictions.get(problem.qid)
+        if resumed is not None:
+            predictions.append(resumed)
+            if run_session is not None:
+                events.append(
+                    build_event(
+                        "prediction_resumed",
+                        "completed",
+                        "Reused prediction from checkpoint.",
+                        qid=resumed.qid,
+                        payload={
+                            "answer": resumed.answer,
+                            "strategy": resumed.strategy,
+                            "confidence": resumed.confidence,
+                        },
+                    )
+                )
+            continue
         prediction = solve_problem(
             problem,
             client,
@@ -306,6 +389,11 @@ def main() -> int:
             config=config,
         )
         predictions.append(prediction)
+        if checkpoint_enabled:
+            pending_checkpoint.append(prediction)
+            if len(pending_checkpoint) >= args.checkpoint_every:
+                append_checkpoint(trace_dir, pending_checkpoint)
+                pending_checkpoint = []
         if run_session is not None:
             events.append(
                 build_event(
@@ -322,6 +410,8 @@ def main() -> int:
                     },
                 )
             )
+    if checkpoint_enabled and pending_checkpoint:
+        append_checkpoint(trace_dir, pending_checkpoint)
     summary = validate_predictions(
         problems,
         predictions,
@@ -347,6 +437,7 @@ def main() -> int:
             )
         )
     if trace_dir:
+        write_checkpoint(trace_dir, predictions)
         write_trace(trace_dir, predictions)
         write_summary(trace_dir / "run-summary.json", summary)
         if run_session is not None:

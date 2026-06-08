@@ -11,6 +11,12 @@ from pathlib import Path
 from hackaithon_c.agents import list_agents, render_agent_detail, render_agents, resolve_agent
 from hackaithon_c.branding import ascii_logo, version_line
 from hackaithon_c.capabilities import collect_capabilities, render_capabilities
+from hackaithon_c.checkpoint import (
+    append_checkpoint,
+    load_checkpoint,
+    verify_checkpoint_meta,
+    write_checkpoint_meta,
+)
 from hackaithon_c.classifier import classify_problem
 from hackaithon_c.command_registry import (
     list_commands,
@@ -420,6 +426,86 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("Neko Core Session", detail)
         self.assertIn("--events", detail)
         self.assertIn("resolve-tasks.ps1", detail)
+
+    def test_checkpoint_round_trips_predictions_and_rejects_input_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_path = root / "public_test.json"
+            changed_input_path = root / "changed_public_test.json"
+            input_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_checkpoint_1",
+                            "question": "Which answer?",
+                            "choices": ["A one", "B two"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            changed_input_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_checkpoint_1",
+                            "question": "Which changed answer?",
+                            "choices": ["A one", "B two"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            prediction = Prediction(
+                qid="test_checkpoint_1",
+                answer="A",
+                model="heuristic",
+                raw_answer="A",
+                strategy="fallback_overlap",
+                confidence=0.8,
+                trace=(TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True", "A"),),
+            )
+            trace_dir = root / "traces"
+
+            write_checkpoint_meta(
+                trace_dir,
+                config=self.config,
+                input_path=input_path,
+                workflow="quick-dry-run",
+                strategy="auto",
+                dry_run=True,
+                verify=False,
+                model="heuristic",
+                total_problems=1,
+            )
+            append_checkpoint(trace_dir, [prediction])
+            loaded = load_checkpoint(trace_dir)
+
+            self.assertEqual(loaded["test_checkpoint_1"].answer, "A")
+            self.assertEqual(loaded["test_checkpoint_1"].trace[0].role, "solver")
+            verify_checkpoint_meta(
+                trace_dir,
+                config=self.config,
+                input_path=input_path,
+                workflow="quick-dry-run",
+                strategy="auto",
+                dry_run=True,
+                verify=False,
+                model="heuristic",
+                total_problems=1,
+            )
+            with self.assertRaises(ValueError):
+                verify_checkpoint_meta(
+                    trace_dir,
+                    config=self.config,
+                    input_path=changed_input_path,
+                    workflow="quick-dry-run",
+                    strategy="auto",
+                    dry_run=True,
+                    verify=False,
+                    model="heuristic",
+                    total_problems=1,
+                )
 
     def test_run_event_log_round_trips_as_jsonl(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

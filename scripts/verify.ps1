@@ -172,12 +172,24 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
         {
             & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --run-dir "run-verify" --limit 3
             if (-not (Test-Path -LiteralPath "run-verify\output\pred.csv")) { throw "missing run output" }
+            if (-not (Test-Path -LiteralPath "run-verify\traces\predictions.checkpoint.jsonl")) { throw "missing run checkpoint" }
             if (-not (Test-Path -LiteralPath "run-verify\traces\predictions.trace.jsonl")) { throw "missing run trace" }
             if (-not (Test-Path -LiteralPath "run-verify\run-report.md")) { throw "missing run report" }
             if (-not (Test-Path -LiteralPath "run-verify\review-tasks.md")) { throw "missing review tasks markdown" }
             if (-not (Test-Path -LiteralPath "run-verify\review-tasks.json")) { throw "missing review tasks json" }
             if (-not (Test-Path -LiteralPath "run-verify\events.jsonl")) { throw "missing event log" }
             Get-Content -LiteralPath "run-verify\run-report.md" -TotalCount 20
+        }
+
+    Invoke-NekoCheck "Run session resumes from checkpoint" `
+        ".\neko-core.ps1 --workflow quick-dry-run --input `"$InputPath`" --run-dir run-verify --limit 3 --resume; .\neko-core.ps1 --events run-verify" `
+        {
+            & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --run-dir "run-verify" --limit 3 --resume
+            $events = & ".\neko-core.ps1" --events "run-verify"
+            $events | ForEach-Object { Write-Output $_ }
+            if (-not (($events | Out-String) -match "prediction_resumed")) {
+                throw "resume did not reuse checkpointed predictions"
+            }
         }
 
     Invoke-NekoCheck "Session commands read resume-ready run artifacts" `

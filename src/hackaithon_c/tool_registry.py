@@ -74,9 +74,9 @@ def list_tools(config: HarnessConfig) -> tuple[ToolSpec, ...]:
             phase="development",
             status="enabled",
             permission="filesystem-write",
-            description="Writes trace JSONL, summary, manifest, and run session artifacts.",
+            description="Writes trace JSONL, checkpoint, summary, manifest, and run session artifacts.",
             inputs=("Prediction[]", "ValidationSummary", "RunManifest"),
-            outputs=("traces/", "run-report.md", "events.jsonl"),
+            outputs=("traces/", "predictions.checkpoint.jsonl", "run-report.md", "events.jsonl"),
             guardrail="Development-only; final Docker scoring path does not require traces.",
         ),
         ToolSpec(
