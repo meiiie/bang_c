@@ -10,6 +10,7 @@ from .compare import compare_trace_dirs, render_trace_comparison
 from .config import load_config
 from .doctor import collect_doctor_checks, render_doctor_report
 from .evaluation import validate_predictions, write_summary
+from .events import build_event, load_events, render_events, write_events
 from .exporter import write_predictions, write_trace
 from .loader import filter_problems_by_qids, find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
@@ -56,6 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--list-runs", action="store_true", help="List local run sessions")
     parser.add_argument("--runs-root", default=".", help="Root directory for --list-runs")
     parser.add_argument("--session", default=None, help="Show details for a local run session")
+    parser.add_argument("--events", default=None, help="Show a run session event log")
     parser.add_argument(
         "--compare-traces",
         nargs=2,
@@ -150,6 +152,11 @@ def main() -> int:
         print(render_run_session_detail(record))
         return 0
 
+    if args.events:
+        source = Path(args.events)
+        print(render_events(load_events(source), source=source))
+        return 0
+
     if args.compare_traces:
         comparison = compare_trace_dirs(
             Path(args.compare_traces[0]),
@@ -206,8 +213,28 @@ def main() -> int:
             )
         )
 
-    predictions = [
-        solve_problem(
+    events = []
+    if run_session is not None:
+        events.append(
+            build_event(
+                "session_started",
+                "started",
+                "Run session started.",
+                payload={
+                    "workflow": workflow.name if workflow else None,
+                    "strategy": strategy,
+                    "dry_run": dry_run,
+                    "verify": verify,
+                    "input": str(input_path),
+                    "output": str(output_path),
+                    "total_problems": len(problems),
+                },
+            )
+        )
+
+    predictions = []
+    for problem in problems:
+        prediction = solve_problem(
             problem,
             client,
             dry_run=dry_run,
@@ -216,8 +243,23 @@ def main() -> int:
             fail_fast=args.fail_fast,
             config=config,
         )
-        for problem in problems
-    ]
+        predictions.append(prediction)
+        if run_session is not None:
+            events.append(
+                build_event(
+                    "prediction_completed",
+                    "completed",
+                    f"Predicted {prediction.answer} with {prediction.strategy}.",
+                    qid=prediction.qid,
+                    payload={
+                        "answer": prediction.answer,
+                        "strategy": prediction.strategy,
+                        "confidence": prediction.confidence,
+                        "question_kind": prediction.question_kind,
+                        "fallback": bool(prediction.fallback_reason),
+                    },
+                )
+            )
     summary = validate_predictions(
         problems,
         predictions,
@@ -229,9 +271,31 @@ def main() -> int:
         raise RuntimeError(f"Invalid prediction contract: {messages}")
 
     write_predictions(output_path, predictions)
+    if run_session is not None:
+        events.append(
+            build_event(
+                "predictions_written",
+                "completed",
+                "Prediction CSV written.",
+                payload={
+                    "output": str(output_path),
+                    "total_predictions": summary.total_predictions,
+                    "valid": summary.valid,
+                },
+            )
+        )
     if trace_dir:
         write_trace(trace_dir, predictions)
         write_summary(trace_dir / "run-summary.json", summary)
+        if run_session is not None:
+            events.append(
+                build_event(
+                    "trace_written",
+                    "completed",
+                    "Trace artifacts written.",
+                    payload={"trace_dir": str(trace_dir)},
+                )
+            )
         write_run_manifest(
             trace_dir / "run-manifest.json",
             build_run_manifest(
@@ -254,6 +318,18 @@ def main() -> int:
             tasks = build_review_tasks(review)
             write_review_tasks_json(run_session.review_tasks_json_path, tasks)
             write_review_tasks_markdown(run_session.review_tasks_markdown_path, tasks)
+            events.append(
+                build_event(
+                    "review_completed",
+                    "completed" if review.verdict == "pass" else "warning",
+                    f"Trace review finished with {review.verdict.upper()}.",
+                    payload={
+                        "verdict": review.verdict,
+                        "findings": len(review.findings),
+                        "review_tasks": len(tasks),
+                    },
+                )
+            )
             write_run_report(
                 run_session.report_path,
                 input_path=input_path,
@@ -268,6 +344,18 @@ def main() -> int:
                 review=review,
                 review_tasks_path=run_session.review_tasks_markdown_path,
             )
+            events.append(
+                build_event(
+                    "session_completed",
+                    "completed",
+                    "Run session completed.",
+                    payload={
+                        "run_report": str(run_session.report_path),
+                        "events": str(run_session.events_path),
+                    },
+                )
+            )
+            write_events(run_session.events_path, tuple(events))
 
     print(f"Loaded {len(problems)} problems from {input_path}")
     if workflow is not None:

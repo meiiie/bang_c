@@ -151,14 +151,16 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
             if (-not (Test-Path -LiteralPath "run-verify\run-report.md")) { throw "missing run report" }
             if (-not (Test-Path -LiteralPath "run-verify\review-tasks.md")) { throw "missing review tasks markdown" }
             if (-not (Test-Path -LiteralPath "run-verify\review-tasks.json")) { throw "missing review tasks json" }
+            if (-not (Test-Path -LiteralPath "run-verify\events.jsonl")) { throw "missing event log" }
             Get-Content -LiteralPath "run-verify\run-report.md" -TotalCount 20
         }
 
     Invoke-NekoCheck "Session commands read resume-ready run artifacts" `
-        ".\neko-core.ps1 --list-runs --runs-root .; .\neko-core.ps1 --session run-verify" `
+        ".\neko-core.ps1 --list-runs --runs-root .; .\neko-core.ps1 --session run-verify; .\neko-core.ps1 --events run-verify" `
         {
             & ".\neko-core.ps1" --list-runs --runs-root "."
             & ".\neko-core.ps1" --session "run-verify"
+            & ".\neko-core.ps1" --events "run-verify"
         }
 
     Invoke-NekoCheck "Review task queue reads quick workflow artifacts" `

@@ -14,6 +14,7 @@ from hackaithon_c.compare import compare_trace_dirs, render_trace_comparison
 from hackaithon_c.config import LOCAL_CONFIG_DIR, LOCAL_CONFIG_NAME, load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions, write_summary
+from hackaithon_c.events import build_event, load_events, render_events, write_events
 from hackaithon_c.exporter import write_predictions, write_trace
 from hackaithon_c.loader import filter_problems_by_qids, load_problems
 from hackaithon_c.manifest import build_run_manifest, write_run_manifest
@@ -365,6 +366,16 @@ class ContestContractTest(unittest.TestCase):
             review = review_trace_dir(session.trace_dir)
             tasks = build_review_tasks(review)
             write_review_tasks_json(session.review_tasks_json_path, tasks)
+            write_events(
+                session.events_path,
+                (
+                    build_event(
+                        "session_started",
+                        "started",
+                        "Run session started.",
+                    ),
+                ),
+            )
             write_run_report(
                 session.report_path,
                 input_path=input_path,
@@ -388,10 +399,41 @@ class ContestContractTest(unittest.TestCase):
         self.assertIsNotNone(record)
         self.assertEqual(record.workflow if record else "", "quick-dry-run")
         self.assertEqual(record.review_task_count if record else 0, 1)
+        self.assertEqual(record.event_count if record else 0, 1)
         self.assertIn("Neko Core Run Sessions", listing)
         self.assertIn("run-session", listing)
         self.assertIn("Neko Core Session", detail)
+        self.assertIn("--events", detail)
         self.assertIn("resolve-tasks.ps1", detail)
+
+    def test_run_event_log_round_trips_as_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "events.jsonl"
+            write_events(
+                path,
+                (
+                    build_event(
+                        "session_started",
+                        "started",
+                        "Run session started.",
+                        payload={"workflow": "quick-dry-run"},
+                    ),
+                    build_event(
+                        "prediction_completed",
+                        "completed",
+                        "Predicted A.",
+                        qid="test_0001",
+                        payload={"answer": "A"},
+                    ),
+                ),
+            )
+            events = load_events(path)
+            rendered = render_events(events, source=path)
+
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0].schema_version, "neko_core.run_event.v1")
+        self.assertEqual(events[1].qid, "test_0001")
+        self.assertIn("prediction_completed [test_0001]", rendered)
 
     def test_doctor_reports_contract_without_requiring_input(self) -> None:
         checks = collect_doctor_checks(

@@ -103,9 +103,9 @@ Configured workflow examples:
 ```
 
 `--run-dir` is a development session path. It writes `output/pred.csv`,
-`traces/`, `run-report.md`, `review-tasks.md`, and `review-tasks.json`
-together so experiments can be reviewed without remembering separate output and
-trace paths.
+`traces/`, `run-report.md`, `review-tasks.md`, `review-tasks.json`, and
+`events.jsonl` together so experiments can be reviewed without remembering
+separate output and trace paths.
 
 Session inspection, inspired by Claude Code's `/resume` and `/session`
 surfaces:
@@ -113,11 +113,13 @@ surfaces:
 ```powershell
 .\neko-core.ps1 --list-runs --runs-root .
 .\neko-core.ps1 --session run-smoke
+.\neko-core.ps1 --events run-smoke
 ```
 
 These commands only read local artifacts. They show workflow, model, contract
 status, trace review status, review-task count, and the next review/resolve
-commands for a run folder.
+commands for a run folder. `--events` renders the run timeline: session start,
+per-qid prediction completion, trace writing, review, and session completion.
 
 Verification report inspired by Claude Code's verification-agent pattern:
 

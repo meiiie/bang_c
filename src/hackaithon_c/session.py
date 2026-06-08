@@ -18,6 +18,7 @@ class RunSession:
     report_path: Path
     review_tasks_json_path: Path
     review_tasks_markdown_path: Path
+    events_path: Path
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,8 @@ class RunSessionRecord:
     review_verdict: str
     review_task_count: int
     review_tasks_path: Path
+    event_count: int
+    events_path: Path
 
 
 def prepare_run_session(
@@ -52,6 +55,7 @@ def prepare_run_session(
         report_path=run_dir / "run-report.md",
         review_tasks_json_path=run_dir / "review-tasks.json",
         review_tasks_markdown_path=run_dir / "review-tasks.md",
+        events_path=run_dir / "events.jsonl",
     )
 
 
@@ -75,6 +79,7 @@ def load_run_session_record(run_dir: Path) -> RunSessionRecord | None:
     summary = _read_json(trace_dir / "run-summary.json")
     review_tasks_path = run_dir / "review-tasks.json"
     review_tasks = _read_json(review_tasks_path)
+    events_path = run_dir / "events.jsonl"
     review = review_trace_dir(trace_dir) if trace_dir.exists() else None
 
     stat = report_path.stat()
@@ -95,6 +100,8 @@ def load_run_session_record(run_dir: Path) -> RunSessionRecord | None:
         review_verdict=review.verdict if review else "missing",
         review_task_count=_task_count(review_tasks),
         review_tasks_path=review_tasks_path,
+        event_count=_event_count(events_path),
+        events_path=events_path,
     )
 
 
@@ -120,6 +127,7 @@ def render_run_sessions(
             f"{record.run_dir} | {record.workflow} | {record.model} | "
             f"valid={record.valid} | predictions={predictions} | "
             f"review={record.review_verdict.upper()} | tasks={record.review_task_count} | "
+            f"events={record.event_count} | "
             f"updated={record.updated_at_utc}"
         )
     return "\n".join(lines)
@@ -141,9 +149,11 @@ def render_run_session_detail(record: RunSessionRecord) -> str:
         f"Average confidence: {_none_label(record.average_confidence)}",
         f"Trace review: {record.review_verdict.upper()}",
         f"Review tasks: {record.review_task_count}",
+        f"Events: {record.event_count}",
         "",
         "Next commands:",
         f"- Review: .\\neko-core.ps1 --review-trace \"{record.trace_dir}\"",
+        f"- Events: .\\neko-core.ps1 --events \"{record.run_dir}\"",
     ]
     if record.review_tasks_path.exists() and record.input_path:
         lines.append(
@@ -286,6 +296,12 @@ def _task_count(payload: dict[str, Any] | None) -> int:
         return 0
     tasks = payload.get("tasks", [])
     return len(tasks) if isinstance(tasks, list) else 0
+
+
+def _event_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
 def _optional_bool(value: Any) -> bool | None:

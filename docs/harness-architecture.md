@@ -93,12 +93,15 @@ changed answers, input/config drift, confidence drift, and fallback drift.
 `--run-dir <path>` creates a development run session. The CLI writes
 `output/pred.csv`, `traces/`, `run-report.md`, `review-tasks.md`, and
 `review-tasks.json` under that directory, then runs the trace reviewer against
-the session trace. This gives the team one portable folder per experiment while
-keeping the final `/data` to `/output` contest contract unchanged.
+the session trace. It also writes `events.jsonl`, a structured timeline of run
+lifecycle events that future UI, task watchers, or subagents can consume without
+parsing prose reports. This gives the team one portable folder per experiment
+while keeping the final `/data` to `/output` contest contract unchanged.
 `--list-runs` and `--session <run-dir>` are read-only resume surfaces inspired
 by Claude Code's `/resume` and `/session`: they rediscover run folders from
 disk, summarize workflow/model/contract/review state, and print the next
-review or resolve command without relying on hidden process state.
+review or resolve command without relying on hidden process state. `--events`
+renders the run's event log as a compact timeline.
 
 `--review-tasks <trace-dir>` turns trace-review findings into an action queue.
 It is intentionally deterministic and model-free: subagents or teammates can
