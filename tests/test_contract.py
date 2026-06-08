@@ -845,6 +845,41 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(rows[0]["trace"][0]["role"], "classifier")
         self.assertEqual(rows[0]["trace"][-1]["answer"], "B")
 
+    def test_verifier_repairs_invalid_output_before_keep_or_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_verifier_repair",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+            client = FakeClient(["A", "I need to explain instead of returning a letter.", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.strategy, "gemma_verified")
+        self.assertIn("verifier_repair=B", prediction.raw_answer)
+        self.assertEqual(len(client.calls), 3)
+        self.assertEqual([step.role for step in prediction.trace], ["classifier", "solver", "verifier"])
+        self.assertEqual(
+            prediction.trace[-1].detail,
+            "verifier output repaired to a valid answer letter",
+        )
+
     def test_trace_review_warns_on_low_confidence_without_failing_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "public_test.json"

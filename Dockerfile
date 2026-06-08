@@ -18,4 +18,4 @@ COPY README.md .
 RUN mkdir -p /data /output
 
 ENTRYPOINT ["python", "-m", "hackaithon_c.run"]
-CMD ["--data-dir", "/data", "--output-dir", "/output"]
+CMD ["--workflow", "contest-auto", "--data-dir", "/data", "--output-dir", "/output"]

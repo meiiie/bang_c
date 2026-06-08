@@ -194,14 +194,14 @@ def _solve_direct(
         )
     )
     if verify:
-        raw_verifier, verified = _verify(problem, client, normalized)
+        raw_verifier, verified = _verify(problem, client, normalized, config=config)
         if verified is not None:
             trace_steps.append(
                 TraceStep(
                     role="verifier",
                     action="answer_only_check",
                     status="completed",
-                    detail="verifier returned a valid answer letter",
+                    detail=_verification_detail(raw_verifier),
                     answer=verified,
                 )
             )
@@ -296,7 +296,7 @@ def _solve_tournament(
     )
 
     if verify or votes == 1:
-        raw_verifier, verified = _verify(problem, client, answer)
+        raw_verifier, verified = _verify(problem, client, answer, config=config)
         if verified is not None:
             attempts.append(("verifier", raw_verifier, verified))
             answer = verified
@@ -306,7 +306,7 @@ def _solve_tournament(
                     role="verifier",
                     action="answer_only_check",
                     status="completed",
-                    detail="verifier returned a valid answer letter",
+                    detail=_verification_detail(raw_verifier),
                     answer=verified,
                 )
             )
@@ -342,6 +342,8 @@ def _verify(
     problem: Problem,
     client: NvidiaChatClient,
     candidate_answer: str,
+    *,
+    config: HarnessConfig,
 ) -> tuple[str, str | None]:
     prompt = build_verifier_prompt(problem, candidate_answer)
     raw_verifier = client.complete(
@@ -349,7 +351,20 @@ def _verify(
         prompt.user_prompt,
         max_tokens=prompt.max_tokens,
     )
-    return raw_verifier, normalize_answer(raw_verifier, problem)
+    verified = normalize_answer(raw_verifier, problem)
+    if verified is not None or not config.repair_invalid_output:
+        return raw_verifier, verified
+    repaired = _repair_invalid_answer(problem, client, raw_verifier, config=config)
+    if repaired is None:
+        return raw_verifier, None
+    raw_repair, repaired_answer = repaired
+    return f"{raw_verifier.strip()} | verifier_repair={raw_repair.strip()}", repaired_answer
+
+
+def _verification_detail(raw_verifier: str) -> str:
+    if "verifier_repair=" in raw_verifier:
+        return "verifier output repaired to a valid answer letter"
+    return "verifier returned a valid answer letter"
 
 
 def _repair_invalid_answer(

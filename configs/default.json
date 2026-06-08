@@ -43,6 +43,13 @@
       "dry_run": false,
       "phase": "runtime"
     },
+    "contest-strict": {
+      "description": "Accuracy-first contest path: verify every answer and keep checkpoints for long runs.",
+      "strategy": "verify",
+      "verify": true,
+      "dry_run": false,
+      "phase": "runtime"
+    },
     "quick-dry-run": {
       "description": "Contract smoke without API calls.",
       "strategy": "auto",

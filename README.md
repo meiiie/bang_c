@@ -125,6 +125,14 @@ Configured workflow examples:
 .\neko-core.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-smoke --limit 5
 ```
 
+Use `contest-auto` for the default final path. Use `contest-strict` when
+accuracy is more important than API call count or runtime:
+
+```powershell
+.\neko-core.ps1 --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-strict --checkpoint-every 1
+.\neko-core.ps1 --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-strict --resume
+```
+
 `--run-dir` is a development session path. It writes `output/pred.csv`,
 `traces/`, `run-report.md`, `review-tasks.md`, `review-tasks.json`, and
 `events.jsonl` together so experiments can be reviewed without remembering
