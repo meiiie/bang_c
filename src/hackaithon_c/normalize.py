@@ -11,19 +11,26 @@ def normalize_answer(raw_answer: str, problem: Problem) -> str | None:
     if text in allowed:
         return text
 
-    # Gemma 4 can emit empty thought tags before the final answer. Prefer the
-    # last visible letter because final answers usually come after those tags.
-    candidates = re.findall(r"\b([A-Z])\b", text)
-    for candidate in reversed(candidates):
+    for marker in ("ANSWER", "FINAL", "RESULT", "DAP AN", "KET QUA"):
+        pattern = rf"\b{marker}\b\s*[:=\-]?\s*([A-Z])\b"
+        matches = re.findall(pattern, text)
+        for candidate in reversed(matches):
+            if candidate in allowed:
+                return candidate
+
+    line_candidates: list[str] = []
+    for line in text.splitlines():
+        cleaned = line.strip()
+        match = re.fullmatch(r"(?:OPTION\s+)?([A-Z])[\).:]?", cleaned)
+        if match:
+            line_candidates.append(match.group(1))
+    for candidate in reversed(line_candidates):
         if candidate in allowed:
             return candidate
 
-    # Some models answer "Đáp án: A" without clean word boundaries.
-    for marker in ("ĐÁP ÁN", "ANSWER", "FINAL", "KẾT QUẢ"):
-        position = text.rfind(marker)
-        if position >= 0:
-            tail = text[position:]
-            for char in tail:
-                if char in allowed:
-                    return char
+    if len(text) <= 8:
+        candidates = re.findall(r"\b([A-Z])\b", text)
+        for candidate in reversed(candidates):
+            if candidate in allowed:
+                return candidate
     return None

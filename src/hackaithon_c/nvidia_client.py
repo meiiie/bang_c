@@ -5,8 +5,6 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-import requests
-
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_MODEL = "google/gemma-4-31b-it"
@@ -42,7 +40,9 @@ class NvidiaChatClient:
     def model(self) -> str:
         return self._config.model
 
-    def complete(self, system_prompt: str, user_prompt: str) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
+        import requests
+
         payload: dict[str, Any] = {
             "model": self._config.model,
             "messages": [
@@ -51,7 +51,7 @@ class NvidiaChatClient:
             ],
             "temperature": 0.0,
             "top_p": 0.1,
-            "max_tokens": 8,
+            "max_tokens": max_tokens,
             "stream": False,
         }
         headers = {

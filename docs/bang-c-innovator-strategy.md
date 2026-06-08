@@ -46,12 +46,21 @@ time of probing, so rerank should remain an adapter boundary until confirmed.
 Use a task-specific harness, inspired by Codex/Odysseus/Wiii:
 
 1. Classify question shape.
-2. Solve with Gemma 4 using a strict one-letter prompt.
-3. Normalize answer robustly.
-4. Fall back to deterministic overlap only if the model output is invalid.
-5. Trace raw output and strategy in dev mode.
-6. Loop on public-test failures and low-confidence traces.
-7. Keep the final image free of web crawlers, subagents, UI, and hidden state.
+2. Select a prompt variant: direct, evidence, elimination, or calculation.
+3. Solve with Gemma 4 using a strict one-letter prompt.
+4. Normalize answer robustly.
+5. Verify or run a small tournament only for risky items.
+6. Fall back to deterministic overlap only if the model/API path fails.
+7. Trace raw output and strategy in dev mode.
+8. Loop on public-test failures and low-confidence traces.
+9. Keep the final image free of web crawlers, subagents, UI, and hidden state.
+
+Current strategy modes:
+
+- `direct`: one Gemma call.
+- `verify`: one Gemma call plus one verifier call.
+- `tournament`: multiple prompt variants, majority vote, optional verifier.
+- `auto`: classifier chooses the cheapest safe route.
 
 Subagents and web research are allowed during development for strategy review,
 prompt design, and error analysis. They must not be runtime dependencies for the

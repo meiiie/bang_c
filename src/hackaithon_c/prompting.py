@@ -1,47 +1,137 @@
 from __future__ import annotations
 
-from .schema import Problem
+import re
+from dataclasses import dataclass
+
+from .schema import Problem, ProblemProfile
 
 
-SYSTEM_PROMPT = """Bạn giải bài trắc nghiệm tiếng Việt.
-Quy tắc bắt buộc:
-- Chỉ dùng thông tin trong đề bài và các lựa chọn đã cho.
-- Chọn đáp án đúng nhất trong các lựa chọn.
-- Không giải thích.
-- Trả về đúng một chữ cái in hoa trong tập lựa chọn hợp lệ."""
+SYSTEM_PROMPT = """You solve Vietnamese multiple-choice questions.
+Rules:
+- Use only the provided question and options.
+- Select the best answer among the options.
+- Return exactly one uppercase option letter.
+- Do not include explanation, punctuation, or markdown."""
 
 
-def build_user_prompt(problem: Problem) -> str:
-    options = "\n".join(
-        f"{letter}. {choice}"
-        for letter, choice in zip(problem.allowed_letters, problem.choices, strict=False)
+@dataclass(frozen=True)
+class PromptBundle:
+    system_prompt: str
+    user_prompt: str
+    variant: str
+    max_tokens: int = 12
+
+
+def build_prompt(problem: Problem, profile: ProblemProfile, variant: str | None = None) -> PromptBundle:
+    selected_variant = variant or profile.prompt_variant
+    builder = {
+        "direct": _direct_prompt,
+        "evidence": _evidence_prompt,
+        "elimination": _elimination_prompt,
+        "calculation": _calculation_prompt,
+    }.get(selected_variant, _direct_prompt)
+    return PromptBundle(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=builder(problem),
+        variant=selected_variant,
     )
-    return (
-        "Đề bài:\n"
-        f"{problem.question}\n\n"
-        "Các lựa chọn:\n"
-        f"{options}\n\n"
-        f"Chỉ trả về một chữ cái trong: {', '.join(problem.allowed_letters)}."
-    )
 
 
-def build_verifier_prompt(problem: Problem, candidate_answer: str) -> str:
-    options = "\n".join(
-        f"{letter}. {choice}"
-        for letter, choice in zip(problem.allowed_letters, problem.choices, strict=False)
-    )
+def build_verifier_prompt(problem: Problem, candidate_answer: str) -> PromptBundle:
     candidate_text = ""
     if candidate_answer in problem.allowed_letters:
         index = problem.allowed_letters.index(candidate_answer)
         candidate_text = problem.choices[index]
-    return (
-        "Bạn là bước kiểm định đáp án trắc nghiệm.\n"
-        "Hãy đọc lại đề, so sánh đáp án ứng viên với các lựa chọn, rồi trả về "
-        "một chữ cái đúng nhất. Nếu ứng viên đúng, giữ nguyên chữ cái đó.\n\n"
-        "Đề bài:\n"
-        f"{problem.question}\n\n"
-        "Các lựa chọn:\n"
-        f"{options}\n\n"
-        f"Đáp án ứng viên: {candidate_answer}. {candidate_text}\n\n"
-        f"Chỉ trả về một chữ cái trong: {', '.join(problem.allowed_letters)}."
+    user_prompt = (
+        "Verify the candidate answer for this Vietnamese multiple-choice item.\n"
+        "Compare the candidate against every option. If it is correct, keep it. "
+        "If another option is clearly better, return that other letter.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Candidate answer: {candidate_answer}. {candidate_text}\n\n"
+        f"Return exactly one letter from: {_letters(problem)}"
     )
+    return PromptBundle(SYSTEM_PROMPT, user_prompt, "verifier")
+
+
+def tournament_variants(profile: ProblemProfile) -> tuple[str, ...]:
+    if profile.kind == "calculation":
+        return ("calculation", "direct")
+    if profile.kind in {"many_choice", "negative"}:
+        return ("elimination", "direct", "evidence")
+    if profile.kind == "reading":
+        return ("evidence", "direct")
+    return ("direct", "evidence")
+
+
+def _direct_prompt(problem: Problem) -> str:
+    return (
+        "Choose the best answer.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Return exactly one letter from: {_letters(problem)}"
+    )
+
+
+def _evidence_prompt(problem: Problem) -> str:
+    context, query = _split_context_and_query(problem.question)
+    if context:
+        body = (
+            "Read the context, then answer the question using only evidence in the context.\n\n"
+            f"Context:\n{context}\n\n"
+            f"Question:\n{query}\n\n"
+            f"Options:\n{_format_options(problem)}\n\n"
+        )
+    else:
+        body = (
+            "Find the option that is best supported by the question text.\n\n"
+            f"{_format_problem(problem)}\n\n"
+        )
+    return body + f"Return exactly one letter from: {_letters(problem)}"
+
+
+def _elimination_prompt(problem: Problem) -> str:
+    return (
+        "Choose by elimination. Pay close attention to negative wording such as "
+        "'khong dung', 'khong phai', 'ngoai tru', and 'sai'.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Return exactly one letter from: {_letters(problem)}"
+    )
+
+
+def _calculation_prompt(problem: Problem) -> str:
+    return (
+        "Solve the quantitative or logical question carefully. Use the numbers "
+        "in the prompt, compare with the options, then return the matching letter.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Return exactly one letter from: {_letters(problem)}"
+    )
+
+
+def _format_problem(problem: Problem) -> str:
+    return f"Question:\n{problem.question}\n\nOptions:\n{_format_options(problem)}"
+
+
+def _format_options(problem: Problem) -> str:
+    return "\n".join(
+        f"{letter}. {choice}"
+        for letter, choice in zip(problem.allowed_letters, problem.choices, strict=False)
+    )
+
+
+def _letters(problem: Problem) -> str:
+    return ", ".join(problem.allowed_letters)
+
+
+def _split_context_and_query(question: str) -> tuple[str, str]:
+    markers = (
+        r"\n\s*Cau hoi\s*:",
+        r"\n\s*Câu hỏi\s*:",
+        r"\n\s*Question\s*:",
+    )
+    for marker in markers:
+        match = re.search(marker, question, flags=re.IGNORECASE)
+        if match:
+            context = question[: match.start()].strip()
+            query = question[match.end() :].strip()
+            if context and query:
+                return context, query
+    return "", question.strip()

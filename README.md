@@ -54,7 +54,29 @@ Gemma 4 with a second verifier pass:
 
 ```powershell
 $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
-python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --verify
+python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --strategy verify
+```
+
+Auto strategy with selective tournament:
+
+```powershell
+$env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
+python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 10 --strategy auto
+```
+
+Strategies:
+
+- `direct`: one model call using the classifier-selected prompt variant.
+- `verify`: direct call plus verifier call for every item.
+- `tournament`: multiple prompt variants, majority vote, then optional verifier.
+- `auto`: classifier decides when to verify or tournament. This is the default.
+
+Trace mode writes:
+
+- `predictions.trace.jsonl`: raw model answer, normalized answer, strategy,
+  question kind, confidence, fallback reason.
+- `run-summary.json`: contract validation, strategy counts, question-kind
+  counts, fallback count, average confidence.
 ```
 
 ## Docker
@@ -88,3 +110,13 @@ Recommended loop:
 3. Add one prompt or verifier change at a time.
 4. Re-run the same sample and compare answer stability.
 5. Keep only changes that improve reproducibility and rule compliance.
+
+## Architecture Notes
+
+The harness borrows product discipline from Wiii, Codex, Odysseus, and Goose:
+
+- typed input/output contracts;
+- provider/model state configured outside source code;
+- small workflow modules instead of one prompt blob;
+- explicit trace/eval artifacts for development;
+- final container path kept independent of UI, browser, database, and web tools.
