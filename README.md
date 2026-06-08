@@ -68,6 +68,11 @@ One-command local install:
 .\neko-core.ps1 --init
 ```
 
+`bootstrap.ps1` creates `.venv`, installs the local editable package, and runs
+fast checks for `--version`, `--doctor`, `--policy`, and `--list-workflows`.
+Use `.\scripts\bootstrap.ps1 -SkipChecks` only when you need installation
+without validation.
+
 Or install manually:
 
 ```powershell
