@@ -11,12 +11,13 @@ from hackaithon_c.capabilities import collect_capabilities, render_capabilities
 from hackaithon_c.classifier import classify_problem
 from hackaithon_c.config import load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
-from hackaithon_c.evaluation import validate_predictions
+from hackaithon_c.evaluation import validate_predictions, write_summary
 from hackaithon_c.exporter import write_predictions, write_trace
 from hackaithon_c.loader import load_problems
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
-from hackaithon_c.schema import Prediction
+from hackaithon_c.review import render_trace_review, review_trace_dir
+from hackaithon_c.schema import Prediction, TraceStep
 from hackaithon_c.solver import solve_problem
 from hackaithon_c.workflows import list_workflows, render_workflows, resolve_workflow
 
@@ -333,6 +334,54 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual([step.role for step in prediction.trace], ["classifier", "solver", "verifier"])
         self.assertEqual(rows[0]["trace"][0]["role"], "classifier")
         self.assertEqual(rows[0]["trace"][-1]["answer"], "B")
+
+    def test_trace_review_warns_on_low_confidence_without_failing_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0009",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+            prediction = Prediction(
+                qid=problem.qid,
+                answer="A",
+                model="heuristic",
+                raw_answer="A",
+                strategy="fallback_overlap",
+                confidence=0.4,
+                trace=(
+                    TraceStep("classifier", "profile_problem", "completed", "kind=short"),
+                    TraceStep("solver", "heuristic_fallback", "completed", "dry_run=True", "A"),
+                ),
+            )
+            trace_dir = Path(temp_dir) / "traces"
+            write_trace(trace_dir, [prediction])
+            write_summary(
+                trace_dir / "run-summary.json",
+                validate_predictions([problem], [prediction], self.config, trace_enabled=True),
+            )
+
+            review = review_trace_dir(trace_dir)
+            rendered = render_trace_review(review)
+
+        self.assertEqual(review.verdict, "warn")
+        self.assertIn("low_confidence", rendered)
+
+    def test_trace_review_fails_when_trace_artifact_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            review = review_trace_dir(Path(temp_dir) / "missing-traces")
+
+        self.assertEqual(review.verdict, "fail")
+        self.assertTrue(any(finding.code == "missing_summary" for finding in review.findings))
 
 
 if __name__ == "__main__":

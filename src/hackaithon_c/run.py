@@ -12,6 +12,7 @@ from .evaluation import validate_predictions, write_summary
 from .exporter import write_predictions, write_trace
 from .loader import find_input_file, load_problems
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
+from .review import render_trace_review, review_trace_dir
 from .solver import solve_problem
 from .workflows import list_workflows, render_workflows, resolve_workflow
 
@@ -28,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
+    parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
     parser.add_argument("--banner", action="store_true", help="Print the ASCII Neko Core banner")
     parser.add_argument("--dry-run", action="store_true", help="Use deterministic heuristic only")
     parser.add_argument(
@@ -61,6 +63,11 @@ def main() -> int:
     if args.list_workflows:
         print(render_workflows(list_workflows(config)))
         return 0
+
+    if args.review_trace:
+        review = review_trace_dir(Path(args.review_trace))
+        print(render_trace_review(review))
+        return 1 if review.verdict == "fail" else 0
 
     if args.doctor:
         input_path = Path(args.input) if args.input else None

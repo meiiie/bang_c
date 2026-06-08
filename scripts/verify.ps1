@@ -126,6 +126,10 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
     Invoke-NekoCheck "Quick workflow produces pred.csv" `
         ".\neko-core.ps1 --workflow quick-dry-run --input `"$InputPath`" --output-dir output-verify --trace-dir traces-verify --limit 3" `
         { & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --output-dir "output-verify" --trace-dir "traces-verify" --limit 3 }
+
+    Invoke-NekoCheck "Trace reviewer reads quick workflow artifacts" `
+        ".\neko-core.ps1 --review-trace traces-verify" `
+        { & ".\neko-core.ps1" --review-trace "traces-verify" }
 } else {
     Add-PartialCheck "Quick workflow produces pred.csv" "Input file not provided or not found. Pass -InputPath path\to\public_test.json."
 }

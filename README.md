@@ -114,6 +114,16 @@ Workflow eval comparison:
 The eval script runs selected workflows with trace enabled, compares
 `pred.csv` stability, and writes per-run artifacts under `eval-runs/`.
 
+Trace review:
+
+```powershell
+.\neko-core.ps1 --review-trace traces-verify
+```
+
+The reviewer is development-only. It reads `run-summary.json` plus
+`predictions.trace.jsonl`, then reports low confidence, fallback paths, trace
+warnings, missing roles, and blocked steps without touching `pred.csv`.
+
 Dry-run smoke test without API:
 
 ```powershell

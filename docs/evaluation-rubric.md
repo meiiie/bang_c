@@ -61,6 +61,11 @@ The `trace` field records the agent-style path that produced the answer, which
 helps separate classifier mistakes, solver drift, repair events, verifier
 changes, and tournament synthesis issues.
 
+Run `neko-core --review-trace <trace-dir>` after experiments to get a compact
+reviewer verdict. A `WARN` verdict is expected for heuristic or low-confidence
+development runs; a `FAIL` verdict means trace artifacts are missing, counts do
+not match, the prediction contract is invalid, or a trace step is blocked.
+
 The default run repeats `quick-dry-run` twice to check reproducibility without
 requiring an API key. When model access is available, compare workflows such as
 `contest-auto`, `verify-all`, or `tournament` explicitly.

@@ -61,11 +61,19 @@ Runtime modules:
 - `normalize.py`: strict answer-letter extraction.
 - `evaluation.py`: validates predictions and computes harness score.
 - `exporter.py`: writes contest output and dev traces.
+- `review.py`: reads dev traces after a run and reports reviewer findings
+  without invoking a model.
 
 Dev traces are structured as agent steps on each prediction. Current roles are
 `classifier`, `solver`, `repair`, `verifier`, and `synthesizer`. This gives the
 team a Claude Code-like review timeline without changing the contest artifact:
 `pred.csv` remains only `qid,answer`.
+
+Trace review is intentionally separate from solving. `--review-trace` can be
+run after any trace-enabled workflow to catch low confidence, fallback paths,
+trace warnings, missing roles, and blocked steps. This mirrors the
+execute-then-verify split from coding agents while keeping the contest runtime
+simple.
 
 ## Why Config First
 
