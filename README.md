@@ -114,7 +114,8 @@ Workflow eval comparison:
 The eval script runs selected workflows with trace enabled, compares
 `pred.csv` stability, runs trace review, compares each run to the first run,
 and writes per-run artifacts under `eval-runs/`, including `review.txt` and
-`compare-to-first.txt`.
+`compare-to-first.txt`. Each eval directory also includes `eval-summary.json`
+and `eval-report.md` for machine-readable and human-readable run history.
 
 Trace review:
 

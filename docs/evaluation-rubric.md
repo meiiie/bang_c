@@ -48,7 +48,8 @@ Recommended accuracy loop:
 
 Use `scripts/evaluate.ps1` for development-only workflow comparison. The script
 runs selected workflows with trace enabled, stores artifacts under `eval-runs/`,
-and reports:
+and writes `eval-summary.json` plus `eval-report.md` for the whole eval run. It
+reports:
 
 - contract validity;
 - harness score;

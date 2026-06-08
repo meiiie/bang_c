@@ -82,6 +82,62 @@ function Read-Verdict {
     return "UNKNOWN"
 }
 
+function Write-EvalArtifacts {
+    param(
+        [string]$RunDir,
+        [string]$InputPath,
+        [string[]]$Workflows,
+        [int]$Limit,
+        [int]$Repeat,
+        [object[]]$Results,
+        [string]$Verdict,
+        [string[]]$FailureReasons
+    )
+
+    $summaryPath = Join-Path $RunDir "eval-summary.json"
+    $reportPath = Join-Path $RunDir "eval-report.md"
+    $createdAt = (Get-Date).ToUniversalTime().ToString("o")
+
+    [pscustomobject]@{
+        schema_version = "neko_core.eval_summary.v1"
+        created_at_utc = $createdAt
+        input = $InputPath
+        workflows = $Workflows
+        limit = $Limit
+        repeat = $Repeat
+        verdict = $Verdict
+        failure_reasons = $FailureReasons
+        results = $Results
+    } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# Neko Core Eval Report") | Out-Null
+    $lines.Add("") | Out-Null
+    $lines.Add("- Created UTC: $createdAt") | Out-Null
+    $lines.Add("- Input: $InputPath") | Out-Null
+    $lines.Add("- Workflows: $($Workflows -join ', ')") | Out-Null
+    $lines.Add("- Limit: $Limit") | Out-Null
+    $lines.Add("- Repeat: $Repeat") | Out-Null
+    $lines.Add("- Verdict: $Verdict") | Out-Null
+    if ($FailureReasons.Count -gt 0) {
+        $lines.Add("- Failure reasons: $($FailureReasons -join ', ')") | Out-Null
+    }
+    $lines.Add("") | Out-Null
+    $lines.Add("| Workflow | Run | Valid | Score | Confidence | Fallbacks | Changed vs first | Review | Compare |") | Out-Null
+    $lines.Add("| --- | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |") | Out-Null
+    foreach ($result in $Results) {
+        $lines.Add(
+            "| $($result.workflow) | $($result.run) | $($result.valid) | $($result.score) | $($result.confidence) | $($result.fallbacks) | $($result.changed_vs_first) | $($result.review) | $($result.compare) |"
+        ) | Out-Null
+    }
+    Set-Content -LiteralPath $reportPath -Value $lines -Encoding UTF8
+
+    return [pscustomobject]@{
+        summary = $summaryPath
+        report = $reportPath
+    }
+}
+
 $results = New-Object System.Collections.Generic.List[object]
 $baselinePredictions = $null
 $baselineTraceDir = $null
@@ -170,25 +226,39 @@ $unstable = @(
         }
 )
 
+$failureReasons = New-Object System.Collections.Generic.List[string]
 if ($invalid.Count -gt 0) {
-    Write-Output "EVAL VERDICT: FAIL"
-    exit 1
+    $failureReasons.Add("invalid_prediction_contract") | Out-Null
 }
-
 if ($reviewFailures.Count -gt 0) {
-    Write-Output "EVAL VERDICT: FAIL"
-    exit 1
+    $failureReasons.Add("trace_review_failed") | Out-Null
 }
-
 if ($comparisonFailures.Count -gt 0) {
-    Write-Output "EVAL VERDICT: FAIL"
-    exit 1
+    $failureReasons.Add("trace_comparison_failed") | Out-Null
 }
-
 if ($unstable.Count -gt 0) {
-    Write-Output "EVAL VERDICT: FAIL"
-    exit 1
+    $failureReasons.Add("workflow_changed_answer_instability") | Out-Null
 }
 
-Write-Output "EVAL VERDICT: PASS"
+$verdict = "PASS"
+if ($failureReasons.Count -gt 0) {
+    $verdict = "FAIL"
+}
+
+$artifactPaths = Write-EvalArtifacts `
+    -RunDir $runDir `
+    -InputPath $InputPath `
+    -Workflows $Workflows `
+    -Limit $Limit `
+    -Repeat $Repeat `
+    -Results @($results | ForEach-Object { $_ }) `
+    -Verdict $verdict `
+    -FailureReasons @($failureReasons | ForEach-Object { $_ })
+
+Write-Output "Summary artifact: $($artifactPaths.summary)"
+Write-Output "Report artifact: $($artifactPaths.report)"
+Write-Output "EVAL VERDICT: $verdict"
+if ($verdict -eq "FAIL") {
+    exit 1
+}
 exit 0
