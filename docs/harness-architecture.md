@@ -62,6 +62,11 @@ Runtime modules:
 - `evaluation.py`: validates predictions and computes harness score.
 - `exporter.py`: writes contest output and dev traces.
 
+Dev traces are structured as agent steps on each prediction. Current roles are
+`classifier`, `solver`, `repair`, `verifier`, and `synthesizer`. This gives the
+team a Claude Code-like review timeline without changing the contest artifact:
+`pred.csv` remains only `qid,answer`.
+
 ## Why Config First
 
 Public test data is not the real problem. Private test can vary by language,

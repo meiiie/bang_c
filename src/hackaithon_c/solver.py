@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 
 from .classifier import classify_problem
 from .config import HarnessConfig
@@ -8,7 +9,7 @@ from .heuristic import fallback_answer
 from .normalize import normalize_answer
 from .nvidia_client import NvidiaChatClient
 from .prompting import build_prompt, build_repair_prompt, build_verifier_prompt, tournament_variants
-from .schema import Prediction, Problem, ProblemProfile
+from .schema import Prediction, Problem, ProblemProfile, TraceStep
 
 
 SolverStrategy = str
@@ -29,6 +30,7 @@ def solve_problem(
 
         config = load_config()
     profile = classify_problem(problem, config)
+    trace = (_classification_step(profile),)
     if dry_run or client is None:
         answer, confidence, strategy = fallback_answer(problem)
         return Prediction(
@@ -40,16 +42,38 @@ def solve_problem(
             confidence=confidence,
             question_kind=profile.kind,
             prompt_variant="heuristic",
+            trace=trace
+            + (
+                TraceStep(
+                    role="solver",
+                    action="heuristic_fallback",
+                    status="completed",
+                    detail=f"dry_run={dry_run}",
+                    answer=answer,
+                ),
+            ),
         )
 
     try:
         if strategy == "direct":
-            return _solve_direct(problem, profile, client, config=config, verify=verify)
+            return _with_trace(
+                _solve_direct(problem, profile, client, config=config, verify=verify),
+                trace,
+            )
         if strategy == "verify":
-            return _solve_direct(problem, profile, client, config=config, verify=True)
+            return _with_trace(
+                _solve_direct(problem, profile, client, config=config, verify=True),
+                trace,
+            )
         if strategy == "tournament":
-            return _solve_tournament(problem, profile, client, config=config, verify=verify)
-        return _solve_auto(problem, profile, client, config=config, force_verify=verify)
+            return _with_trace(
+                _solve_tournament(problem, profile, client, config=config, verify=verify),
+                trace,
+            )
+        return _with_trace(
+            _solve_auto(problem, profile, client, config=config, force_verify=verify),
+            trace,
+        )
     except Exception as error:  # noqa: BLE001 - keep pred.csv complete by default
         if fail_fast:
             raise
@@ -64,6 +88,22 @@ def solve_problem(
             question_kind=profile.kind,
             prompt_variant=profile.prompt_variant,
             fallback_reason=error.__class__.__name__,
+            trace=trace
+            + (
+                TraceStep(
+                    role="solver",
+                    action="model_call",
+                    status="blocked",
+                    detail=error.__class__.__name__,
+                ),
+                TraceStep(
+                    role="solver",
+                    action="heuristic_fallback",
+                    status="completed",
+                    detail="fail_fast=false",
+                    answer=answer,
+                ),
+            ),
         )
 
 
@@ -95,6 +135,7 @@ def _solve_direct(
     verify: bool,
 ) -> Prediction:
     prompt = build_prompt(problem, profile, config=config)
+    trace_steps: list[TraceStep] = []
     raw_answer = client.complete(
         prompt.system_prompt,
         prompt.user_prompt,
@@ -102,9 +143,26 @@ def _solve_direct(
     )
     normalized = normalize_answer(raw_answer, problem)
     if normalized is None:
+        trace_steps.append(
+            TraceStep(
+                role="solver",
+                action=f"prompt:{prompt.variant}",
+                status="warning",
+                detail="model output was not a valid answer letter",
+            )
+        )
         repaired = _repair_invalid_answer(problem, client, raw_answer, config=config)
         if repaired is not None:
             raw_repair, repaired_answer = repaired
+            trace_steps.append(
+                TraceStep(
+                    role="repair",
+                    action="answer_only_repair",
+                    status="completed",
+                    detail="repair produced a valid answer letter",
+                    answer=repaired_answer,
+                )
+            )
             return Prediction(
                 qid=problem.qid,
                 answer=repaired_answer,
@@ -115,6 +173,7 @@ def _solve_direct(
                 question_kind=profile.kind,
                 prompt_variant=prompt.variant,
                 attempts=2,
+                trace=tuple(trace_steps),
             )
         return _fallback_prediction(
             problem,
@@ -122,11 +181,30 @@ def _solve_direct(
             client.model,
             raw_answer,
             f"invalid_{prompt.variant}",
+            trace_steps=tuple(trace_steps),
         )
 
+    trace_steps.append(
+        TraceStep(
+            role="solver",
+            action=f"prompt:{prompt.variant}",
+            status="completed",
+            detail="model output normalized",
+            answer=normalized,
+        )
+    )
     if verify:
         raw_verifier, verified = _verify(problem, client, normalized)
         if verified is not None:
+            trace_steps.append(
+                TraceStep(
+                    role="verifier",
+                    action="answer_only_check",
+                    status="completed",
+                    detail="verifier returned a valid answer letter",
+                    answer=verified,
+                )
+            )
             return Prediction(
                 qid=problem.qid,
                 answer=verified,
@@ -137,7 +215,16 @@ def _solve_direct(
                 question_kind=profile.kind,
                 prompt_variant=prompt.variant,
                 attempts=2,
+                trace=tuple(trace_steps),
             )
+        trace_steps.append(
+            TraceStep(
+                role="verifier",
+                action="answer_only_check",
+                status="warning",
+                detail="verifier output was not a valid answer letter",
+            )
+        )
 
     return Prediction(
         qid=problem.qid,
@@ -148,6 +235,7 @@ def _solve_direct(
         confidence=0.80,
         question_kind=profile.kind,
         prompt_variant=prompt.variant,
+        trace=tuple(trace_steps),
     )
 
 
@@ -160,6 +248,7 @@ def _solve_tournament(
     verify: bool,
 ) -> Prediction:
     attempts: list[tuple[str, str, str | None]] = []
+    trace_steps: list[TraceStep] = []
     for variant in tournament_variants(profile):
         prompt = build_prompt(problem, profile, config=config, variant=variant)
         raw_answer = client.complete(
@@ -167,16 +256,44 @@ def _solve_tournament(
             prompt.user_prompt,
             max_tokens=prompt.max_tokens,
         )
-        attempts.append((variant, raw_answer, normalize_answer(raw_answer, problem)))
+        normalized = normalize_answer(raw_answer, problem)
+        attempts.append((variant, raw_answer, normalized))
+        trace_steps.append(
+            TraceStep(
+                role="solver",
+                action=f"tournament:{variant}",
+                status="completed" if normalized else "warning",
+                detail="variant output normalized"
+                if normalized
+                else "variant output was not a valid answer letter",
+                answer=normalized,
+            )
+        )
 
     valid_answers = [answer for _, _, answer in attempts if answer is not None]
     if not valid_answers:
         raw = " | ".join(f"{variant}={raw.strip()}" for variant, raw, _ in attempts)
-        return _fallback_prediction(problem, profile, client.model, raw, "invalid_tournament")
+        return _fallback_prediction(
+            problem,
+            profile,
+            client.model,
+            raw,
+            "invalid_tournament",
+            trace_steps=tuple(trace_steps),
+        )
 
     counts = Counter(valid_answers)
     answer, votes = counts.most_common(1)[0]
     confidence = 0.78 + min(0.15, 0.05 * (votes - 1))
+    trace_steps.append(
+        TraceStep(
+            role="synthesizer",
+            action="majority_vote",
+            status="completed",
+            detail=f"votes={votes}/{len(valid_answers)}",
+            answer=answer,
+        )
+    )
 
     if verify or votes == 1:
         raw_verifier, verified = _verify(problem, client, answer)
@@ -184,6 +301,24 @@ def _solve_tournament(
             attempts.append(("verifier", raw_verifier, verified))
             answer = verified
             confidence = max(confidence, 0.84 if verified in valid_answers else 0.70)
+            trace_steps.append(
+                TraceStep(
+                    role="verifier",
+                    action="answer_only_check",
+                    status="completed",
+                    detail="verifier returned a valid answer letter",
+                    answer=verified,
+                )
+            )
+        else:
+            trace_steps.append(
+                TraceStep(
+                    role="verifier",
+                    action="answer_only_check",
+                    status="warning",
+                    detail="verifier output was not a valid answer letter",
+                )
+            )
 
     raw = " | ".join(
         f"{variant}={raw.strip()}=>{normalized or '?'}"
@@ -199,6 +334,7 @@ def _solve_tournament(
         question_kind=profile.kind,
         prompt_variant="+".join(tournament_variants(profile)),
         attempts=len(attempts),
+        trace=tuple(trace_steps),
     )
 
 
@@ -243,6 +379,8 @@ def _fallback_prediction(
     model: str,
     raw_answer: str,
     reason: str,
+    *,
+    trace_steps: tuple[TraceStep, ...] = (),
 ) -> Prediction:
     answer, confidence, strategy = fallback_answer(problem)
     return Prediction(
@@ -255,4 +393,33 @@ def _fallback_prediction(
         question_kind=profile.kind,
         prompt_variant=profile.prompt_variant,
         fallback_reason=reason,
+        trace=trace_steps
+        + (
+            TraceStep(
+                role="solver",
+                action="heuristic_fallback",
+                status="completed",
+                detail=reason,
+                answer=answer,
+            ),
+        ),
     )
+
+
+def _classification_step(profile: ProblemProfile) -> TraceStep:
+    detail = (
+        f"kind={profile.kind}; variant={profile.prompt_variant}; "
+        f"verify={profile.should_verify}; tournament={profile.should_tournament}"
+    )
+    if profile.reasons:
+        detail = f"{detail}; reasons={','.join(profile.reasons)}"
+    return TraceStep(
+        role="classifier",
+        action="profile_problem",
+        status="completed",
+        detail=detail,
+    )
+
+
+def _with_trace(prediction: Prediction, prefix: tuple[TraceStep, ...]) -> Prediction:
+    return replace(prediction, trace=prefix + prediction.trace)

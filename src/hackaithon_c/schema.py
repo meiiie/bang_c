@@ -36,6 +36,15 @@ class ProblemProfile:
 
 
 @dataclass(frozen=True)
+class TraceStep:
+    role: str
+    action: str
+    status: str
+    detail: str
+    answer: str | None = None
+
+
+@dataclass(frozen=True)
 class Prediction:
     qid: str
     answer: str
@@ -47,3 +56,4 @@ class Prediction:
     prompt_variant: str = "direct"
     attempts: int = 1
     fallback_reason: str | None = None
+    trace: tuple[TraceStep, ...] = ()

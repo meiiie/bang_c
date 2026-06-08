@@ -149,7 +149,8 @@ controlled by `runtime.repair_invalid_output` in `configs/default.json`.
 Trace mode writes:
 
 - `predictions.trace.jsonl`: raw model answer, normalized answer, strategy,
-  question kind, confidence, fallback reason.
+  question kind, confidence, fallback reason, and structured agent steps such
+  as `classifier`, `solver`, `repair`, `verifier`, or `synthesizer`.
 - `run-summary.json`: contract validation, strategy counts, question-kind
   counts, fallback count, average confidence, harness score.
 

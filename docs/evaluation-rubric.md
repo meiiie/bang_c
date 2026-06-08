@@ -56,6 +56,11 @@ and reports:
 - fallback count;
 - answer changes compared with the first run.
 
+Inspect `predictions.trace.jsonl` for each changed or low-confidence answer.
+The `trace` field records the agent-style path that produced the answer, which
+helps separate classifier mistakes, solver drift, repair events, verifier
+changes, and tournament synthesis issues.
+
 The default run repeats `quick-dry-run` twice to check reproducibility without
 requiring an API key. When model access is available, compare workflows such as
 `contest-auto`, `verify-all`, or `tournament` explicitly.

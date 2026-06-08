@@ -12,7 +12,7 @@ from hackaithon_c.classifier import classify_problem
 from hackaithon_c.config import load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions
-from hackaithon_c.exporter import write_predictions
+from hackaithon_c.exporter import write_predictions, write_trace
 from hackaithon_c.loader import load_problems
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.prompting import build_prompt
@@ -267,6 +267,7 @@ class ContestContractTest(unittest.TestCase):
 
         self.assertEqual(prediction.answer, "B")
         self.assertEqual(prediction.strategy, "gemma_direct")
+        self.assertEqual([step.role for step in prediction.trace], ["classifier", "solver"])
 
     def test_solver_repairs_invalid_model_output_before_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -295,6 +296,43 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(prediction.answer, "C")
         self.assertEqual(prediction.strategy, "gemma_repaired")
         self.assertEqual(prediction.attempts, 2)
+        self.assertEqual([step.role for step in prediction.trace], ["classifier", "solver", "repair"])
+
+    def test_trace_export_contains_structured_agent_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_0008",
+                            "question": "Question: choose one.",
+                            "choices": ["A choice", "B choice", "C choice", "D choice"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+            prediction = solve_problem(
+                problem,
+                FakeClient(["A", "B"]),  # type: ignore[arg-type]
+                strategy="verify",
+                config=self.config,
+            )
+            trace_dir = Path(temp_dir) / "traces"
+            write_trace(trace_dir, [prediction])
+            rows = [
+                json.loads(line)
+                for line in (trace_dir / "predictions.trace.jsonl").read_text(
+                    encoding="utf-8"
+                ).splitlines()
+            ]
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual([step.role for step in prediction.trace], ["classifier", "solver", "verifier"])
+        self.assertEqual(rows[0]["trace"][0]["role"], "classifier")
+        self.assertEqual(rows[0]["trace"][-1]["answer"], "B")
 
 
 if __name__ == "__main__":
