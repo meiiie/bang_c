@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neko-core"
-version = "0.3.0"
+version = "0.3.1"
 description = "Neko Core config-first inference harness for HackAIthon 2026 Bang C"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,4 +20,4 @@ bang-c = "hackaithon_c.run:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-hackaithon_c = []
+hackaithon_c = ["resources/*.json"]

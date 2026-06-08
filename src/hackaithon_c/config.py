@@ -123,6 +123,7 @@ def _default_config_path() -> Path:
         Path.cwd() / LOCAL_CONFIG_DIR / LOCAL_CONFIG_NAME,
         Path.cwd() / "configs" / DEFAULT_CONFIG_NAME,
         Path(__file__).resolve().parents[2] / "configs" / DEFAULT_CONFIG_NAME,
+        Path(__file__).resolve().parent / "resources" / DEFAULT_CONFIG_NAME,
     )
     for candidate in candidates:
         if candidate.exists():

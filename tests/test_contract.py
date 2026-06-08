@@ -252,6 +252,15 @@ class ContestContractTest(unittest.TestCase):
         self.assertTrue(ascii_logo(self.config))
         self.assertIn("Neko Core", version_line(self.config))
 
+    def test_packaged_default_config_matches_repo_default(self) -> None:
+        repo_config = Path("configs/default.json")
+        packaged_config = Path("src/hackaithon_c/resources/default.json")
+
+        self.assertEqual(
+            json.loads(repo_config.read_text(encoding="utf-8")),
+            json.loads(packaged_config.read_text(encoding="utf-8")),
+        )
+
     def test_local_project_config_is_preferred_from_current_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

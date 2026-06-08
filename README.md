@@ -52,6 +52,31 @@ an adapter boundary until an available endpoint is confirmed.
 
 From this folder:
 
+One-command global install from GitHub:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/meiiie/bang_c/main/install.ps1 | iex"
+neko-core --doctor
+```
+
+Linux/macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh | bash
+neko-core --doctor
+```
+
+The global installer uses `pipx`, so the `neko-core` command is isolated from
+your system Python packages. If the command is not visible immediately, open a
+new terminal or add the pipx app path shown by the installer to `PATH`.
+
+Upgrade or uninstall:
+
+```powershell
+python -m pipx upgrade neko-core
+python -m pipx uninstall neko-core
+```
+
 One-command local install:
 
 ```powershell
@@ -271,6 +296,39 @@ docker run --rm `
   -v C:\path\to\output:/output `
   neko-core:dev
 ```
+
+The official release workflow is designed to push a Docker Hub image when the
+repository has `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets configured.
+For a manual release:
+
+```powershell
+docker build -t <dockerhub-user>/neko-core:latest .
+docker push <dockerhub-user>/neko-core:latest
+```
+
+## Release
+
+GitHub Actions release workflow:
+
+- verifies unit tests, source compilation, CLI policy, and Docker CSV contract;
+- builds wheel and source distribution under `dist/`;
+- attaches Python artifacts to GitHub Releases for tag builds;
+- pushes `<dockerhub-user>/neko-core` to Docker Hub when secrets are present.
+
+Required repository secrets for Docker Hub publishing:
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+
+Create a release tag:
+
+```powershell
+git tag v0.3.1
+git push origin v0.3.1
+```
+
+Without Docker Hub secrets, the workflow still verifies and builds artifacts
+but skips the Docker Hub push.
 
 ## Development Loop
 

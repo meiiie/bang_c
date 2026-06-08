@@ -4,6 +4,8 @@ run*/
 task-runs/
 eval-runs/
 data/
+build/
+dist/
 .venv/
 *.egg-info/
 *.log

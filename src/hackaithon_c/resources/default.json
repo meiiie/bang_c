@@ -1,0 +1,154 @@
+{
+  "schema_version": "bang_c.harness_config.v1",
+  "brand": {
+    "name": "Neko Core",
+    "slug": "neko-core",
+    "ascii_logo": [
+      " _   _      _          ____               ",
+      "| \\ | | ___| | _____  / ___|___  _ __ ___ ",
+      "|  \\| |/ _ \\ |/ / _ \\| |   / _ \\| '__/ _ \\",
+      "| |\\  |  __/   < (_) | |__| (_) | | |  __/",
+      "|_| \\_|\\___|_|\\_\\___/ \\____\\___/|_|  \\___|"
+    ]
+  },
+  "contest": {
+    "input_candidates": [
+      "private_test.csv",
+      "public_test.csv",
+      "private-test.csv",
+      "public-test.csv",
+      "private_test.json",
+      "public_test.json",
+      "private-test.json",
+      "public-test.json"
+    ],
+    "output_file": "pred.csv",
+    "output_columns": ["qid", "answer"]
+  },
+  "runtime": {
+    "default_model": "google/gemma-4-31b-it",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "allowed_model_families": ["gemma-4", "qwen3.5"],
+    "allowed_embedding_families": ["bge-m3", "qwen-rerank"],
+    "default_strategy": "auto",
+    "max_retries": 2,
+    "timeout_seconds": 90,
+    "repair_invalid_output": true
+  },
+  "workflows": {
+    "contest-auto": {
+      "description": "Final contest path: model auto strategy, no dev-only assumptions.",
+      "strategy": "auto",
+      "verify": false,
+      "dry_run": false,
+      "phase": "runtime"
+    },
+    "contest-strict": {
+      "description": "Accuracy-first contest path: verify every answer and keep checkpoints for long runs.",
+      "strategy": "verify",
+      "verify": true,
+      "dry_run": false,
+      "phase": "runtime"
+    },
+    "quick-dry-run": {
+      "description": "Contract smoke without API calls.",
+      "strategy": "auto",
+      "verify": false,
+      "dry_run": true,
+      "phase": "development"
+    },
+    "verify-all": {
+      "description": "Force a second answer-only pass for every item.",
+      "strategy": "verify",
+      "verify": true,
+      "dry_run": false,
+      "phase": "development"
+    },
+    "tournament": {
+      "description": "Use multiple prompt variants and vote synthesis.",
+      "strategy": "tournament",
+      "verify": true,
+      "dry_run": false,
+      "phase": "development"
+    }
+  },
+  "profiling": {
+    "thresholds": {
+      "many_choice_min": 5,
+      "long_context_chars": 1800,
+      "short_question_chars": 280,
+      "focus_tail_chars": 900
+    },
+    "markers": {
+      "question": [
+        "cau hoi:",
+        "question:",
+        "pregunta:",
+        "question :",
+        "frage:",
+        "domanda:"
+      ],
+      "context": [
+        "doan thong tin",
+        "context",
+        "passage",
+        "texte",
+        "texto",
+        "informacion",
+        "information",
+        "document",
+        "article",
+        "contenido"
+      ],
+      "negative": [
+        "khong dung",
+        "khong phai",
+        "ngoai tru",
+        "sai",
+        "not true",
+        "not correct",
+        "incorrect",
+        "except",
+        "false",
+        "faux",
+        "incorrecte",
+        "sauf",
+        "falso",
+        "excepto",
+        "no es correcto",
+        "no es correcta"
+      ],
+      "calculation": [
+        "tinh",
+        "tinh toan",
+        "phan tram",
+        "ty le",
+        "do co gian",
+        "bao nhieu",
+        "gia tri",
+        "cong thuc",
+        "calculate",
+        "percent",
+        "percentage",
+        "ratio",
+        "how many",
+        "how much",
+        "value",
+        "formula",
+        "calcule",
+        "pourcentage",
+        "combien",
+        "calcular",
+        "porcentaje",
+        "cuanto"
+      ]
+    }
+  },
+  "rubric": {
+    "contract": 40,
+    "reproducibility": 20,
+    "robustness": 20,
+    "runtime_discipline": 10,
+    "traceability": 10
+  }
+}
