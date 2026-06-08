@@ -29,7 +29,7 @@ from .events import build_event, load_events, render_events, write_events
 from .exporter import write_predictions, write_trace
 from .loader import filter_problems_by_qids, find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
-from .model_inventory import collect_model_inventory, render_model_inventory
+from .model_inventory import classify_model, collect_model_inventory, render_model_inventory
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
 from .policy import evaluate_policy, render_policy_report
 from .project import init_project
@@ -300,6 +300,11 @@ def main() -> int:
                 default_max_retries=config.max_retries,
             )
         )
+        try:
+            validate_runtime_model(client.model, config)
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
 
     resumed_predictions = {}
     checkpoint_enabled = trace_dir is not None and args.checkpoint_every > 0
@@ -526,6 +531,21 @@ def main() -> int:
         f"harness_score={summary.harness_score}"
     )
     return 0
+
+
+def validate_runtime_model(model_id: str, config) -> None:
+    selected = classify_model(
+        model_id,
+        allowed_llm_families=config.allowed_model_families,
+        allowed_embedding_families=config.allowed_embedding_families,
+    )
+    if selected.allowed and selected.category == "llm":
+        return
+    raise ValueError(
+        "Runtime model is not allowed by Bang C rules: "
+        f"{model_id} ({selected.reason}). "
+        "Use a Gemma-4 model or a Qwen3.5 model with size <= 9B."
+    )
 
 
 if __name__ == "__main__":

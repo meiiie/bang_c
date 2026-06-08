@@ -47,6 +47,7 @@ from hackaithon_c.review_tasks import (
     render_review_tasks,
     write_review_tasks_json,
 )
+from hackaithon_c.run import validate_runtime_model
 from hackaithon_c.schema import Prediction, TraceStep
 from hackaithon_c.session import (
     discover_run_sessions,
@@ -661,6 +662,16 @@ class ContestContractTest(unittest.TestCase):
         self.assertFalse(blocked.allowed)
         self.assertIn("Allowed LLM models", rendered)
         self.assertNotIn("nvidia/nv-embed-v1: ", rendered)
+
+    def test_runtime_model_validation_fails_closed_on_disallowed_models(self) -> None:
+        validate_runtime_model("google/gemma-4-31b-it", self.config)
+        validate_runtime_model("qwen/qwen3.5-8b-instruct", self.config)
+
+        with self.assertRaisesRegex(ValueError, "not allowed by Bang C rules"):
+            validate_runtime_model("qwen/qwen3.5-14b-instruct", self.config)
+
+        with self.assertRaisesRegex(ValueError, "not allowed by Bang C rules"):
+            validate_runtime_model("baai/bge-m3", self.config)
 
     def test_workflow_registry_resolves_named_profiles(self) -> None:
         workflows = list_workflows(self.config)
