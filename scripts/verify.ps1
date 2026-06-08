@@ -254,7 +254,9 @@ if ($Docker) {
                 $data = Join-Path $base "data"
                 $out = Join-Path $base "output"
                 New-Item -ItemType Directory -Path $data, $out | Out-Null
-                Copy-Item -LiteralPath $InputPath -Destination (Join-Path $data "public_test.json")
+                $extension = [System.IO.Path]::GetExtension($InputPath).ToLowerInvariant()
+                $contestName = if ($extension -eq ".csv") { "public_test.csv" } else { "public_test.json" }
+                Copy-Item -LiteralPath $InputPath -Destination (Join-Path $data $contestName)
                 & docker run --rm -v "${data}:/data" -v "${out}:/output" $Image --workflow quick-dry-run --limit 3
                 Get-Content -LiteralPath (Join-Path $out "pred.csv")
             }
