@@ -11,7 +11,7 @@ from .config import load_config
 from .doctor import collect_doctor_checks, render_doctor_report
 from .evaluation import validate_predictions, write_summary
 from .exporter import write_predictions, write_trace
-from .loader import find_input_file, load_problems
+from .loader import filter_problems_by_qids, find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
 from .model_inventory import collect_model_inventory, render_model_inventory
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
@@ -34,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-dir", default="/data", help="Contest input directory")
     parser.add_argument("--output-dir", default=None, help="Contest output directory")
     parser.add_argument("--input", default=None, help="Explicit input JSON/CSV for local dev")
+    parser.add_argument("--qid", action="append", default=[], help="Run only this qid; repeat for multiple qids")
     parser.add_argument("--limit", type=int, default=None, help="Optional local dev limit")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     parser.add_argument("--init", action="store_true", help="Create a project-local .neko-core/config.json")
@@ -159,6 +160,8 @@ def main() -> int:
     output_path = output_dir / config.output_file
 
     problems = load_problems(input_path)
+    if args.qid:
+        problems = filter_problems_by_qids(problems, tuple(args.qid))
     if args.limit is not None:
         problems = problems[: args.limit]
 

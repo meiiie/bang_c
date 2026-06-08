@@ -15,7 +15,7 @@ from hackaithon_c.config import LOCAL_CONFIG_DIR, LOCAL_CONFIG_NAME, load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions, write_summary
 from hackaithon_c.exporter import write_predictions, write_trace
-from hackaithon_c.loader import load_problems
+from hackaithon_c.loader import filter_problems_by_qids, load_problems
 from hackaithon_c.manifest import build_run_manifest, write_run_manifest
 from hackaithon_c.model_inventory import (
     classify_model,
@@ -126,6 +126,27 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertEqual(problems[0].qid, "test_0001")
         self.assertEqual(problems[0].allowed_letters, "ABCD")
+
+    def test_problem_filter_selects_requested_qids_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {"qid": "a", "question": "A?", "choices": ["yes", "no"]},
+                        {"qid": "b", "question": "B?", "choices": ["yes", "no"]},
+                        {"qid": "c", "question": "C?", "choices": ["yes", "no"]},
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problems = load_problems(path)
+
+        filtered = filter_problems_by_qids(problems, ("c", "a"))
+
+        self.assertEqual([problem.qid for problem in filtered], ["c", "a"])
+        with self.assertRaises(ValueError):
+            filter_problems_by_qids(problems, ("missing",))
 
     def test_csv_export_uses_exact_submission_columns(self) -> None:
         prediction = Prediction(

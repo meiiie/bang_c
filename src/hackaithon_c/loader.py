@@ -40,6 +40,17 @@ def load_problems(path: Path) -> list[Problem]:
     raise ValueError(f"Unsupported input file type: {path}")
 
 
+def filter_problems_by_qids(problems: list[Problem], qids: tuple[str, ...]) -> list[Problem]:
+    if not qids:
+        return problems
+    requested = tuple(dict.fromkeys(str(qid) for qid in qids if str(qid).strip()))
+    by_qid = {problem.qid: problem for problem in problems}
+    missing = [qid for qid in requested if qid not in by_qid]
+    if missing:
+        raise ValueError(f"Requested qid not found: {', '.join(missing)}")
+    return [by_qid[qid] for qid in requested]
+
+
 def _load_json(path: Path) -> list[Problem]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(data, dict):

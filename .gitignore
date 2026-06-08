@@ -1,6 +1,7 @@
 output*/
 traces*/
 run*/
+task-runs/
 eval-runs/
 data/
 .venv/

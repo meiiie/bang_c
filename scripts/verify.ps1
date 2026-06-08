@@ -161,6 +161,15 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
             if (-not (Test-Path -LiteralPath "run-review-tasks\review-tasks.md")) { throw "missing review task queue" }
         }
 
+    Invoke-NekoCheck "Task resolver reruns qid-scoped review tasks" `
+        ".\scripts\resolve-tasks.ps1 -TaskPath run-verify\review-tasks.json -InputPath `"$InputPath`" -Workflow quick-dry-run" `
+        {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\resolve-tasks.ps1" `
+                -TaskPath "run-verify\review-tasks.json" `
+                -InputPath $InputPath `
+                -Workflow "quick-dry-run"
+        }
+
     Invoke-NekoCheck "Trace reviewer reads quick workflow artifacts" `
         ".\neko-core.ps1 --review-trace traces-verify" `
         { & ".\neko-core.ps1" --review-trace "traces-verify" }

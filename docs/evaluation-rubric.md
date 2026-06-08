@@ -71,6 +71,8 @@ development runs; a `FAIL` verdict means trace artifacts are missing, counts do
 not match, the prediction contract is invalid, or a trace step is blocked.
 Run `neko-core --review-tasks <trace-dir> --run-dir <path>` to convert those
 findings into a queue of concrete follow-up tasks.
+Run `scripts/resolve-tasks.ps1` to rerun qid-scoped tasks with a stronger
+workflow and record the resolution evidence.
 Use `run-manifest.json` in the same trace directory to compare config/input
 hashes before trusting differences between two runs.
 Use `neko-core --compare-traces <left> <right>` to separate real answer changes
