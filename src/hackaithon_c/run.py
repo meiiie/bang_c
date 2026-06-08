@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .agents import list_agents, render_agent_detail, render_agents, resolve_agent
 from .branding import render_banner, version_line
 from .capabilities import collect_capabilities, render_capabilities
 from .compare import compare_trace_dirs, render_trace_comparison
@@ -49,6 +50,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force", action="store_true", help="Overwrite files for commands that support it")
     parser.add_argument("--doctor", action="store_true", help="Run environment and contract diagnostics")
     parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
+    parser.add_argument("--agents", action="store_true", help="Print harness agent role registry")
+    parser.add_argument("--agent", default=None, help="Print one harness agent role")
     parser.add_argument("--model-inventory", action="store_true", help="Probe provider models and Bang C eligibility")
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
@@ -105,6 +108,18 @@ def main() -> int:
 
     if args.capabilities:
         print(render_capabilities(collect_capabilities(config)))
+        return 0
+
+    if args.agents:
+        print(render_agents(list_agents(config)))
+        return 0
+
+    if args.agent:
+        try:
+            print(render_agent_detail(resolve_agent(config, args.agent)))
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
         return 0
 
     if args.model_inventory:

@@ -42,6 +42,8 @@ configs/default.json
 
 Runtime modules:
 
+- `agents.py`: documents named harness roles, tool boundaries, artifact reads,
+  artifact writes, and handoff contracts for runtime and development roles.
 - `branding.py`: owns Neko Core identity, version string, and ASCII banner.
 - `capabilities.py`: lists runtime and development-only capabilities in one
   registry.
@@ -110,6 +112,13 @@ pick up those tasks later, while the submission artifact stays unchanged.
 that queue, reruns the qid-scoped tasks with a stronger workflow, records a
 task-resolution report plus JSON lifecycle artifact, and compares only the
 queued qids against the source run when baseline traces are available.
+
+`--agents` and `--agent <name>` expose a read-only role registry inspired by
+Claude Code-style agent surfaces. The registry names the current runner,
+classifier, solver, verifier, trace reviewer, task resolver, session inspector,
+and model inventory roles, but it does not spawn processes or mutate outputs.
+Its purpose is to make handoff boundaries explicit before adding heavier
+subagent workflows.
 
 `scripts/evaluate.ps1` composes those run sessions into a higher-level eval
 session. Each workflow repeat gets its own run folder, then the eval report
@@ -190,12 +199,12 @@ Useful patterns from the local Claude Code snapshot:
   private-test assumptions.
 
 For Neko Core, the first adapted slices are `--doctor`, `--capabilities`,
-`--list-workflows`, `scripts/verify.ps1`, and `scripts/evaluate.ps1`. They prove
-config, contract, model, key presence, input discovery, the
-runtime/development boundary, verification evidence, and workflow stability
-without running inference unless explicitly requested. Future work should add
-subagent-style evaluation reviewers in the same style, while keeping the final
-Docker contract narrow.
+`--agents`, `--agent`, `--list-workflows`, `scripts/verify.ps1`, and
+`scripts/evaluate.ps1`. They prove config, contract, model, key presence, input
+discovery, the runtime/development boundary, role handoffs, verification
+evidence, and workflow stability without running inference unless explicitly
+requested. Future work should add subagent-style evaluation reviewers in the
+same style, while keeping the final Docker contract narrow.
 
 ## Wiii Reuse Path
 

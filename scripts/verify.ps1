@@ -117,6 +117,13 @@ Invoke-NekoCheck "Workflow registry fast path" `
     ".\neko-core.ps1 --list-workflows" `
     { & ".\neko-core.ps1" --list-workflows }
 
+Invoke-NekoCheck "Agent registry fast path" `
+    ".\neko-core.ps1 --agents; .\neko-core.ps1 --agent task-resolver" `
+    {
+        & ".\neko-core.ps1" --agents
+        & ".\neko-core.ps1" --agent "task-resolver"
+    }
+
 Invoke-NekoCheck "Model inventory fast path without API key" `
     ".\neko-core.ps1 --model-inventory --run-dir run-model-inventory with NVIDIA_API_KEY cleared" `
     {

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from hackaithon_c.agents import list_agents, render_agent_detail, render_agents, resolve_agent
 from hackaithon_c.branding import ascii_logo, version_line
 from hackaithon_c.capabilities import collect_capabilities, render_capabilities
 from hackaithon_c.classifier import classify_problem
@@ -451,9 +452,24 @@ class ContestContractTest(unittest.TestCase):
         report = render_capabilities(capabilities)
 
         self.assertIn("contest_io", report)
+        self.assertIn("agent_registry", report)
         self.assertIn("model_inventory", report)
         self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
         self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
+
+    def test_agent_registry_documents_handoff_boundaries(self) -> None:
+        agents = list_agents(self.config)
+        rendered = render_agents(agents)
+        resolver = resolve_agent(self.config, "task-resolver")
+        detail = render_agent_detail(resolver)
+
+        self.assertIn("Neko Core agents", rendered)
+        self.assertTrue(any(agent.name == "runner" and agent.phase == "runtime" for agent in agents))
+        self.assertTrue(any(agent.name == "session-inspector" and agent.phase == "development" for agent in agents))
+        self.assertIn("--compare-qid", detail)
+        self.assertIn("task-resolution.json", detail)
+        with self.assertRaises(ValueError):
+            resolve_agent(self.config, "missing-agent")
 
     def test_model_inventory_filters_bang_c_allowed_models(self) -> None:
         payload = {

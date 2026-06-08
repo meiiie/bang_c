@@ -59,6 +59,7 @@ One-command local install:
 .\neko-core.ps1 --help
 .\neko-core.ps1 --doctor
 .\neko-core.ps1 --capabilities
+.\neko-core.ps1 --agents
 .\neko-core.ps1 --model-inventory
 .\neko-core.ps1 --list-workflows
 .\neko-core.ps1 --init
@@ -89,6 +90,10 @@ CLI fast paths inspired by Claude Code:
 - `--init`: create `.neko-core/config.json` for project-local workflow/model
   tuning without editing source files.
 - `--capabilities`: explicit runtime/development capability registry.
+- `--agents`: named harness role registry for runner, classifier, solver,
+  verifier, reviewer, resolver, session inspection, and model inventory.
+- `--agent <name>`: inspect one role's tools, reads, writes, and handoff
+  boundary, for example `--agent task-resolver`.
 - `--model-inventory`: probe NVIDIA `/models` and filter models by Bang C
   allowed LLM and embedding/rerank families. Combine with `--run-dir` to save
   `model-inventory.txt` before model experiments.
