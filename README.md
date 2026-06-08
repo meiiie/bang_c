@@ -1,9 +1,10 @@
-# HackAIthon 2026 - Bang C Harness
+# Neko Core
 
 Status: draft competition harness
 
-This folder is intentionally separate from Wiii Core. It reuses Wiii's
-harness mindset, model-routing discipline, and verification loop, but the final
+Neko Core is a draft competition harness for HackAIthon 2026 Bang C. This
+folder is intentionally separate from Wiii Core. It reuses Wiii's harness
+mindset, model-routing discipline, and verification loop, but the final
 container stays small and reproducible.
 
 ## Contest Contract
@@ -55,7 +56,9 @@ One-command local install:
 
 ```powershell
 .\scripts\bootstrap.ps1
-.\bang-c.ps1 --help
+.\neko-core.ps1 --help
+.\neko-core.ps1 --doctor
+.\neko-core.ps1 --capabilities
 ```
 
 Or install manually:
@@ -70,28 +73,37 @@ python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368
 After bootstrap, use the local CLI shim:
 
 ```powershell
-.\bang-c.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
 ```
+
+`.\bang-c.ps1` remains as a compatibility alias.
+
+CLI fast paths inspired by Claude Code:
+
+- `--version`: identity check without running inference.
+- `--banner`: ASCII brand preview.
+- `--doctor`: local environment and contest-contract diagnostics.
+- `--capabilities`: explicit runtime/development capability registry.
 
 Dry-run smoke test without API:
 
 ```powershell
 $env:PYTHONPATH = "$PWD/src"
-python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5 --dry-run
+.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5 --dry-run
 ```
 
 Gemma 4 with a second verifier pass:
 
 ```powershell
 $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
-python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --strategy verify
+.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --strategy verify
 ```
 
 Auto strategy with selective tournament:
 
 ```powershell
 $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
-python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 10 --strategy auto
+.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 10 --strategy auto
 ```
 
 Strategies:
@@ -117,7 +129,7 @@ Trace mode writes:
 Build:
 
 ```powershell
-docker build -t wiii-hackaithon-c:dev .
+docker build -t neko-core:dev .
 ```
 
 Run with a mounted data folder:
@@ -127,7 +139,7 @@ docker run --rm `
   -e NVIDIA_API_KEY=$env:NVIDIA_API_KEY `
   -v C:\path\to\data:/data `
   -v C:\path\to\output:/output `
-  wiii-hackaithon-c:dev
+  neko-core:dev
 ```
 
 ## Development Loop

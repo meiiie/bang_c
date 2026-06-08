@@ -6,8 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from hackaithon_c.branding import ascii_logo, version_line
+from hackaithon_c.capabilities import collect_capabilities, render_capabilities
 from hackaithon_c.classifier import classify_problem
 from hackaithon_c.config import load_config
+from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions
 from hackaithon_c.exporter import write_predictions
 from hackaithon_c.loader import load_problems
@@ -121,9 +124,31 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(profile.prompt_variant, "elimination")
 
     def test_default_config_has_expected_contract_shape(self) -> None:
+        self.assertEqual(self.config.brand_name, "Neko Core")
         self.assertEqual(self.config.output_columns, ("qid", "answer"))
         self.assertIn("private_test.csv", self.config.input_candidates)
         self.assertGreater(self.config.rubric["contract"], 0)
+        self.assertTrue(ascii_logo(self.config))
+        self.assertIn("Neko Core", version_line(self.config))
+
+    def test_doctor_reports_contract_without_requiring_input(self) -> None:
+        checks = collect_doctor_checks(
+            self.config,
+            data_dir=Path("missing-data-dir-for-test"),
+        )
+        report = render_doctor_report(checks)
+
+        self.assertIn("Neko Core doctor", report)
+        self.assertTrue(any(check.name == "config" and check.status == "ok" for check in checks))
+        self.assertTrue(any(check.name == "input" and check.status == "warn" for check in checks))
+
+    def test_capability_registry_separates_runtime_from_development(self) -> None:
+        capabilities = collect_capabilities(self.config)
+        report = render_capabilities(capabilities)
+
+        self.assertIn("contest_io", report)
+        self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
+        self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
 
     def test_normalize_answer_prefers_last_visible_valid_letter(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

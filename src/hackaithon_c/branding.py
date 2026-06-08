@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+from .config import HarnessConfig
+
+VERSION = "0.3.0"
+DEFAULT_BRAND_NAME = "Neko Core"
+DEFAULT_BRAND_SLUG = "neko-core"
+DEFAULT_ASCII_LOGO = (
+    " _   _      _          ____               ",
+    "| \\ | | ___| | _____  / ___|___  _ __ ___ ",
+    "|  \\| |/ _ \\ |/ / _ \\| |   / _ \\| '__/ _ \\",
+    "| |\\  |  __/   < (_) | |__| (_) | | |  __/",
+    "|_| \\_|\\___|_|\\_\\___/ \\____\\___/|_|  \\___|",
+)
+
+
+def brand_name(config: HarnessConfig | None = None) -> str:
+    if config is None:
+        return DEFAULT_BRAND_NAME
+    return config.brand_name
+
+
+def version_line(config: HarnessConfig | None = None) -> str:
+    return f"{brand_name(config)} {VERSION}"
+
+
+def ascii_logo(config: HarnessConfig | None = None) -> tuple[str, ...]:
+    if config is None:
+        return DEFAULT_ASCII_LOGO
+    return config.ascii_logo or DEFAULT_ASCII_LOGO
+
+
+def render_banner(config: HarnessConfig | None = None) -> str:
+    lines = list(ascii_logo(config))
+    lines.append(version_line(config))
+    lines.append("HackAIthon 2026 Bang C inference harness")
+    return "\n".join(lines)

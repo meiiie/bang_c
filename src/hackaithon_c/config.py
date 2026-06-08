@@ -19,6 +19,18 @@ class HarnessConfig:
         return str(self.raw.get("schema_version", ""))
 
     @property
+    def brand_name(self) -> str:
+        return str(self.raw.get("brand", {}).get("name", "Neko Core"))
+
+    @property
+    def brand_slug(self) -> str:
+        return str(self.raw.get("brand", {}).get("slug", "neko-core"))
+
+    @property
+    def ascii_logo(self) -> tuple[str, ...]:
+        return tuple(str(line) for line in self.raw.get("brand", {}).get("ascii_logo", ()))
+
+    @property
     def input_candidates(self) -> tuple[str, ...]:
         return tuple(self.raw["contest"]["input_candidates"])
 

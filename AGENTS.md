@@ -8,7 +8,8 @@ Last updated: 2026-06-08
 
 ## Purpose
 
-This repository is a competition inference harness for HackAIthon 2026 Bang C.
+This repository is Neko Core, a competition inference harness for HackAIthon
+2026 Bang C.
 It must stay clean, reproducible, and reusable as an AI-core research artifact.
 
 The harness is more important than any single prompt. Treat model calls,
@@ -64,9 +65,11 @@ $env:PYTHONPATH = "$PWD/src"
 python -m unittest discover -s tests -v
 python -m compileall -q src
 .\scripts\bootstrap.ps1
-.\bang-c.ps1 --help
-.\bang-c.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output-dryrun --trace-dir traces-dryrun --dry-run
-docker build -t bang-c:dev .
+.\neko-core.ps1 --help
+.\neko-core.ps1 --doctor
+.\neko-core.ps1 --capabilities
+.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output-dryrun --trace-dir traces-dryrun --dry-run
+docker build -t neko-core:dev .
 ```
 
 For model smoke tests, set `NVIDIA_API_KEY` outside git first.

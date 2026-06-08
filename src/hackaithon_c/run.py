@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .branding import render_banner, version_line
+from .capabilities import collect_capabilities, render_capabilities
 from .config import load_config
+from .doctor import collect_doctor_checks, render_doctor_report
 from .evaluation import validate_predictions, write_summary
 from .exporter import write_predictions, write_trace
 from .loader import find_input_file, load_problems
@@ -12,12 +15,16 @@ from .solver import solve_problem
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="HackAIthon 2026 Bang C runner")
+    parser = argparse.ArgumentParser(description="Neko Core inference harness")
     parser.add_argument("--config", default=None, help="Harness config JSON path")
     parser.add_argument("--data-dir", default="/data", help="Contest input directory")
     parser.add_argument("--output-dir", default="/output", help="Contest output directory")
     parser.add_argument("--input", default=None, help="Explicit input JSON/CSV for local dev")
     parser.add_argument("--limit", type=int, default=None, help="Optional local dev limit")
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
+    parser.add_argument("--doctor", action="store_true", help="Run environment and contract diagnostics")
+    parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
+    parser.add_argument("--banner", action="store_true", help="Print the ASCII Neko Core banner")
     parser.add_argument("--dry-run", action="store_true", help="Use deterministic heuristic only")
     parser.add_argument(
         "--strategy",
@@ -34,6 +41,25 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     config = load_config(args.config)
+
+    if args.version:
+        print(version_line(config))
+        return 0
+
+    if args.banner:
+        print(render_banner(config))
+        return 0
+
+    if args.capabilities:
+        print(render_capabilities(collect_capabilities(config)))
+        return 0
+
+    if args.doctor:
+        input_path = Path(args.input) if args.input else None
+        checks = collect_doctor_checks(config, data_dir=Path(args.data_dir), input_path=input_path)
+        print(render_doctor_report(checks))
+        return 0
+
     input_path = Path(args.input) if args.input else find_input_file(Path(args.data_dir), config)
     output_dir = Path(args.output_dir)
     output_path = output_dir / config.output_file

@@ -1,5 +1,16 @@
 {
   "schema_version": "bang_c.harness_config.v1",
+  "brand": {
+    "name": "Neko Core",
+    "slug": "neko-core",
+    "ascii_logo": [
+      " _   _      _          ____               ",
+      "| \\ | | ___| | _____  / ___|___  _ __ ___ ",
+      "|  \\| |/ _ \\ |/ / _ \\| |   / _ \\| '__/ _ \\",
+      "| |\\  |  __/   < (_) | |__| (_) | | |  __/",
+      "|_| \\_|\\___|_|\\_\\___/ \\____\\___/|_|  \\___|"
+    ]
+  },
   "contest": {
     "input_candidates": [
       "private_test.csv",

@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bang-c-harness"
-version = "0.2.0"
-description = "Config-first inference harness for HackAIthon 2026 Bang C"
+name = "neko-core"
+version = "0.3.0"
+description = "Neko Core config-first inference harness for HackAIthon 2026 Bang C"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
+neko-core = "hackaithon_c.run:main"
 bang-c = "hackaithon_c.run:main"
 
 [tool.setuptools.packages.find]

@@ -1,4 +1,4 @@
-# Bang C Harness Architecture
+# Neko Core Harness Architecture
 
 Status: Active
 Last updated: 2026-06-08
@@ -16,6 +16,9 @@ The design follows lessons from:
 - Odysseus/Goose-style provider inventory and workflow-pack thinking;
 - Anthropic's Claude Code large-codebase guidance on working through explicit
   entry points, subproblems, and reusable project context.
+- A local historical Claude Code source snapshot at
+  `E:\Sach\Sua\test\claude_lo\claude-code`, studied for architectural patterns
+  only. Do not copy proprietary implementation code into this repository.
 
 Reference:
 
@@ -38,6 +41,11 @@ configs/default.json
 
 Runtime modules:
 
+- `branding.py`: owns Neko Core identity, version string, and ASCII banner.
+- `capabilities.py`: lists runtime and development-only capabilities in one
+  registry.
+- `doctor.py`: runs lightweight diagnostics similar to CLI doctor/status
+  workflows.
 - `config.py`: loads schema-versioned harness config.
 - `loader.py`: reads CSV/JSON input and maps it to `Problem`.
 - `schema.py`: owns shared dataclasses.
@@ -103,6 +111,25 @@ Add a new technique only through one of these extension points:
 
 Avoid adding cross-cutting branches inside unrelated modules.
 
+## Claude Code Patterns Adapted
+
+Useful patterns from the local Claude Code snapshot:
+
+- Keep the bootstrap/entrypoint thin and fast.
+- Put commands such as version, doctor, and status before the expensive solve
+  path.
+- Treat tool/workflow registries as explicit capability lists, not scattered
+  conditionals.
+- Separate diagnostics, runtime execution, and UI rendering.
+- Use feature/config gates for optional capabilities instead of hard-coding
+  private-test assumptions.
+
+For Neko Core, the first adapted slices are `--doctor` and `--capabilities`.
+They prove config, contract, model, key presence, input discovery, and the
+runtime/development boundary without running inference. Future work should add
+subworkflow manifests in the same style, while keeping the final Docker
+contract narrow.
+
 ## Wiii Reuse Path
 
 If this harness proves useful, Wiii should import the pattern, not the contest
@@ -113,4 +140,3 @@ logic:
 - strict output validators;
 - dev-only trace summaries;
 - runtime boundaries that keep UI, tools, memory, and model calls explicit.
-
