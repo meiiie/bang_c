@@ -16,7 +16,9 @@ class NvidiaConfig:
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
     timeout_seconds: int = 90
-    max_retries: int = 2
+    max_retries: int = 6
+    retry_base_delay_seconds: float = 1.5
+    retry_max_delay_seconds: float = 30.0
 
     @classmethod
     def from_env(
@@ -25,7 +27,9 @@ class NvidiaConfig:
         default_base_url: str = DEFAULT_BASE_URL,
         default_model: str = DEFAULT_MODEL,
         default_timeout_seconds: int = 90,
-        default_max_retries: int = 2,
+        default_max_retries: int = 6,
+        default_retry_base_delay_seconds: float = 1.5,
+        default_retry_max_delay_seconds: float = 30.0,
     ) -> "NvidiaConfig":
         api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
         if not api_key:
@@ -36,6 +40,18 @@ class NvidiaConfig:
             model=os.environ.get("HACKC_LLM_MODEL", default_model).strip() or default_model,
             timeout_seconds=int(os.environ.get("HACKC_TIMEOUT_SECONDS", str(default_timeout_seconds))),
             max_retries=int(os.environ.get("HACKC_MAX_RETRIES", str(default_max_retries))),
+            retry_base_delay_seconds=float(
+                os.environ.get(
+                    "HACKC_RETRY_BASE_DELAY_SECONDS",
+                    str(default_retry_base_delay_seconds),
+                )
+            ),
+            retry_max_delay_seconds=float(
+                os.environ.get(
+                    "HACKC_RETRY_MAX_DELAY_SECONDS",
+                    str(default_retry_max_delay_seconds),
+                )
+            ),
         )
 
 
@@ -67,7 +83,9 @@ class NvidiaChatClient:
         }
         url = f"{self._config.base_url}/chat/completions"
         last_error: Exception | None = None
+        retryable_statuses = {429, 500, 502, 503, 504}
         for attempt in range(self._config.max_retries + 1):
+            response = None
             try:
                 response = requests.post(
                     url,
@@ -75,14 +93,45 @@ class NvidiaChatClient:
                     json=payload,
                     timeout=self._config.timeout_seconds,
                 )
-                if response.status_code in {429, 500, 502, 503, 504}:
-                    response.raise_for_status()
                 response.raise_for_status()
                 data = response.json()
                 return str(data["choices"][0]["message"]["content"])
+            except requests.HTTPError as error:
+                last_error = error
+                status_code = response.status_code if response is not None else None
+                if status_code not in retryable_statuses or attempt >= self._config.max_retries:
+                    break
+                time.sleep(_retry_delay_seconds(attempt, response, self._config))
             except Exception as error:  # noqa: BLE001 - retry boundary
                 last_error = error
                 if attempt >= self._config.max_retries:
                     break
-                time.sleep(1.5 * (attempt + 1))
+                time.sleep(_retry_delay_seconds(attempt, response, self._config))
         raise RuntimeError(f"NVIDIA chat completion failed: {last_error}") from last_error
+
+
+def _retry_delay_seconds(
+    attempt: int,
+    response: Any | None,
+    config: NvidiaConfig,
+) -> float:
+    retry_after = _parse_retry_after(response)
+    if retry_after is not None:
+        return min(config.retry_max_delay_seconds, retry_after)
+    exponential = config.retry_base_delay_seconds * (2**attempt)
+    return min(config.retry_max_delay_seconds, exponential)
+
+
+def _parse_retry_after(response: Any | None) -> float | None:
+    if response is None:
+        return None
+    raw_value = getattr(response, "headers", {}).get("Retry-After")
+    if raw_value is None:
+        return None
+    try:
+        parsed = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return parsed

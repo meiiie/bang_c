@@ -65,11 +65,11 @@ The `trace` field records the agent-style path that produced the answer, which
 helps separate classifier mistakes, solver drift, repair events, verifier
 changes, and tournament synthesis issues.
 
-Run `neko-core --review-trace <trace-dir>` after experiments to get a compact
+Run `neko --review-trace <trace-dir>` after experiments to get a compact
 reviewer verdict. A `WARN` verdict is expected for heuristic or low-confidence
 development runs; a `FAIL` verdict means trace artifacts are missing, counts do
 not match, the prediction contract is invalid, or a trace step is blocked.
-Run `neko-core --review-tasks <trace-dir> --run-dir <path>` to convert those
+Run `neko --review-tasks <trace-dir> --run-dir <path>` to convert those
 findings into a queue of concrete follow-up tasks.
 Run `scripts/resolve-tasks.ps1` to rerun qid-scoped tasks with a stronger
 workflow and record the resolution evidence. The resolver writes
@@ -77,7 +77,7 @@ workflow and record the resolution evidence. The resolver writes
 comparison so unrelated qids do not pollute a review task.
 Use `run-manifest.json` in the same trace directory to compare config/input
 hashes before trusting differences between two runs.
-Use `neko-core --compare-traces <left> <right>` to separate real answer changes
+Use `neko --compare-traces <left> <right>` to separate real answer changes
 from config/input/model drift, and add repeated `--compare-qid` flags when a
 review should be limited to specific qids.
 

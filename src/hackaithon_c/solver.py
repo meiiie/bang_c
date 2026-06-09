@@ -6,11 +6,12 @@ from dataclasses import replace
 from .calculation import adjudicate_calculation
 from .classifier import classify_problem
 from .config import HarnessConfig
-from .evidence import adjudicate_direct_evidence
+from .evidence import adjudicate_date_evidence, adjudicate_direct_evidence
 from .heuristic import fallback_answer
 from .normalize import normalize_answer
 from .nvidia_client import NvidiaChatClient
 from .prompting import build_prompt, build_repair_prompt, build_verifier_prompt, tournament_variants
+from .principles import adjudicate_principle
 from .schema import Prediction, Problem, ProblemProfile, TraceStep
 
 
@@ -194,6 +195,35 @@ def _solve_direct(
                     attempts=2,
                     trace=tuple(trace_steps),
                 )
+            principle_decision = adjudicate_principle(problem)
+            if principle_decision is not None:
+                trace_steps.append(
+                    TraceStep(
+                        role="principle-adjudicator",
+                        action="domain_principle_check",
+                        status="warning"
+                        if principle_decision.answer != repaired_answer
+                        else "completed",
+                        detail=principle_decision.detail,
+                        answer=principle_decision.answer,
+                    )
+                )
+                return Prediction(
+                    qid=problem.qid,
+                    answer=principle_decision.answer,
+                    model=client.model,
+                    raw_answer=(
+                        f"{prompt.variant}={raw_answer.strip()} | "
+                        f"repair={raw_repair.strip()} | "
+                        f"principle={principle_decision.answer}"
+                    ),
+                    strategy="gemma_repaired_principle",
+                    confidence=0.82,
+                    question_kind=profile.kind,
+                    prompt_variant=prompt.variant,
+                    attempts=2,
+                    trace=tuple(trace_steps),
+                )
             if verify:
                 raw_verifier, verified = _verify(
                     problem,
@@ -244,6 +274,29 @@ def _solve_direct(
                 question_kind=profile.kind,
                 prompt_variant=prompt.variant,
                 attempts=2,
+                trace=tuple(trace_steps),
+            )
+        evidence_decision = adjudicate_date_evidence(problem, None, config)
+        if evidence_decision is not None:
+            trace_steps.append(
+                TraceStep(
+                    role="evidence-adjudicator",
+                    action="date_passage_support",
+                    status="warning",
+                    detail=evidence_decision.detail,
+                    answer=evidence_decision.answer,
+                )
+            )
+            return Prediction(
+                qid=problem.qid,
+                answer=evidence_decision.answer,
+                model=client.model,
+                raw_answer=f"{prompt.variant}={raw_answer.strip()} | date_evidence={evidence_decision.answer}",
+                strategy="gemma_date_evidence",
+                confidence=0.76,
+                question_kind=profile.kind,
+                prompt_variant=prompt.variant,
+                attempts=1,
                 trace=tuple(trace_steps),
             )
         return _fallback_prediction(
@@ -307,12 +360,47 @@ def _solve_direct(
                     attempts=2,
                     trace=tuple(trace_steps),
                 )
-            evidence_decision = adjudicate_direct_evidence(problem, verified, config)
+            principle_decision = adjudicate_principle(problem)
+            if principle_decision is not None:
+                trace_steps.append(
+                    TraceStep(
+                        role="principle-adjudicator",
+                        action="domain_principle_check",
+                        status="warning"
+                        if principle_decision.answer != verified
+                        else "completed",
+                        detail=principle_decision.detail,
+                        answer=principle_decision.answer,
+                    )
+                )
+                return Prediction(
+                    qid=problem.qid,
+                    answer=principle_decision.answer,
+                    model=client.model,
+                    raw_answer=(
+                        f"{prompt.variant}={raw_answer.strip()} | "
+                        f"verifier={raw_verifier.strip()} | "
+                        f"principle={principle_decision.answer}"
+                    ),
+                    strategy="gemma_verified_principle",
+                    confidence=0.86
+                    if principle_decision.answer == verified
+                    else 0.76,
+                    question_kind=profile.kind,
+                    prompt_variant=prompt.variant,
+                    attempts=2,
+                    trace=tuple(trace_steps),
+                )
+            evidence_decision = adjudicate_date_evidence(
+                problem,
+                verified,
+                config,
+            ) or adjudicate_direct_evidence(problem, verified, config)
             if evidence_decision is not None:
                 trace_steps.append(
                     TraceStep(
                         role="evidence-adjudicator",
-                        action="direct_passage_support",
+                        action="passage_support",
                         status="warning",
                         detail=evidence_decision.detail,
                         answer=evidence_decision.answer,
@@ -386,6 +474,34 @@ def _solve_direct(
             trace=tuple(trace_steps),
         )
 
+    principle_decision = adjudicate_principle(problem)
+    if principle_decision is not None:
+        trace_steps.append(
+            TraceStep(
+                role="principle-adjudicator",
+                action="domain_principle_check",
+                status="warning"
+                if principle_decision.answer != normalized
+                else "completed",
+                detail=principle_decision.detail,
+                answer=principle_decision.answer,
+            )
+        )
+        return Prediction(
+            qid=problem.qid,
+            answer=principle_decision.answer,
+            model=client.model,
+            raw_answer=(
+                f"{prompt.variant}={raw_answer.strip()} | "
+                f"principle={principle_decision.answer}"
+            ),
+            strategy="gemma_direct_principle",
+            confidence=0.80 if principle_decision.answer == normalized else 0.70,
+            question_kind=profile.kind,
+            prompt_variant=prompt.variant,
+            trace=tuple(trace_steps),
+        )
+
     return Prediction(
         qid=problem.qid,
         answer=normalized,
@@ -417,15 +533,24 @@ def _solve_tournament(
             max_tokens=prompt.max_tokens,
         )
         normalized = normalize_answer(raw_answer, problem)
-        attempts.append((variant, raw_answer, normalized))
+        variant_raw = raw_answer
+        detail = "variant output normalized"
+        if normalized is None:
+            repaired = _repair_invalid_answer(problem, client, raw_answer, config=config)
+            if repaired is not None:
+                raw_repair, repaired_answer = repaired
+                variant_raw = f"{raw_answer.strip()} | repair={raw_repair.strip()}"
+                normalized = repaired_answer
+                detail = "variant output repaired to a valid answer letter"
+            else:
+                detail = "variant output was not a valid answer letter"
+        attempts.append((variant, variant_raw, normalized))
         trace_steps.append(
             TraceStep(
                 role="solver",
                 action=f"tournament:{variant}",
                 status="completed" if normalized else "warning",
-                detail="variant output normalized"
-                if normalized
-                else "variant output was not a valid answer letter",
+                detail=detail,
                 answer=normalized,
             )
         )
@@ -479,6 +604,59 @@ def _solve_tournament(
                     detail="verifier output was not a valid answer letter",
                 )
             )
+
+    calculation_decision = adjudicate_calculation(problem)
+    if calculation_decision is not None:
+        trace_steps.append(
+            TraceStep(
+                role="calculation-adjudicator",
+                action="deterministic_formula_check",
+                status="warning"
+                if calculation_decision.answer != answer
+                else "completed",
+                detail=calculation_decision.detail,
+                answer=calculation_decision.answer,
+            )
+        )
+        answer = calculation_decision.answer
+        confidence = max(confidence, 0.82)
+        attempts.append(("calculation", calculation_decision.detail, answer))
+    else:
+        principle_decision = adjudicate_principle(problem)
+        if principle_decision is not None:
+            trace_steps.append(
+                TraceStep(
+                    role="principle-adjudicator",
+                    action="domain_principle_check",
+                    status="warning"
+                    if principle_decision.answer != answer
+                    else "completed",
+                    detail=principle_decision.detail,
+                    answer=principle_decision.answer,
+                )
+            )
+            answer = principle_decision.answer
+            confidence = max(confidence, 0.82)
+            attempts.append(("principle", principle_decision.detail, answer))
+        else:
+            evidence_decision = adjudicate_date_evidence(
+                problem,
+                answer,
+                config,
+            ) or adjudicate_direct_evidence(problem, answer, config)
+            if evidence_decision is not None:
+                trace_steps.append(
+                    TraceStep(
+                        role="evidence-adjudicator",
+                        action="passage_support",
+                        status="warning",
+                        detail=evidence_decision.detail,
+                        answer=evidence_decision.answer,
+                    )
+                )
+                answer = evidence_decision.answer
+                confidence = max(confidence, 0.74)
+                attempts.append(("direct_evidence", evidence_decision.detail, answer))
 
     raw = " | ".join(
         f"{variant}={raw.strip()}=>{normalized or '?'}"

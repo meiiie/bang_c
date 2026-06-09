@@ -157,6 +157,15 @@ read-only, and the solve path enforces the same policy before loading input or
 model state. This is the first Claude Code-style permission layer for richer
 workflows.
 
+`--yolo` is the first bounded autonomous mode. It adapts the same lesson from
+Codex/Claude-style agents: autonomy is a named permission/workflow state, not
+an invisible prompt behavior. The preset selects `contest-strict` when no
+workflow is provided, enables compatible auto-resume, keeps checkpointing on,
+and writes review/session artifacts. It still runs the same policy gate, model
+eligibility check, prediction validator, and exporter contract. It does not
+submit leaderboard files, push git changes, delete files, or allow development
+tools such as web research/subagent review to write `pred.csv`.
+
 `scripts/evaluate.ps1` composes those run sessions into a higher-level eval
 session. Each workflow repeat gets its own run folder, then the eval report
 records trace review, trace comparison, and a selected candidate. This mirrors
@@ -179,7 +188,7 @@ The config layer stores:
 - classifier thresholds;
 - harness scoring weights.
 
-`neko-core --init` copies the canonical config to `.neko-core/config.json`.
+`neko --init` copies the canonical config to `.neko-core/config.json`.
 When no `--config` path is provided, the loader checks this project-local
 config before `configs/default.json`. This mirrors agent CLI practice: runtime
 source stays stable while a team can tune local harness profiles.
@@ -237,7 +246,8 @@ Useful patterns from the local Claude Code snapshot:
 
 For Neko Core, the first adapted slices are `--doctor`, `--capabilities`,
 `--agents`, `--agent`, `--tools`, `--tool`, `--commands`, `--command`,
-`--policy`, `--list-workflows`, `scripts/verify.ps1`, and `scripts/evaluate.ps1`.
+`--policy`, `--list-workflows`, `--yolo`, `scripts/verify.ps1`, and
+`scripts/evaluate.ps1`.
 They prove config, contract, model, key presence, input discovery, the
 runtime/development boundary, role handoffs, tool guardrails, command
 guardrails, policy boundaries, verification evidence, and workflow stability

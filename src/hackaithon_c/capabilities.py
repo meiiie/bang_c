@@ -49,6 +49,12 @@ def collect_capabilities(config: HarnessConfig) -> tuple[Capability, ...]:
         Capability("model_inventory", "cli", "enabled", "Provider model probe and Bang C filtering"),
         Capability("workflow_registry", "cli", "enabled", "Named runtime and development workflows"),
         Capability(
+            "bounded_autopilot",
+            "runtime",
+            "enabled",
+            "YOLO preset with contest-strict, checkpoint, auto-resume, review, and policy gates",
+        ),
+        Capability(
             "web_research",
             "development",
             "external",

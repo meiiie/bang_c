@@ -25,7 +25,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="identity",
             option="--version",
             description="Print the Neko Core version without running inference.",
-            example=".\\neko-core.ps1 --version",
+            example="neko --version",
             guardrail="Fast path; no file, model, or network access.",
         ),
         CommandSpec(
@@ -34,7 +34,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="identity",
             option="--banner",
             description="Print the ASCII Neko Core brand banner.",
-            example=".\\neko-core.ps1 --banner",
+            example="neko --banner",
             guardrail="Brand preview only; does not change config or outputs.",
         ),
         CommandSpec(
@@ -43,7 +43,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="configuration",
             option="--init",
             description="Create a project-local .neko-core/config.json profile.",
-            example=".\\neko-core.ps1 --init",
+            example="neko --init",
             guardrail="Keeps source config stable; use --force only when resetting local config intentionally.",
         ),
         CommandSpec(
@@ -52,7 +52,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="diagnostics",
             option="--doctor",
             description="Check environment, config, input discovery, and output contract.",
-            example=".\\neko-core.ps1 --doctor --input C:\\data\\public_test.json",
+            example="neko --doctor --input C:\\data\\public_test.json",
             guardrail="Diagnostics only; does not call the model or write predictions.",
         ),
         CommandSpec(
@@ -61,7 +61,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="registry",
             option="--capabilities",
             description="Show runtime, CLI, and development capabilities.",
-            example=".\\neko-core.ps1 --capabilities",
+            example="neko --capabilities",
             guardrail="Read-only registry surface.",
         ),
         CommandSpec(
@@ -70,7 +70,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="registry",
             option="--agents / --agent",
             description="Show harness role boundaries and one-role details.",
-            example=".\\neko-core.ps1 --agent task-resolver",
+            example="neko --agent task-resolver",
             guardrail="Read-only role registry; does not spawn subagents.",
         ),
         CommandSpec(
@@ -79,7 +79,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="registry",
             option="--tools / --tool",
             description="Show tool contracts, permission class, inputs, outputs, and guardrails.",
-            example=".\\neko-core.ps1 --tool web-research",
+            example="neko --tool web-research",
             guardrail="Read-only tool registry; external tools stay quarantined from runtime output.",
         ),
         CommandSpec(
@@ -88,7 +88,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="registry",
             option="--commands / --command",
             description="Show this command registry and one-command details.",
-            example=".\\neko-core.ps1 --command run",
+            example="neko --command run",
             guardrail="Read-only command registry; useful before running heavier workflows.",
         ),
         CommandSpec(
@@ -97,7 +97,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="diagnostics",
             option="--policy",
             description="Audit runtime/development boundaries across commands, tools, and agents.",
-            example=".\\neko-core.ps1 --policy",
+            example="neko --policy",
             guardrail="Read-only audit command; the solve path enforces the same policy gate.",
         ),
         CommandSpec(
@@ -106,7 +106,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="registry",
             option="--list-workflows / --workflow",
             description="List configured workflow profiles or run one by name.",
-            example=".\\neko-core.ps1 --workflow quick-dry-run --input C:\\data\\public_test.json --limit 5",
+            example="neko --workflow quick-dry-run --input C:\\data\\public_test.json --limit 5",
             guardrail="Runtime workflows remain config-defined instead of source-hardcoded.",
         ),
         CommandSpec(
@@ -115,8 +115,20 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="provider",
             option="--model-inventory",
             description="Probe provider models and filter Bang C eligible families.",
-            example=".\\neko-core.ps1 --model-inventory --run-dir run-model-inventory",
+            example="neko --model-inventory --run-dir run-model-inventory",
             guardrail="Provider metadata only; does not send contest questions.",
+        ),
+        CommandSpec(
+            name="yolo",
+            phase="runtime",
+            category="autonomy",
+            option="--yolo",
+            description="Run the bounded autonomous contest preset.",
+            example="neko core --yolo --data-dir /data --output-dir /output --run-dir /output/neko-run",
+            guardrail=(
+                "Sets contest-strict, checkpointing, auto-resume, and review artifacts; "
+                "does not bypass policy, submit results, delete files, or use development-only tools."
+            ),
         ),
         CommandSpec(
             name="run",
@@ -124,16 +136,16 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="contest",
             option="--input / --data-dir / --output-dir",
             description=f"Read contest input, solve problems, and write {output_file}.",
-            example=".\\neko-core.ps1 --workflow contest-auto --data-dir /data --output-dir /output",
+            example="neko --workflow contest-auto --data-dir /data --output-dir /output",
             guardrail="Final path writes only the configured qid,answer prediction CSV.",
         ),
         CommandSpec(
             name="run-session",
             phase="development",
             category="experiment",
-            option="--run-dir / --resume / --checkpoint-every",
+            option="--run-dir / --resume / --auto-resume / --checkpoint-every",
             description="Create or resume a portable run folder with output, traces, report, tasks, events, and checkpoints.",
-            example=".\\neko-core.ps1 --workflow quick-dry-run --input C:\\data\\public_test.json --run-dir run-smoke --limit 5 --resume",
+            example="neko --workflow quick-dry-run --input C:\\data\\public_test.json --run-dir run-smoke --limit 5 --auto-resume",
             guardrail="Checkpoint artifacts stay in the trace folder; final pred.csv is written only after validation.",
         ),
         CommandSpec(
@@ -142,7 +154,7 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="resume",
             option="--list-runs / --session / --events",
             description="Rediscover local run sessions and render resume-ready state.",
-            example=".\\neko-core.ps1 --session run-smoke",
+            example="neko --session run-smoke",
             guardrail="Read-only session inspection; no hidden state required.",
         ),
         CommandSpec(
@@ -151,8 +163,17 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             category="verification",
             option="--review-trace / --review-tasks / --compare-traces",
             description="Review trace artifacts, create qid tasks, and compare runs.",
-            example=".\\neko-core.ps1 --review-tasks run-smoke\\traces --run-dir run-review-tasks",
+            example="neko --review-tasks run-smoke\\traces --run-dir run-review-tasks",
             guardrail="Review outputs are evidence; they do not mutate pred.csv.",
+        ),
+        CommandSpec(
+            name="check-submission",
+            phase="cli",
+            category="verification",
+            option="--check-submission",
+            description="Validate a pred.csv artifact against input qids, header, filename, and per-row allowed letters.",
+            example="neko --input C:\\data\\public_test.csv --check-submission pred.csv",
+            guardrail="Read-only artifact check; validates allowed letters from each input row instead of hard-coding A-D.",
         ),
         CommandSpec(
             name="resolve-tasks",

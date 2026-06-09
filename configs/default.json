@@ -31,7 +31,12 @@
     "allowed_model_families": ["gemma-4", "qwen3.5"],
     "allowed_embedding_families": ["bge-m3", "qwen-rerank"],
     "default_strategy": "auto",
-    "max_retries": 2,
+    "max_retries": 6,
+    "retry_base_delay_seconds": 1.5,
+    "retry_max_delay_seconds": 30,
+    "problem_max_retries": 2,
+    "problem_retry_base_delay_seconds": 5,
+    "problem_retry_max_delay_seconds": 60,
     "timeout_seconds": 90,
     "repair_invalid_output": true
   },
@@ -45,7 +50,7 @@
     },
     "contest-strict": {
       "description": "Accuracy-first contest path: verify every answer and keep checkpoints for long runs.",
-      "strategy": "verify",
+      "strategy": "auto",
       "verify": true,
       "dry_run": false,
       "phase": "runtime"

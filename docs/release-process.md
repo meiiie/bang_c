@@ -27,8 +27,9 @@ Version locations:
 python -m unittest discover -s tests -v
 python -m compileall -q src
 .\scripts\verify.ps1 -InputPath <public_test.csv> -Docker
-neko-core --doctor
-neko-core --policy
+neko --input <public_test.csv> --check-submission <pred.csv>
+neko --doctor
+neko --policy
 ```
 
 For model or prompt changes, also run a small real-model smoke with
@@ -68,4 +69,3 @@ If a release fails after tag creation:
 2. Tag a new patch version.
 3. Do not force-move published tags unless no external artifact has consumed
    the tag yet.
-

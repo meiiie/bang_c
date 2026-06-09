@@ -18,4 +18,4 @@ COPY README.md .
 RUN mkdir -p /data /output
 
 ENTRYPOINT ["python", "-m", "hackaithon_c.run"]
-CMD ["--workflow", "contest-auto", "--data-dir", "/data", "--output-dir", "/output"]
+CMD ["--workflow", "contest-strict", "--data-dir", "/data", "--output-dir", "/output", "--run-dir", "/output/neko-run", "--auto-resume", "--checkpoint-every", "1"]

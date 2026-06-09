@@ -10,7 +10,7 @@ def normalize_text(text: str) -> str:
         for char in unicodedata.normalize("NFD", text.lower())
         if unicodedata.category(char) != "Mn"
     )
-    without_marks = without_marks.replace("đ", "d")
+    without_marks = without_marks.replace("\u0111", "d")
     return re.sub(r"\s+", " ", without_marks).strip()
 
 

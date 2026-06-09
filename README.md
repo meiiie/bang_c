@@ -5,45 +5,50 @@
 
 ![Neko Core banner](docs/assets/neko-core-banner-left-logo.png)
 
-Status: draft competition harness
+Status: competition harness
 
-Neko Core is a draft competition harness for HackAIthon 2026 Bang C. This
-folder is intentionally separate from Wiii Core. It reuses Wiii's harness
-mindset, model-routing discipline, and verification loop, but the final
-container stays small and reproducible.
+Neko Core is a config-first inference harness for HackAIthon 2026 Bang C. It
+is intentionally separate from Wiii Core: the runtime container stays small,
+reproducible, and limited to the contest contract, while development workflows
+keep traces, review tasks, and model checks outside the submitted artifact.
 
 ## Install Neko Core
 
 Windows PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/meiiie/bang_c/main/install.ps1 | iex"
-neko-core --doctor
+irm https://neko.holilihu.online/install.ps1 | iex
+neko --doctor
 ```
 
 Linux/macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh | bash
-neko-core --doctor
+curl -fsSL https://neko.holilihu.online/install.sh | bash
+neko --doctor
 ```
 
-The installer uses `pipx`, so the `neko-core` command is isolated from system
-Python packages. If the command is not visible immediately, open a new terminal
-or add the pipx app path shown by the installer to `PATH`.
+The installer uses `pipx`, so the `neko` command is isolated from system Python
+packages. It runs `pipx ensurepath`, updates the current shell `PATH` when the
+pipx app directory is discoverable, and verifies `neko --version` before
+finishing. If the command is not visible immediately, open a new terminal or
+add the pipx app path shown by the installer to `PATH`.
+
+`neko` is the primary command. `neko-core` and `bang-c` are compatibility
+aliases, and `neko core --doctor` is accepted as a namespace-style alias.
 
 For CI, scripts, or repeatable machine setup:
 
 ```powershell
 $env:NEKO_NON_INTERACTIVE = "1"
 $env:NEKO_INSTALL_SOURCE = "git+https://github.com/meiiie/bang_c.git"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/meiiie/bang_c/main/install.ps1 | iex"
+irm https://neko.holilihu.online/install.ps1 | iex
 ```
 
 ```bash
 export NEKO_NON_INTERACTIVE=1
 export NEKO_INSTALL_SOURCE="git+https://github.com/meiiie/bang_c.git"
-curl -fsSL https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh | bash
+curl -fsSL https://neko.holilihu.online/install.sh | bash
 ```
 
 Upgrade or uninstall:
@@ -53,14 +58,14 @@ python -m pipx upgrade neko-core
 python -m pipx uninstall neko-core
 ```
 
-A branded install domain can be added later without changing the package:
+Fallback GitHub raw installer URLs:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://neko.holilihu.online/install.ps1 | iex"
+irm https://raw.githubusercontent.com/meiiie/bang_c/main/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://neko.holilihu.online/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh | bash
 ```
 
 See `docs/distribution-domain.md` for the Cloudflare routing plan.
@@ -116,16 +121,16 @@ One-command local install:
 
 ```powershell
 .\scripts\bootstrap.ps1
-.\neko-core.ps1 --help
-.\neko-core.ps1 --doctor
-.\neko-core.ps1 --capabilities
-.\neko-core.ps1 --agents
-.\neko-core.ps1 --tools
-.\neko-core.ps1 --commands
-.\neko-core.ps1 --policy
-.\neko-core.ps1 --model-inventory
-.\neko-core.ps1 --list-workflows
-.\neko-core.ps1 --init
+.\neko.ps1 --quickstart
+.\neko.ps1 --doctor
+.\neko.ps1 --capabilities
+.\neko.ps1 --agents
+.\neko.ps1 --tools
+.\neko.ps1 --commands
+.\neko.ps1 --policy
+.\neko.ps1 --model-inventory
+.\neko.ps1 --list-workflows
+.\neko.ps1 --init
 ```
 
 `bootstrap.ps1` creates `.venv`, installs the local editable package, and runs
@@ -145,10 +150,10 @@ python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368
 After bootstrap, use the local CLI shim:
 
 ```powershell
-.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+.\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
 ```
 
-`.\bang-c.ps1` remains as a compatibility alias.
+`.\neko-core.ps1` and `.\bang-c.ps1` remain compatibility aliases.
 
 CLI fast paths inspired by Claude Code:
 
@@ -176,21 +181,55 @@ CLI fast paths inspired by Claude Code:
   allowed LLM and embedding/rerank families. Combine with `--run-dir` to save
   `model-inventory.txt` before model experiments.
 - `--list-workflows`: named runtime/development workflow registry.
+- `--check-submission <pred.csv>`: read-only validation for the final artifact.
+  It checks the file name, exact `qid,answer` header, row count, duplicate or
+  missing qids, and whether each answer belongs to that row's available choice
+  letters. It intentionally derives allowed letters from the input instead of
+  hard-coding A-D.
+- `--yolo`: bounded autonomous run preset. It selects `contest-strict` when no
+  workflow is provided, enables `--auto-resume`, keeps checkpointing on, writes
+  run/session review artifacts, and still enforces the policy and output
+  contract. It does not submit results, delete files, bypass model rules, or use
+  web/subagents inside the final runtime.
 
 Configured workflow examples:
 
 ```powershell
-.\neko-core.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
-.\neko-core.ps1 --workflow verify-all --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
-.\neko-core.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-smoke --limit 5
+.\neko.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+.\neko.ps1 --workflow verify-all --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+.\neko.ps1 --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-smoke --limit 5
 ```
 
-Use `contest-auto` for the default final path. Use `contest-strict` when
-accuracy is more important than API call count or runtime:
+The Docker default uses `contest-strict` with checkpointing and auto-resume so
+one container command can keep progressing through long public/private files.
+Use the same path locally when accuracy is more important than API call count
+or runtime:
 
 ```powershell
-.\neko-core.ps1 --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-strict --checkpoint-every 1
-.\neko-core.ps1 --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-strict --resume
+.\neko.ps1 --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-strict --auto-resume --checkpoint-every 1
+```
+
+The shorter autonomous preset is:
+
+```powershell
+.\neko.ps1 core --yolo --input "C:\Users\Admin\Downloads\public-test_1780368312.json"
+```
+
+For a contest-style container command, keep `/output/pred.csv` explicit while
+storing resume/review artifacts under `/output/neko-run`:
+
+```bash
+neko core --yolo --data-dir /data --output-dir /output --run-dir /output/neko-run
+```
+
+If uploading through the website manually, upload the generated file named
+`pred.csv`; do not upload a renamed run artifact such as
+`neko-core-bang-c-public-v5-reviewed.csv`.
+
+Validate the upload artifact before submitting:
+
+```powershell
+.\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --check-submission "C:\Users\Admin\Downloads\pred.csv"
 ```
 
 `--run-dir` is a development session path. It writes `output/pred.csv`,
@@ -202,22 +241,22 @@ For large files, do not paste the whole dataset into an AI chat. Let the CLI
 iterate qid-by-qid and keep a checkpoint:
 
 ```powershell
-.\neko-core.ps1 --workflow contest-auto --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-full --checkpoint-every 1
-.\neko-core.ps1 --workflow contest-auto --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-full --resume
+.\neko.ps1 --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-full --auto-resume --checkpoint-every 1
 ```
 
-`--resume` reuses qids already recorded in
+`--auto-resume` reuses qids already recorded in
 `traces/predictions.checkpoint.jsonl` after checking the input/config/workflow
-metadata. The final `pred.csv` is still written only after the full prediction
-set passes the contest contract validation.
+metadata, and clears stale checkpoints when the input/config no longer match.
+The final `pred.csv` is still written only after the full prediction set passes
+the contest contract validation.
 
 Session inspection, inspired by Claude Code's `/resume` and `/session`
 surfaces:
 
 ```powershell
-.\neko-core.ps1 --list-runs --runs-root .
-.\neko-core.ps1 --session run-smoke
-.\neko-core.ps1 --events run-smoke
+.\neko.ps1 --list-runs --runs-root .
+.\neko.ps1 --session run-smoke
+.\neko.ps1 --events run-smoke
 ```
 
 These commands only read local artifacts. They show workflow, model, contract
@@ -252,11 +291,11 @@ machine-readable and human-readable run history.
 Trace review:
 
 ```powershell
-.\neko-core.ps1 --review-trace traces-verify
-.\neko-core.ps1 --review-tasks traces-verify --run-dir run-review-tasks
+.\neko.ps1 --review-trace traces-verify
+.\neko.ps1 --review-tasks traces-verify --run-dir run-review-tasks
 .\scripts\resolve-tasks.ps1 -TaskPath run-review-tasks\review-tasks.json -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" -Workflow verify-all
-.\neko-core.ps1 --compare-traces traces-before traces-after
-.\neko-core.ps1 --compare-traces traces-before traces-after --compare-qid test_0001
+.\neko.ps1 --compare-traces traces-before traces-after
+.\neko.ps1 --compare-traces traces-before traces-after --compare-qid test_0001
 ```
 
 The reviewer is development-only. It reads `run-summary.json` plus
@@ -276,21 +315,21 @@ Dry-run smoke test without API:
 
 ```powershell
 $env:PYTHONPATH = "$PWD/src"
-.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5 --dry-run
+.\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5 --dry-run
 ```
 
 Gemma 4 with a second verifier pass:
 
 ```powershell
 $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
-.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --strategy verify
+.\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --strategy verify
 ```
 
 Auto strategy with selective tournament:
 
 ```powershell
 $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
-.\neko-core.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 10 --strategy auto
+.\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 10 --strategy auto
 ```
 
 Strategies:

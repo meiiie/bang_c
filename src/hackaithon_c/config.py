@@ -75,7 +75,27 @@ class HarnessConfig:
 
     @property
     def max_retries(self) -> int:
-        return int(self.raw["runtime"].get("max_retries", 2))
+        return int(self.raw["runtime"].get("max_retries", 6))
+
+    @property
+    def retry_base_delay_seconds(self) -> float:
+        return float(self.raw["runtime"].get("retry_base_delay_seconds", 1.5))
+
+    @property
+    def retry_max_delay_seconds(self) -> float:
+        return float(self.raw["runtime"].get("retry_max_delay_seconds", 30.0))
+
+    @property
+    def problem_max_retries(self) -> int:
+        return int(self.raw["runtime"].get("problem_max_retries", 2))
+
+    @property
+    def problem_retry_base_delay_seconds(self) -> float:
+        return float(self.raw["runtime"].get("problem_retry_base_delay_seconds", 5.0))
+
+    @property
+    def problem_retry_max_delay_seconds(self) -> float:
+        return float(self.raw["runtime"].get("problem_retry_max_delay_seconds", 60.0))
 
     @property
     def timeout_seconds(self) -> int:
@@ -147,6 +167,26 @@ def _validate_config(raw: dict[str, Any], path: Path) -> None:
 
     if not raw["runtime"].get("allowed_model_families"):
         raise ValueError(f"Config {path} missing runtime.allowed_model_families")
+    if int(raw["runtime"].get("max_retries", 0)) < 0:
+        raise ValueError(f"Config {path} runtime.max_retries must be >= 0")
+    if float(raw["runtime"].get("retry_base_delay_seconds", 0)) < 0:
+        raise ValueError(
+            f"Config {path} runtime.retry_base_delay_seconds must be >= 0"
+        )
+    if float(raw["runtime"].get("retry_max_delay_seconds", 0)) < 0:
+        raise ValueError(
+            f"Config {path} runtime.retry_max_delay_seconds must be >= 0"
+        )
+    if int(raw["runtime"].get("problem_max_retries", 0)) < 0:
+        raise ValueError(f"Config {path} runtime.problem_max_retries must be >= 0")
+    if float(raw["runtime"].get("problem_retry_base_delay_seconds", 0)) < 0:
+        raise ValueError(
+            f"Config {path} runtime.problem_retry_base_delay_seconds must be >= 0"
+        )
+    if float(raw["runtime"].get("problem_retry_max_delay_seconds", 0)) < 0:
+        raise ValueError(
+            f"Config {path} runtime.problem_retry_max_delay_seconds must be >= 0"
+        )
 
     thresholds = raw["profiling"].get("thresholds", {})
     for key in ("many_choice_min", "long_context_chars", "short_question_chars", "focus_tail_chars"):

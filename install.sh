@@ -40,17 +40,22 @@ echo "Installing/upgrading pipx..."
 echo "Ensuring pipx app path is registered..."
 "${PYTHON_BIN}" -m pipx ensurepath
 
-export PATH="${HOME}/.local/bin:${PATH}"
+PIPX_BIN_DIR="$("${PYTHON_BIN}" -m pipx environment --value PIPX_BIN_DIR 2>/dev/null || true)"
+if [[ -z "${PIPX_BIN_DIR}" ]]; then
+  PIPX_BIN_DIR="${HOME}/.local/bin"
+fi
+export PATH="${PIPX_BIN_DIR}:${PATH}"
 
 echo "Installing Neko Core from ${SOURCE} ..."
 "${PYTHON_BIN}" -m pipx install --force "${SOURCE}"
 
-if command -v neko-core >/dev/null 2>&1; then
-  neko-core --version
+if command -v neko >/dev/null 2>&1; then
+  neko --version
   echo "Neko Core installed."
-  echo "Try: neko-core --doctor"
-  echo "Run: neko-core --workflow contest-strict --data-dir data --output-dir output"
+  echo "Try: neko --doctor"
+  echo "Run: neko --workflow contest-strict --data-dir data --output-dir output"
+  echo "Alias: neko-core --doctor"
 else
   echo "Neko Core installed, but the command is not visible in this shell yet." >&2
-  echo "Open a new terminal or add ${HOME}/.local/bin to PATH." >&2
+  echo "Open a new terminal or add ${PIPX_BIN_DIR} to PATH." >&2
 fi

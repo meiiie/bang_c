@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$TaskPath,
     [Parameter(Mandatory = $true)]
@@ -91,13 +91,13 @@ $displayArguments = $arguments | ForEach-Object {
         $arg
     }
 }
-$commandText = ".\neko-core.ps1 " + ($displayArguments -join " ")
+$commandText = ".\neko.ps1 " + ($displayArguments -join " ")
 $lines.Add("- Command: $commandText") | Out-Null
 $lines.Add("") | Out-Null
 
 $global:LASTEXITCODE = 0
 $output = (
-    & ".\neko-core.ps1" @arguments 2>&1 | ForEach-Object {
+    & ".\neko.ps1" @arguments 2>&1 | ForEach-Object {
         if ($_ -is [System.Management.Automation.ErrorRecord]) {
             $_.Exception.Message
         } else {
@@ -124,7 +124,7 @@ if ($baselineTraceDir -and (Test-Path -LiteralPath $baselineTraceDir) -and (Test
 
     $global:LASTEXITCODE = 0
     $comparisonOutput = (
-        & ".\neko-core.ps1" @compareArguments 2>&1 | ForEach-Object {
+        & ".\neko.ps1" @compareArguments 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) {
                 $_.Exception.Message
             } else {

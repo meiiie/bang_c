@@ -13,6 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
+neko = "hackaithon_c.run:main"
 neko-core = "hackaithon_c.run:main"
 bang-c = "hackaithon_c.run:main"
 

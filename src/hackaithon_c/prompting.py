@@ -24,7 +24,7 @@ class PromptBundle:
     system_prompt: str
     user_prompt: str
     variant: str
-    max_tokens: int = 12
+    max_tokens: int = 96
 
 
 def build_prompt(
@@ -68,7 +68,7 @@ def build_verifier_prompt(problem: Problem, candidate_answer: str) -> PromptBund
         f"Candidate answer: {candidate_answer}. {candidate_text}\n\n"
         f"Return exactly one letter from: {_letters(problem)}"
     )
-    return PromptBundle(SYSTEM_PROMPT, user_prompt, "verifier")
+    return PromptBundle(SYSTEM_PROMPT, user_prompt, "verifier", max_tokens=64)
 
 
 def build_repair_prompt(problem: Problem, invalid_answer: str) -> PromptBundle:
@@ -79,7 +79,7 @@ def build_repair_prompt(problem: Problem, invalid_answer: str) -> PromptBundle:
         f"Previous invalid response:\n{invalid_answer[:600]}\n\n"
         f"Valid letters: {_letters(problem)}"
     )
-    return PromptBundle(SYSTEM_PROMPT, user_prompt, "repair", max_tokens=4)
+    return PromptBundle(SYSTEM_PROMPT, user_prompt, "repair", max_tokens=16)
 
 
 def tournament_variants(profile: ProblemProfile) -> tuple[str, ...]:

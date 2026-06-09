@@ -35,3 +35,26 @@ def render_banner(config: HarnessConfig | None = None) -> str:
     lines.append(version_line(config))
     lines.append("HackAIthon 2026 Bang C inference harness")
     return "\n".join(lines)
+
+
+def render_quickstart(config: HarnessConfig | None = None) -> str:
+    return "\n".join(
+        (
+            render_banner(config),
+            "",
+            "Quick start:",
+            "  neko --doctor",
+            "  neko --model-inventory",
+            "  neko core --yolo --data-dir /data --output-dir /output",
+            "  neko --workflow contest-strict --data-dir /data --output-dir /output",
+            "",
+            "Local development:",
+            "  neko core --yolo --input public_test.json",
+            "  neko --workflow contest-strict --input public_test.json --run-dir run-full --auto-resume",
+            "  neko --session run-full",
+            "",
+            "Aliases:",
+            "  neko core --doctor",
+            "  neko-core --doctor",
+        )
+    )

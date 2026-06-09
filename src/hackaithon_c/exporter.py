@@ -11,7 +11,7 @@ from .schema import Prediction
 def write_predictions(path: Path, predictions: list[Prediction]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["qid", "answer"])
+        writer = csv.DictWriter(handle, fieldnames=["qid", "answer"], lineterminator="\n")
         writer.writeheader()
         for prediction in predictions:
             writer.writerow({"qid": prediction.qid, "answer": prediction.answer})

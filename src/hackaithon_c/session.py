@@ -152,8 +152,8 @@ def render_run_session_detail(record: RunSessionRecord) -> str:
         f"Events: {record.event_count}",
         "",
         "Next commands:",
-        f"- Review: .\\neko-core.ps1 --review-trace \"{record.trace_dir}\"",
-        f"- Events: .\\neko-core.ps1 --events \"{record.run_dir}\"",
+        f"- Review: neko --review-trace \"{record.trace_dir}\"",
+        f"- Events: neko --events \"{record.run_dir}\"",
     ]
     if record.review_tasks_path.exists() and record.input_path:
         lines.append(

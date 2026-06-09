@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$InputPath,
     [string[]]$Workflows = @("quick-dry-run"),
@@ -57,7 +57,7 @@ function Invoke-NekoTextCommand {
 
     $global:LASTEXITCODE = 0
     $output = (
-        & ".\neko-core.ps1" @Arguments 2>&1 | ForEach-Object {
+        & ".\neko.ps1" @Arguments 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) {
                 $_.Exception.Message
             } else {
@@ -191,9 +191,9 @@ foreach ($workflow in $Workflows) {
         $traceDir = Join-Path $caseDir "traces"
         $runReportPath = Join-Path $caseDir "run-report.md"
 
-        $commandText = ".\neko-core.ps1 --workflow $workflow --input `"$InputPath`" --run-dir `"$caseDir`" --limit $Limit"
+        $commandText = ".\neko.ps1 --workflow $workflow --input `"$InputPath`" --run-dir `"$caseDir`" --limit $Limit"
         Write-Output "Running: $commandText"
-        & ".\neko-core.ps1" --workflow $workflow --input $InputPath --run-dir $caseDir --limit $Limit
+        & ".\neko.ps1" --workflow $workflow --input $InputPath --run-dir $caseDir --limit $Limit
         if ($LASTEXITCODE -ne 0) {
             throw "Workflow failed: $workflow run $iteration"
         }

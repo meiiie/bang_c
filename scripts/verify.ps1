@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$InputPath,
     [switch]$Docker,
     [string]$Image = "neko-core:dev"
@@ -110,45 +110,45 @@ Invoke-NekoCheck "Source compiles" `
     { & $pythonExe -m compileall -q src }
 
 Invoke-NekoCheck "CLI version fast path" `
-    ".\neko-core.ps1 --version" `
-    { & ".\neko-core.ps1" --version }
+    ".\neko.ps1 --version" `
+    { & ".\neko.ps1" --version }
 
 Invoke-NekoCheck "Workflow registry fast path" `
-    ".\neko-core.ps1 --list-workflows" `
-    { & ".\neko-core.ps1" --list-workflows }
+    ".\neko.ps1 --list-workflows" `
+    { & ".\neko.ps1" --list-workflows }
 
 Invoke-NekoCheck "Agent registry fast path" `
-    ".\neko-core.ps1 --agents; .\neko-core.ps1 --agent task-resolver" `
+    ".\neko.ps1 --agents; .\neko.ps1 --agent task-resolver" `
     {
-        & ".\neko-core.ps1" --agents
-        & ".\neko-core.ps1" --agent "task-resolver"
+        & ".\neko.ps1" --agents
+        & ".\neko.ps1" --agent "task-resolver"
     }
 
 Invoke-NekoCheck "Tool registry fast path" `
-    ".\neko-core.ps1 --tools; .\neko-core.ps1 --tool web-research" `
+    ".\neko.ps1 --tools; .\neko.ps1 --tool web-research" `
     {
-        & ".\neko-core.ps1" --tools
-        & ".\neko-core.ps1" --tool "web-research"
+        & ".\neko.ps1" --tools
+        & ".\neko.ps1" --tool "web-research"
     }
 
 Invoke-NekoCheck "Command registry fast path" `
-    ".\neko-core.ps1 --commands; .\neko-core.ps1 --command run" `
+    ".\neko.ps1 --commands; .\neko.ps1 --command run" `
     {
-        & ".\neko-core.ps1" --commands
-        & ".\neko-core.ps1" --command "run"
+        & ".\neko.ps1" --commands
+        & ".\neko.ps1" --command "run"
     }
 
 Invoke-NekoCheck "Policy audit fast path" `
-    ".\neko-core.ps1 --policy" `
-    { & ".\neko-core.ps1" --policy }
+    ".\neko.ps1 --policy" `
+    { & ".\neko.ps1" --policy }
 
 Invoke-NekoCheck "Model inventory fast path without API key" `
-    ".\neko-core.ps1 --model-inventory --run-dir run-model-inventory with NVIDIA_API_KEY cleared" `
+    ".\neko.ps1 --model-inventory --run-dir run-model-inventory with NVIDIA_API_KEY cleared" `
     {
         $previousKey = $env:NVIDIA_API_KEY
         try {
             $env:NVIDIA_API_KEY = ""
-            & ".\neko-core.ps1" --model-inventory --run-dir "run-model-inventory"
+            & ".\neko.ps1" --model-inventory --run-dir "run-model-inventory"
             if (-not (Test-Path -LiteralPath "run-model-inventory\model-inventory.txt")) {
                 throw "missing model inventory report"
             }
@@ -158,19 +158,19 @@ Invoke-NekoCheck "Model inventory fast path without API key" `
     }
 
 Invoke-NekoCheck "Unknown workflow returns friendly CLI error" `
-    "powershell -NoProfile -ExecutionPolicy Bypass -File .\neko-core.ps1 --workflow missing-workflow --output-dir output-verify-missing --limit 1" `
-    { & powershell -NoProfile -ExecutionPolicy Bypass -File ".\neko-core.ps1" --workflow "missing-workflow" --output-dir "output-verify-missing" --limit 1 } `
+    "powershell -NoProfile -ExecutionPolicy Bypass -File .\neko.ps1 --workflow missing-workflow --output-dir output-verify-missing --limit 1" `
+    { & powershell -NoProfile -ExecutionPolicy Bypass -File ".\neko.ps1" --workflow "missing-workflow" --output-dir "output-verify-missing" --limit 1 } `
     @(2)
 
 if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
     Invoke-NekoCheck "Quick workflow produces pred.csv" `
-        ".\neko-core.ps1 --workflow quick-dry-run --input `"$InputPath`" --output-dir output-verify --trace-dir traces-verify --limit 3" `
-        { & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --output-dir "output-verify" --trace-dir "traces-verify" --limit 3 }
+        ".\neko.ps1 --workflow quick-dry-run --input `"$InputPath`" --output-dir output-verify --trace-dir traces-verify --limit 3" `
+        { & ".\neko.ps1" --workflow "quick-dry-run" --input $InputPath --output-dir "output-verify" --trace-dir "traces-verify" --limit 3 }
 
     Invoke-NekoCheck "Run session writes output trace and report" `
-        ".\neko-core.ps1 --workflow quick-dry-run --input `"$InputPath`" --run-dir run-verify --limit 3" `
+        ".\neko.ps1 --workflow quick-dry-run --input `"$InputPath`" --run-dir run-verify --limit 3" `
         {
-            & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --run-dir "run-verify" --limit 3
+            & ".\neko.ps1" --workflow "quick-dry-run" --input $InputPath --run-dir "run-verify" --limit 3
             if (-not (Test-Path -LiteralPath "run-verify\output\pred.csv")) { throw "missing run output" }
             if (-not (Test-Path -LiteralPath "run-verify\traces\predictions.checkpoint.jsonl")) { throw "missing run checkpoint" }
             if (-not (Test-Path -LiteralPath "run-verify\traces\predictions.trace.jsonl")) { throw "missing run trace" }
@@ -182,10 +182,10 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
         }
 
     Invoke-NekoCheck "Run session resumes from checkpoint" `
-        ".\neko-core.ps1 --workflow quick-dry-run --input `"$InputPath`" --run-dir run-verify --limit 3 --resume; .\neko-core.ps1 --events run-verify" `
+        ".\neko.ps1 --workflow quick-dry-run --input `"$InputPath`" --run-dir run-verify --limit 3 --resume; .\neko.ps1 --events run-verify" `
         {
-            & ".\neko-core.ps1" --workflow "quick-dry-run" --input $InputPath --run-dir "run-verify" --limit 3 --resume
-            $events = & ".\neko-core.ps1" --events "run-verify"
+            & ".\neko.ps1" --workflow "quick-dry-run" --input $InputPath --run-dir "run-verify" --limit 3 --resume
+            $events = & ".\neko.ps1" --events "run-verify"
             $events | ForEach-Object { Write-Output $_ }
             if (-not (($events | Out-String) -match "prediction_resumed")) {
                 throw "resume did not reuse checkpointed predictions"
@@ -193,17 +193,17 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
         }
 
     Invoke-NekoCheck "Session commands read resume-ready run artifacts" `
-        ".\neko-core.ps1 --list-runs --runs-root .; .\neko-core.ps1 --session run-verify; .\neko-core.ps1 --events run-verify" `
+        ".\neko.ps1 --list-runs --runs-root .; .\neko.ps1 --session run-verify; .\neko.ps1 --events run-verify" `
         {
-            & ".\neko-core.ps1" --list-runs --runs-root "."
-            & ".\neko-core.ps1" --session "run-verify"
-            & ".\neko-core.ps1" --events "run-verify"
+            & ".\neko.ps1" --list-runs --runs-root "."
+            & ".\neko.ps1" --session "run-verify"
+            & ".\neko.ps1" --events "run-verify"
         }
 
     Invoke-NekoCheck "Review task queue reads quick workflow artifacts" `
-        ".\neko-core.ps1 --review-tasks run-verify\traces --run-dir run-review-tasks" `
+        ".\neko.ps1 --review-tasks run-verify\traces --run-dir run-review-tasks" `
         {
-            & ".\neko-core.ps1" --review-tasks "run-verify\traces" --run-dir "run-review-tasks"
+            & ".\neko.ps1" --review-tasks "run-verify\traces" --run-dir "run-review-tasks"
             if (-not (Test-Path -LiteralPath "run-review-tasks\review-tasks.md")) { throw "missing review task queue" }
         }
 
@@ -227,16 +227,16 @@ if ($InputPath -and (Test-Path -LiteralPath $InputPath)) {
         }
 
     Invoke-NekoCheck "Trace reviewer reads quick workflow artifacts" `
-        ".\neko-core.ps1 --review-trace traces-verify" `
-        { & ".\neko-core.ps1" --review-trace "traces-verify" }
+        ".\neko.ps1 --review-trace traces-verify" `
+        { & ".\neko.ps1" --review-trace "traces-verify" }
 
     Invoke-NekoCheck "Run manifest is written with hashes" `
         "$pythonExe -c `"import json; m=json.load(open('traces-verify/run-manifest.json', encoding='utf-8')); assert m['schema_version']=='neko_core.run_manifest.v1'; assert len(m['input_sha256'])==64; print(m['workflow'], m['model'])`"" `
         { & $pythonExe -c "import json; m=json.load(open('traces-verify/run-manifest.json', encoding='utf-8')); assert m['schema_version']=='neko_core.run_manifest.v1'; assert len(m['input_sha256'])==64; print(m['workflow'], m['model'])" }
 
     Invoke-NekoCheck "Trace comparison reads identical run artifacts" `
-        ".\neko-core.ps1 --compare-traces traces-verify traces-verify" `
-        { & ".\neko-core.ps1" --compare-traces "traces-verify" "traces-verify" }
+        ".\neko.ps1 --compare-traces traces-verify traces-verify" `
+        { & ".\neko.ps1" --compare-traces "traces-verify" "traces-verify" }
 } else {
     Add-PartialCheck "Quick workflow produces pred.csv" "Input file not provided or not found. Pass -InputPath path\to\public_test.json."
 }

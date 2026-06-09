@@ -1,4 +1,4 @@
-name: Bug report
+﻿name: Bug report
 description: Report a reproducible Neko Core bug.
 title: "[Bug]: "
 labels: ["bug"]
@@ -16,7 +16,7 @@ body:
       label: Reproduction
       description: Include commands, input shape, workflow, and output/error.
       placeholder: |
-        neko-core --workflow contest-strict --input public_test.csv --run-dir run-debug
+        neko --workflow contest-strict --input public_test.csv --run-dir run-debug
     validations:
       required: true
   - type: textarea
@@ -31,4 +31,3 @@ body:
     attributes:
       label: Environment
       description: OS, Python version, Docker version, and Neko Core version.
-

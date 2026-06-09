@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from .agents import list_agents, render_agent_detail, render_agents, resolve_agent
-from .branding import render_banner, version_line
+from .branding import render_banner, render_quickstart, version_line
 from .capabilities import collect_capabilities, render_capabilities
 from .checkpoint import (
     append_checkpoint,
     clear_checkpoint,
+    checkpoint_meta_path,
     load_checkpoint,
     verify_checkpoint_meta,
     write_checkpoint,
@@ -49,11 +51,13 @@ from .session import (
     write_run_report,
 )
 from .solver import solve_problem
+from .submission import check_submission_file, render_submission_check
 from .tool_registry import list_tools, render_tool_detail, render_tools, resolve_tool
 from .workflows import list_workflows, render_workflows, resolve_workflow
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
+    normalized_argv = _normalize_cli_argv(tuple(sys.argv[1:] if argv is None else argv))
     parser = argparse.ArgumentParser(description="Neko Core inference harness")
     parser.add_argument("--config", default=None, help="Harness config JSON path")
     parser.add_argument("--data-dir", default="/data", help="Contest input directory")
@@ -78,6 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
     parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
     parser.add_argument("--review-tasks", default=None, help="Create reviewer task queue from a trace directory")
+    parser.add_argument("--check-submission", default=None, help="Validate a pred.csv artifact against the input contract")
     parser.add_argument("--list-runs", action="store_true", help="List local run sessions")
     parser.add_argument("--runs-root", default=".", help="Root directory for --list-runs")
     parser.add_argument("--session", default=None, help="Show details for a local run session")
@@ -95,6 +100,15 @@ def parse_args() -> argparse.Namespace:
         help="Limit --compare-traces to this qid; repeat for multiple qids",
     )
     parser.add_argument("--banner", action="store_true", help="Print the ASCII Neko Core banner")
+    parser.add_argument("--quickstart", action="store_true", help="Print a short command guide and exit")
+    parser.add_argument(
+        "--yolo",
+        action="store_true",
+        help=(
+            "Run the bounded autonomous contest preset: contest-strict, "
+            "auto-resume, checkpointing, trace review, and policy enforcement."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true", help="Use deterministic heuristic only")
     parser.add_argument(
         "--strategy",
@@ -112,16 +126,39 @@ def parse_args() -> argparse.Namespace:
         help="Reuse qid predictions from an existing run-dir/trace-dir checkpoint",
     )
     parser.add_argument(
+        "--auto-resume",
+        action="store_true",
+        help="Automatically reuse a compatible checkpoint when one exists; stale checkpoints are cleared.",
+    )
+    parser.add_argument(
         "--checkpoint-every",
         type=int,
         default=1,
         help="Flush trace checkpoint after this many newly solved items; 0 disables checkpointing",
     )
-    return parser.parse_args()
+    return parser.parse_args(normalized_argv)
+
+
+def apply_yolo_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    if not args.yolo:
+        return args
+    if args.workflow is None:
+        args.workflow = "contest-strict"
+    args.auto_resume = True
+    if args.checkpoint_every == 0:
+        args.checkpoint_every = 1
+    if args.run_dir is None and args.trace_dir is None:
+        if args.input is None and Path(args.data_dir).as_posix() == "/data":
+            args.output_dir = args.output_dir or "/output"
+            args.run_dir = "/output/neko-run"
+        else:
+            args.run_dir = "run-yolo"
+    return args
 
 
 def main() -> int:
-    args = parse_args()
+    raw_argv = tuple(sys.argv[1:])
+    args = apply_yolo_defaults(parse_args(raw_argv))
 
     if args.init:
         result = init_project(Path.cwd(), force=args.force)
@@ -136,6 +173,10 @@ def main() -> int:
 
     if args.banner:
         print(render_banner(config))
+        return 0
+
+    if args.quickstart or not _normalize_cli_argv(raw_argv):
+        print(render_quickstart(config))
         return 0
 
     if args.capabilities:
@@ -215,6 +256,17 @@ def main() -> int:
         print(rendered)
         return 1 if review.verdict == "fail" else 0
 
+    if args.check_submission:
+        try:
+            input_path = Path(args.input) if args.input else find_input_file(Path(args.data_dir), config)
+            problems = load_problems(input_path)
+            check = check_submission_file(Path(args.check_submission), problems, config)
+        except (FileNotFoundError, ValueError) as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
+        print(render_submission_check(check))
+        return 0 if check.valid else 1
+
     if args.list_runs:
         root = Path(args.runs_root)
         print(render_run_sessions(discover_run_sessions(root), root=root))
@@ -277,8 +329,8 @@ def main() -> int:
         output_dir = Path(args.output_dir or "/output")
     output_path = output_dir / config.output_file
 
-    if args.resume and trace_dir is None:
-        print("Error: --resume requires --run-dir or --trace-dir", file=sys.stderr)
+    if (args.resume or args.auto_resume) and trace_dir is None:
+        print("Error: --resume/--auto-resume requires --run-dir or --trace-dir", file=sys.stderr)
         return 2
     if args.checkpoint_every < 0:
         print("Error: --checkpoint-every must be >= 0", file=sys.stderr)
@@ -298,6 +350,8 @@ def main() -> int:
                 default_model=config.default_model,
                 default_timeout_seconds=config.timeout_seconds,
                 default_max_retries=config.max_retries,
+                default_retry_base_delay_seconds=config.retry_base_delay_seconds,
+                default_retry_max_delay_seconds=config.retry_max_delay_seconds,
             )
         )
         try:
@@ -309,7 +363,8 @@ def main() -> int:
     resumed_predictions = {}
     checkpoint_enabled = trace_dir is not None and args.checkpoint_every > 0
     if trace_dir is not None:
-        if args.resume:
+        auto_resume_checkpoint = args.auto_resume and checkpoint_meta_path(trace_dir).exists()
+        if args.resume or auto_resume_checkpoint:
             try:
                 verify_checkpoint_meta(
                     trace_dir,
@@ -323,9 +378,13 @@ def main() -> int:
                     total_problems=len(problems),
                 )
             except ValueError as error:
-                print(f"Error: {error}", file=sys.stderr)
-                return 2
-            resumed_predictions = load_checkpoint(trace_dir)
+                if args.resume:
+                    print(f"Error: {error}", file=sys.stderr)
+                    return 2
+                clear_checkpoint(trace_dir)
+                resumed_predictions = {}
+            else:
+                resumed_predictions = load_checkpoint(trace_dir)
         else:
             clear_checkpoint(trace_dir)
         if checkpoint_enabled:
@@ -357,6 +416,8 @@ def main() -> int:
                     "output": str(output_path),
                     "total_problems": len(problems),
                     "resume": args.resume,
+                    "auto_resume": args.auto_resume,
+                    "yolo": args.yolo,
                     "resumed_predictions": len(resumed_predictions),
                     "checkpoint_every": args.checkpoint_every,
                 },
@@ -393,6 +454,37 @@ def main() -> int:
             fail_fast=args.fail_fast,
             config=config,
         )
+        problem_retry = 0
+        while (
+            _is_retryable_prediction(prediction)
+            and problem_retry < config.problem_max_retries
+        ):
+            delay_seconds = _problem_retry_delay_seconds(problem_retry, config)
+            if run_session is not None:
+                events.append(
+                    build_event(
+                        "prediction_retry_scheduled",
+                        "warning",
+                        "Retrying a transient fallback prediction.",
+                        qid=prediction.qid,
+                        payload={
+                            "fallback_reason": prediction.fallback_reason,
+                            "attempt": problem_retry + 1,
+                            "delay_seconds": delay_seconds,
+                        },
+                    )
+                )
+            time.sleep(delay_seconds)
+            problem_retry += 1
+            prediction = solve_problem(
+                problem,
+                client,
+                dry_run=dry_run,
+                verify=verify,
+                strategy=strategy,
+                fail_fast=args.fail_fast,
+                config=config,
+            )
         predictions.append(prediction)
         if checkpoint_enabled:
             pending_checkpoint.append(prediction)
@@ -518,6 +610,8 @@ def main() -> int:
     print(f"Loaded {len(problems)} problems from {input_path}")
     if workflow is not None:
         print(f"Workflow: {workflow.name}")
+    if args.yolo:
+        print("YOLO mode: bounded autonomous run with policy enforcement, checkpointing, and review artifacts.")
     print(f"Wrote predictions to {output_path}")
     if run_session is not None:
         print(f"Run report: {run_session.report_path}")
@@ -546,6 +640,32 @@ def validate_runtime_model(model_id: str, config) -> None:
         f"{model_id} ({selected.reason}). "
         "Use a Gemma-4 model or a Qwen3.5 model with size <= 9B."
     )
+
+
+def _is_retryable_prediction(prediction) -> bool:
+    if prediction.fallback_reason is None:
+        return False
+    if prediction.strategy.endswith("_after_error"):
+        return True
+    return prediction.fallback_reason in {
+        "RuntimeError",
+        "ConnectionError",
+        "Timeout",
+        "ReadTimeout",
+        "ConnectTimeout",
+        "HTTPError",
+    }
+
+
+def _problem_retry_delay_seconds(attempt: int, config) -> float:
+    delay = config.problem_retry_base_delay_seconds * (2**attempt)
+    return min(config.problem_retry_max_delay_seconds, delay)
+
+
+def _normalize_cli_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
+    if argv and argv[0].lower() == "core":
+        return argv[1:]
+    return argv
 
 
 if __name__ == "__main__":

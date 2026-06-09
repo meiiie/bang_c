@@ -33,7 +33,7 @@ def classify_problem(problem: Problem, config: HarnessConfig) -> ProblemProfile:
             reasons=tuple(reasons),
             prompt_variant="calculation",
             should_verify=True,
-            should_tournament=False,
+            should_tournament=True,
         )
 
     if contains_any(focus, markers["negative"]):

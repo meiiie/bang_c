@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   pull_request:
@@ -32,9 +32,9 @@ jobs:
         run: |
           python -m unittest discover -s tests -v
           python -m compileall -q src
-          neko-core --version
-          neko-core --policy
-          neko-core --list-workflows
+          neko --version
+          neko --policy
+          neko --list-workflows
 
       - name: Build Python artifacts
         run: python -m build

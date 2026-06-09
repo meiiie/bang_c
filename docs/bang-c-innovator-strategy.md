@@ -40,7 +40,7 @@ answer letter and produced `pred.csv`.
 
 `qwen-rerank` was not visible in the local NVIDIA `/v1/models` response at the
 time of probing, so rerank should remain an adapter boundary until confirmed.
-Use `neko-core --model-inventory` to re-run this provider check without
+Use `neko --model-inventory` to re-run this provider check without
 changing runtime source code.
 
 ## Development Workflow
@@ -83,16 +83,18 @@ final contest container.
 
 Folder:
 
-- `competitions/hackaithon-2026-c/`
+- repository root (`E:\Sach\Sua\bang_c` locally, `meiiie/bang_c` on GitHub)
 
 Current files:
 
 - `Dockerfile`
 - `README.md`
+- `docs/submission-readiness.md`
 - `src/hackaithon_c/loader.py`
 - `src/hackaithon_c/nvidia_client.py`
 - `src/hackaithon_c/solver.py`
 - `src/hackaithon_c/exporter.py`
+- `src/hackaithon_c/submission.py`
 - `tests/test_contract.py`
 
 ## Review Checklist
@@ -102,5 +104,7 @@ Current files:
 - Confirm `pred.csv` exists and has the same number of rows as input.
 - Confirm no duplicate or missing `qid`.
 - Confirm every answer is a valid choice letter.
+- Run `neko --input <official-test.csv> --check-submission <pred.csv>` before
+  manual website upload.
 - Run twice and compare outputs.
 - Search the repo/image for secrets and answer leakage before submission.

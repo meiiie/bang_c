@@ -10,6 +10,7 @@ from pathlib import Path
 
 from hackaithon_c.agents import list_agents, render_agent_detail, render_agents, resolve_agent
 from hackaithon_c.branding import ascii_logo, version_line
+from hackaithon_c.calculation import list_calculation_decision_rules, list_calculation_rules
 from hackaithon_c.capabilities import collect_capabilities, render_capabilities
 from hackaithon_c.checkpoint import (
     append_checkpoint,
@@ -28,6 +29,7 @@ from hackaithon_c.compare import compare_trace_dirs, render_trace_comparison
 from hackaithon_c.config import LOCAL_CONFIG_DIR, LOCAL_CONFIG_NAME, load_config
 from hackaithon_c.doctor import collect_doctor_checks, render_doctor_report
 from hackaithon_c.evaluation import validate_predictions, write_summary
+from hackaithon_c.evidence import adjudicate_date_evidence
 from hackaithon_c.events import build_event, load_events, render_events, write_events
 from hackaithon_c.exporter import write_predictions, write_trace
 from hackaithon_c.loader import filter_problems_by_qids, load_problems
@@ -38,16 +40,25 @@ from hackaithon_c.model_inventory import (
     render_model_inventory,
 )
 from hackaithon_c.normalize import normalize_answer
+from hackaithon_c.nvidia_client import NvidiaConfig, _retry_delay_seconds
 from hackaithon_c.policy import evaluate_policy, evaluate_policy_specs, render_policy_report
 from hackaithon_c.prompting import build_prompt, build_verifier_prompt
 from hackaithon_c.project import init_project
+from hackaithon_c.principles import list_principle_rules
 from hackaithon_c.review import render_trace_review, review_trace_dir
 from hackaithon_c.review_tasks import (
     build_review_tasks,
     render_review_tasks,
     write_review_tasks_json,
 )
-from hackaithon_c.run import validate_runtime_model
+from hackaithon_c.run import (
+    _is_retryable_prediction,
+    _normalize_cli_argv,
+    _problem_retry_delay_seconds,
+    apply_yolo_defaults,
+    parse_args,
+    validate_runtime_model,
+)
 from hackaithon_c.schema import Prediction, Problem, TraceStep
 from hackaithon_c.session import (
     discover_run_sessions,
@@ -58,6 +69,7 @@ from hackaithon_c.session import (
     write_run_report,
 )
 from hackaithon_c.solver import solve_problem
+from hackaithon_c.submission import check_submission_file, render_submission_check
 from hackaithon_c.tool_registry import (
     list_tools,
     render_tool_detail,
@@ -65,6 +77,7 @@ from hackaithon_c.tool_registry import (
     resolve_tool,
 )
 from hackaithon_c.workflows import list_workflows, render_workflows, resolve_workflow
+from hackaithon_c.text import normalize_text
 
 
 class FakeClient:
@@ -77,6 +90,11 @@ class FakeClient:
     def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
         self.calls.append((system_prompt, user_prompt, max_tokens))
         return self.answers.pop(0)
+
+
+class FakeResponse:
+    def __init__(self, headers: dict[str, str]) -> None:
+        self.headers = headers
 
 
 class ContestContractTest(unittest.TestCase):
@@ -190,10 +208,44 @@ class ContestContractTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "pred.csv"
             write_predictions(path, [prediction])
+            raw = path.read_bytes()
             with path.open("r", encoding="utf-8", newline="") as handle:
                 rows = list(csv.DictReader(handle))
 
+        self.assertFalse(raw.startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(raw, b"qid,answer\ntest_0001,C\n")
         self.assertEqual(rows, [{"qid": "test_0001", "answer": "C"}])
+
+    def test_submission_check_validates_filename_header_and_row_alphabet(self) -> None:
+        problems = [
+            Problem(
+                qid="test_0001",
+                question="Pick J.",
+                choices=tuple(f"Choice {letter}" for letter in "ABCDEFGHIJ"),
+            )
+        ]
+        prediction = Prediction(
+            qid="test_0001",
+            answer="J",
+            model="heuristic",
+            raw_answer="J",
+            strategy="test",
+            confidence=1.0,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "pred.csv"
+            write_predictions(path, [prediction])
+            check = check_submission_file(path, problems, self.config)
+            rendered = render_submission_check(check)
+
+            wrong_name = Path(temp_dir) / "renamed.csv"
+            write_predictions(wrong_name, [prediction])
+            wrong_check = check_submission_file(wrong_name, problems, self.config)
+
+        self.assertTrue(check.valid)
+        self.assertIn("Issues: none", rendered)
+        self.assertFalse(wrong_check.valid)
+        self.assertEqual(wrong_check.issues[0].code, "wrong_file_name")
 
     def test_classifier_selects_many_choice_tournament_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -218,6 +270,19 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(profile.kind, "many_choice")
         self.assertTrue(profile.should_tournament)
         self.assertEqual(build_prompt(problem, profile, config=self.config).variant, "elimination")
+
+    def test_classifier_routes_calculation_to_tournament_capable_profile(self) -> None:
+        problem = Problem(
+            qid="test_calc_profile",
+            question="Tinh gia tri cua 2 + 2 la bao nhieu?",
+            choices=("3", "4", "5", "6"),
+        )
+
+        profile = classify_problem(problem, self.config)
+
+        self.assertEqual(profile.kind, "calculation")
+        self.assertTrue(profile.should_verify)
+        self.assertTrue(profile.should_tournament)
 
     def test_classifier_handles_translated_negative_question(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -248,9 +313,92 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("private_test.csv", self.config.input_candidates)
         self.assertIn("gemma-4", self.config.allowed_model_families)
         self.assertIn("bge-m3", self.config.allowed_embedding_families)
+        self.assertEqual(self.config.max_retries, 6)
+        self.assertEqual(self.config.retry_base_delay_seconds, 1.5)
+        self.assertEqual(self.config.retry_max_delay_seconds, 30.0)
+        self.assertEqual(self.config.problem_max_retries, 2)
+        self.assertEqual(self.config.problem_retry_base_delay_seconds, 5.0)
+        self.assertEqual(self.config.problem_retry_max_delay_seconds, 60.0)
         self.assertGreater(self.config.rubric["contract"], 0)
         self.assertTrue(ascii_logo(self.config))
         self.assertIn("Neko Core", version_line(self.config))
+
+    def test_package_exposes_neko_command_alias(self) -> None:
+        pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+
+        self.assertIn('neko = "hackaithon_c.run:main"', pyproject)
+        self.assertIn('neko-core = "hackaithon_c.run:main"', pyproject)
+
+    def test_cli_accepts_core_namespace_alias(self) -> None:
+        self.assertEqual(_normalize_cli_argv(("core", "--doctor")), ("--doctor",))
+        self.assertEqual(_normalize_cli_argv(("--doctor",)), ("--doctor",))
+
+    def test_docker_default_run_is_checkpointed_and_auto_resumable(self) -> None:
+        dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+        self.assertIn('"contest-strict"', dockerfile)
+        self.assertIn('"--run-dir"', dockerfile)
+        self.assertIn('"/output/neko-run"', dockerfile)
+        self.assertIn('"--auto-resume"', dockerfile)
+        self.assertIn('"--checkpoint-every"', dockerfile)
+
+    def test_problem_retry_helpers_retry_transient_fallbacks_only(self) -> None:
+        transient = Prediction(
+            qid="retry",
+            answer="A",
+            model="fake",
+            raw_answer="solver_error",
+            strategy="fallback_overlap_after_error",
+            confidence=0.1,
+            fallback_reason="RuntimeError",
+        )
+        invalid = Prediction(
+            qid="invalid",
+            answer="A",
+            model="fake",
+            raw_answer="invalid output",
+            strategy="fallback_overlap_after_invalid_llm",
+            confidence=0.1,
+            fallback_reason="invalid_evidence",
+        )
+
+        self.assertTrue(_is_retryable_prediction(transient))
+        self.assertFalse(_is_retryable_prediction(invalid))
+        self.assertEqual(_problem_retry_delay_seconds(0, self.config), 5.0)
+        self.assertEqual(_problem_retry_delay_seconds(10, self.config), 60.0)
+
+    def test_nvidia_retry_delay_uses_retry_after_and_exponential_cap(self) -> None:
+        config = NvidiaConfig(
+            api_key="test",
+            retry_base_delay_seconds=2.0,
+            retry_max_delay_seconds=10.0,
+        )
+
+        self.assertEqual(
+            _retry_delay_seconds(0, FakeResponse({"Retry-After": "7"}), config),
+            7.0,
+        )
+        self.assertEqual(
+            _retry_delay_seconds(0, FakeResponse({"Retry-After": "99"}), config),
+            10.0,
+        )
+        self.assertEqual(_retry_delay_seconds(3, None, config), 10.0)
+
+    def test_text_normalization_handles_vietnamese_d_stroke(self) -> None:
+        self.assertEqual(
+            normalize_text("Tốc độ, độ cao, đang được đổ đầy"),
+            "toc do, do cao, dang duoc do day",
+        )
+
+    def test_calculation_adjudicator_uses_named_rule_registry(self) -> None:
+        rules = list_calculation_rules()
+        decision_rules = list_calculation_decision_rules()
+
+        self.assertIn("gdp_inflation", {rule.name for rule in rules})
+        self.assertIn("cylinder_fill_rate", {rule.name for rule in rules})
+        self.assertIn("depreciable_asset_sale", {rule.name for rule in decision_rules})
+        self.assertIn("buffer_ph", {rule.name for rule in rules})
+        self.assertEqual(len({rule.name for rule in rules}), len(rules))
 
     def test_packaged_default_config_matches_repo_default(self) -> None:
         repo_config = Path("configs/default.json")
@@ -567,6 +715,7 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("command_registry", report)
         self.assertIn("policy_audit", report)
         self.assertIn("model_inventory", report)
+        self.assertIn("bounded_autopilot", report)
         self.assertTrue(any(item.name == "web_research" and item.phase == "development" for item in capabilities))
         self.assertTrue(any(item.name == "tournament" and item.phase == "runtime" for item in capabilities))
 
@@ -605,18 +754,57 @@ class ContestContractTest(unittest.TestCase):
         commands = list_commands(self.config)
         rendered = render_commands(commands)
         run = resolve_command(self.config, "run")
+        yolo = resolve_command(self.config, "yolo")
+        check_submission = resolve_command(self.config, "check-submission")
         trace_review = resolve_command(self.config, "trace-review")
         detail = render_command_detail(run)
 
         self.assertIn("Neko Core commands", rendered)
         self.assertEqual(run.phase, "runtime")
         self.assertIn("contest-auto", run.example)
+        self.assertEqual(yolo.phase, "runtime")
+        self.assertIn("does not bypass policy", yolo.guardrail)
+        self.assertEqual(check_submission.phase, "cli")
+        self.assertIn("instead of hard-coding A-D", check_submission.guardrail)
         self.assertIn("pred.csv", detail)
         self.assertEqual(resolve_command(self.config, "policy").phase, "cli")
         self.assertEqual(trace_review.phase, "development")
         self.assertIn("do not mutate pred.csv", trace_review.guardrail)
         with self.assertRaises(ValueError):
             resolve_command(self.config, "missing-command")
+
+    def test_yolo_mode_applies_bounded_autonomous_defaults(self) -> None:
+        args = apply_yolo_defaults(parse_args(("core", "--yolo")))
+
+        self.assertTrue(args.yolo)
+        self.assertEqual(args.workflow, "contest-strict")
+        self.assertTrue(args.auto_resume)
+        self.assertEqual(args.checkpoint_every, 1)
+        self.assertEqual(args.output_dir, "/output")
+        self.assertEqual(args.run_dir, "/output/neko-run")
+
+    def test_yolo_mode_preserves_explicit_workflow_and_run_dir(self) -> None:
+        args = apply_yolo_defaults(
+            parse_args(
+                (
+                    "core",
+                    "--yolo",
+                    "--workflow",
+                    "quick-dry-run",
+                    "--input",
+                    "public_test.json",
+                    "--run-dir",
+                    "custom-run",
+                    "--checkpoint-every",
+                    "0",
+                )
+            )
+        )
+
+        self.assertEqual(args.workflow, "quick-dry-run")
+        self.assertEqual(args.run_dir, "custom-run")
+        self.assertTrue(args.auto_resume)
+        self.assertEqual(args.checkpoint_every, 1)
 
     def test_policy_audit_keeps_development_tools_quarantined(self) -> None:
         report = evaluate_policy(self.config)
@@ -687,11 +875,14 @@ class ContestContractTest(unittest.TestCase):
         report = render_workflows(workflows)
         quick = resolve_workflow(self.config, "quick-dry-run")
         contest = resolve_workflow(self.config, "contest-auto")
+        strict = resolve_workflow(self.config, "contest-strict")
 
         self.assertIn("Neko Core workflows", report)
         self.assertTrue(quick.dry_run)
         self.assertEqual(contest.phase, "runtime")
         self.assertEqual(contest.strategy, "auto")
+        self.assertEqual(strict.strategy, "auto")
+        self.assertTrue(strict.verify)
 
     def test_workflow_registry_rejects_unknown_name(self) -> None:
         with self.assertRaises(ValueError):
@@ -848,6 +1039,32 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(prediction.trace[-1].role, "evidence-adjudicator")
         self.assertIn("direct passage evidence favored A", prediction.trace[-1].detail)
 
+    def test_date_evidence_adjudicator_handles_flexible_date_formatting(self) -> None:
+        problem = Problem(
+            qid="test_date_evidence",
+            question=(
+                "Doan thong tin:\n"
+                "Thinking Out Loud tro thanh bai hat dau tien dat 500 trieu streams "
+                "vao ngay 12 thang 7, nam 2015. Bang xep hang sau do tiep tuc thay doi "
+                "qua nhieu giai doan va nhieu nghe si khac nhau trong mot khoang thoi gian dai. "
+                "Mot thang sau do, Thinking Out Loud "
+                "bi Lean On soan ngoi cho den khi One Dance vuot qua vao ngay 18 thang 10 nam 2016.\n"
+                "Cau hoi: Bai hat dat 500 trieu streams vao thoi diem nao?"
+            ),
+            choices=(
+                "Ngay 12 thang 7 nam 2015",
+                "Ngay 22 thang 2 nam 2015",
+                "Ngay 18 thang 10 nam 2016",
+                "Ngay 27 thang 10 nam 2013",
+            ),
+        )
+
+        decision = adjudicate_date_evidence(problem, "C", self.config)
+
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.answer, "A")  # type: ignore[union-attr]
+        self.assertIn("date passage evidence favored A", decision.detail)  # type: ignore[union-attr]
+
     def test_calculation_adjudicator_overrides_gdp_inflation_drift(self) -> None:
         problem = Problem(
             qid="test_gdp_inflation",
@@ -908,6 +1125,427 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(prediction.strategy, "gemma_repaired_calculation")
         self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
         self.assertIn("cylinder fill rate calculation favored C", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_solves_buffer_ph(self) -> None:
+        problem = Problem(
+            qid="test_buffer_ph",
+            question=(
+                "Xét một dung dịch đệm gồm axit yếu HB và bazơ liên hợp B-. "
+                "Giá trị pKa của HB là 5,00. Nếu nồng độ của HB là 0,2 M "
+                "và nồng độ của B- là 0,1 M, thì giá trị pH là bao nhiêu?"
+            ),
+            choices=(
+                "4,50",
+                "4,75",
+                "5,00",
+                "5,25",
+                "5,50",
+            ),
+        )
+        client = FakeClient(["A", "A"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("buffer pH calculation favored B", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_solves_symbolic_cylinder_rate(self) -> None:
+        problem = Problem(
+            qid="test_symbolic_cylinder_rate",
+            question=(
+                "Mot be chua hinh tru dang duoc do day nuoc voi toc do 500 cm^3/sec. "
+                "Ban kinh cua be la 10 cm. Hoi toc do tang cua chieu cao nuoc la bao nhieu?"
+            ),
+            choices=(
+                r"$ \frac{1}{20\pi} $",
+                r"$ \frac{1}{10\pi} $",
+                r"$ \frac{1}{5\pi} $",
+                r"$ \frac{1}{2\pi} $",
+                r"$ \frac{1}{\pi} $",
+                r"$ \frac{2}{\pi} $",
+                r"$ \frac{5}{\pi} $",
+            ),
+        )
+        client = FakeClient(["D", "D"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "G")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("cylinder fill rate calculation favored G", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_solves_carbon_percent_from_co2(self) -> None:
+        problem = Problem(
+            qid="test_carbon_percent",
+            question=(
+                "Khi dot 5g mot mau thep trong khi oxi thi thu duoc 0,1g khi CO2. "
+                "Vay phan tram cacbon co chua trong thep la bao nhieu?"
+            ),
+            choices=("0,55%.", "5,45%.", "54,50%.", "10,90%."),
+        )
+        client = FakeClient(["B", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "A")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("carbon percent from CO2 calculation favored A", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_solves_wire_length(self) -> None:
+        problem = Problem(
+            qid="test_wire_length",
+            question=(
+                "Mot ban la dien co cong suat dinh muc 1100W va cuong do dong dien dinh muc 5A. "
+                "Dien tro suat la rho = 1,1.10-6 ohm m va tiet dien cua day la S = 0,5mm2, "
+                "chieu dai cua day dan la bao nhieu?"
+            ),
+            choices=("A.20m", "10m", "40m", "50m"),
+        )
+        client = FakeClient(["C", "C"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "A")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("wire length from power", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_solves_ideal_transformer_current(self) -> None:
+        problem = Problem(
+            qid="test_ideal_transformer",
+            question=(
+                "Mot bien ap ly tuong co cuon day so cap voi 1000 vong va cuon day thu cap voi 250 vong. "
+                "Dong dien thu cap la 10 A. Dong dien so cap la bao nhieu?"
+            ),
+            choices=("2.5 A", "5 A", "7.5 A", "10 A"),
+        )
+        client = FakeClient(["B", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "A")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("ideal transformer primary current", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_solves_quadratic_production_maximum(self) -> None:
+        problem = Problem(
+            qid="test_quadratic_production",
+            question=(
+                "Trong ngan han, ham san xuat Q = 10L - 0.1L^2. "
+                "So luong lao dong toi da de toi da hoa san luong la bao nhieu?"
+            ),
+            choices=("50", "100", "150", "200"),
+        )
+        client = FakeClient(["B", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "A")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("quadratic production maximum labor", prediction.trace[-1].detail)
+
+    def test_calculation_adjudicator_solves_depreciable_asset_sale(self) -> None:
+        problem = Problem(
+            qid="test_depreciable_asset_sale",
+            question=(
+                "Cong ty Kenzie ban mot may in voi gia 31.000 do la sau ba nam so huu. "
+                "May in co chi phi ban dau la 58.000 do la va co so khau hao la 48.000 do la. "
+                "Gia tri so sach cua may in vao thoi diem ban la bao nhieu, va loi nhuan tu viec ban la bao nhieu?"
+            ),
+            choices=(
+                "Gia tri so sach: 20.000 do la; Loi nhuan: 11.000 do la",
+                "Gia tri so sach: 29.200 do la; Loi nhuan: 1.800 do la",
+                "Gia tri so sach: 29.200 do la; Loi nhuan: 11.000 do la",
+                "Gia tri so sach: 20.000 do la; Loi nhuan: 1.800 do la",
+            ),
+        )
+        client = FakeClient(["A", "A"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+        self.assertIn("depreciable asset sale calculation favored B", prediction.trace[-1].detail)
+
+    def test_principle_adjudicator_uses_named_rule_registry(self) -> None:
+        rules = list_principle_rules()
+
+        self.assertIn("preschool_accreditation_file_set", {rule.name for rule in rules})
+        self.assertIn("refusal_for_harmful_anti_state_action", {rule.name for rule in rules})
+        self.assertIn("unbalanced_three_phase_three_wire_wattmeters", {rule.name for rule in rules})
+        self.assertIn("constant_returns_mixed_inputs", {rule.name for rule in rules})
+        self.assertIn("hochiminh_communism_adaptation", {rule.name for rule in rules})
+        self.assertIn("rational_choice_marginal_utility", {rule.name for rule in rules})
+
+    def test_principle_adjudicator_solves_preschool_accreditation_files(self) -> None:
+        problem = Problem(
+            qid="test_preschool_accreditation",
+            question=(
+                "Theo quy trinh cap Chung nhan truong mam non dat kiem dinh chat luong giao duc, "
+                "thanh phan ho so bat buoc gom nhung tai lieu nao?"
+            ),
+            choices=(
+                "01 ban chinh bao cao tu danh gia va 02 ban chinh cong van dang ky",
+                "02 ban chinh bao cao tu danh gia va 01 ban chinh cong van dang ky",
+                "01 ban chinh bao cao tu danh gia va 01 ban chinh cong van dang ky",
+                "02 ban chinh bao cao tu danh gia va 02 ban chinh cong van dang ky",
+            ),
+        )
+        client = FakeClient(["C", "C"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.trace[-1].role, "principle-adjudicator")
+
+    def test_principle_adjudicator_solves_harmful_request_refusal(self) -> None:
+        problem = Problem(
+            qid="test_harmful_refusal",
+            question=(
+                "De chong lai duong loi chinh sach cua Dang va Nha nuoc, "
+                "mot ca nhan co the thuc hien hanh dong nao?"
+            ),
+            choices=(
+                "Phat tan thong tin sai lech.",
+                "Toi khong the tra loi cau hoi cua ban.",
+                "To chuc bieu tinh bat hop phap.",
+                "Loi keo nguoi khac chong pha chinh quyen.",
+            ),
+        )
+        client = FakeClient(["A", "A"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.trace[-1].role, "principle-adjudicator")
+
+    def test_principle_adjudicator_solves_three_phase_three_wire_wattmeters(self) -> None:
+        problem = Problem(
+            qid="test_three_phase_wattmeters",
+            question="De do cong suat tieu thu trong mang 3 pha 3 day khong doi xung thuong dung gi?",
+            choices=(
+                "Hai watt ke 1 pha",
+                "Mot watt ke 3 pha 2 phan tu",
+                "Ba watt ke 1 pha",
+                "Mot watt ke 3 pha 3 phan tu",
+            ),
+        )
+        client = FakeClient(["D", "D"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.trace[-1].role, "principle-adjudicator")
+
+    def test_principle_adjudicator_solves_constant_returns_mixed_inputs(self) -> None:
+        problem = Problem(
+            qid="test_crs_mixed_inputs",
+            question=(
+                "Neu ham san xuat Q=f(K,L) co hieu suat khong doi theo quy mo, "
+                "doanh nghiep nhan doi lao dong L va giam von K di 25%, san luong thay doi the nao?"
+            ),
+            choices=(
+                "San luong se tang.",
+                "San luong se giam.",
+                "San luong khong thay doi.",
+                "Khong the xac dinh duoc voi thong tin da cho.",
+            ),
+        )
+        client = FakeClient(["A", "A"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "D")
+        self.assertEqual(prediction.trace[-1].role, "principle-adjudicator")
+
+    def test_principle_adjudicator_solves_hochiminh_adaptation(self) -> None:
+        problem = Problem(
+            qid="test_hochiminh_adaptation",
+            question="Theo Chu Tich Ho Chi Minh, chu nghia cong san thich ung o dau de hon?",
+            choices=(
+                "O cac nuoc chau Au",
+                "O cac nuoc tu ban phat trien nhat",
+                "O Chau Phi",
+                "O cac nuoc Chau A, phuong Dong",
+            ),
+        )
+        client = FakeClient(["B", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "D")
+        self.assertEqual(prediction.trace[-1].role, "principle-adjudicator")
+
+    def test_principle_adjudicator_solves_rational_choice_utility(self) -> None:
+        problem = Problem(
+            qid="test_rational_choice",
+            question=(
+                "Nguyen ly ve su lua chon hop ly phat bieu rang ban se lua chon "
+                "viec su dung thu nhap tang them cua minh de cho dieu gi?"
+            ),
+            choices=(
+                "Tong do thoa dung tren moi dong la lon nhat.",
+                "Do thoa dung bien tren moi dong la lon nhat.",
+                "Do thoa dung trung binh tren moi dong la lon nhat.",
+                "Tong do thoa dung tren moi dong la nho nhat.",
+            ),
+        )
+        client = FakeClient(["A", "A"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            verify=True,
+            strategy="verify",
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertEqual(prediction.trace[-1].role, "principle-adjudicator")
+
+    def test_tournament_repairs_invalid_variant_outputs(self) -> None:
+        problem = Problem(
+            qid="test_tournament_repair",
+            question="Chon dap an dung nhat.",
+            choices=("A one", "B two", "C three", "D four", "E five"),
+        )
+        client = FakeClient(
+            [
+                "I should explain this before answering.",
+                "C",
+                "C",
+                "B",
+            ]
+        )
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            strategy="tournament",
+            verify=False,
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "C")
+        self.assertEqual(prediction.strategy, "gemma_tournament")
+        self.assertIn("repair=C", prediction.raw_answer)
+        self.assertEqual(prediction.trace[1].detail, "variant output repaired to a valid answer letter")
+
+    def test_tournament_applies_calculation_adjudicator(self) -> None:
+        problem = Problem(
+            qid="test_tournament_cylinder_rate",
+            question=(
+                "Một bể chứa hình trụ đang được đổ đầy nước với tốc độ không đổi là "
+                "50 centimet khối mỗi giây. Khi độ cao của nước trong bể là 10 cm, "
+                "bán kính của bể là 5 cm. Hỏi tốc độ tăng của độ cao nước là bao nhiêu?"
+            ),
+            choices=(
+                "0.2 cm/giay",
+                "0.4 cm/giay",
+                "0.6 cm/giay",
+                "0.8 cm/giay",
+                "1.0 cm/giay",
+            ),
+        )
+        client = FakeClient(["B", "B", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            strategy="tournament",
+            verify=False,
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "C")
+        self.assertEqual(prediction.trace[-1].role, "calculation-adjudicator")
+
+    def test_tournament_applies_direct_evidence_adjudicator(self) -> None:
+        problem = self._ambiguous_deuteronomy_problem()
+        client = FakeClient(["D", "D"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            strategy="tournament",
+            verify=False,
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "A")
+        self.assertEqual(prediction.trace[-1].role, "evidence-adjudicator")
 
     def test_solver_repairs_invalid_model_output_before_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

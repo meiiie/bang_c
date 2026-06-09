@@ -74,6 +74,26 @@ function Invoke-SelectedPython {
     }
 }
 
+function Get-PipxBinDir {
+    $fullArgs = @()
+    $fullArgs += $script:Python.Prefix
+    $fullArgs += @("-m", "pipx", "environment", "--value", "PIPX_BIN_DIR")
+    try {
+        $output = & $script:Python.Command @fullArgs 2>$null
+    } catch {
+        $output = $null
+    }
+
+    if ($LASTEXITCODE -eq 0 -and $output) {
+        $path = "$output".Trim()
+        if ($path) {
+            return $path
+        }
+    }
+
+    return (Join-Path $HOME ".local\bin")
+}
+
 $script:Python = Resolve-Python
 Write-Host "Using Python $($script:Python.Version): $($script:Python.Executable)"
 
@@ -83,7 +103,7 @@ Invoke-SelectedPython -Arguments @("-m", "pip", "install", "--user", "--upgrade"
 Write-Host "Ensuring pipx app path is registered..."
 Invoke-SelectedPython -Arguments @("-m", "pipx", "ensurepath")
 
-$localBin = Join-Path $HOME ".local\bin"
+$localBin = Get-PipxBinDir
 if (Test-Path -LiteralPath $localBin) {
     $env:PATH = "$localBin;$env:PATH"
 }
@@ -92,6 +112,10 @@ Write-Host "Installing Neko Core from $Source ..."
 Invoke-SelectedPython -Arguments @("-m", "pipx", "install", "--force", $Source)
 
 $candidateCommands = @(
+    "neko",
+    (Join-Path $localBin "neko.exe"),
+    (Join-Path $localBin "neko.ps1"),
+    (Join-Path $localBin "neko"),
     "neko-core",
     (Join-Path $localBin "neko-core.exe"),
     (Join-Path $localBin "neko-core.ps1"),
@@ -100,7 +124,7 @@ $candidateCommands = @(
 
 $verified = $false
 foreach ($candidate in $candidateCommands) {
-    if ($candidate -eq "neko-core") {
+    if ($candidate -eq "neko" -or $candidate -eq "neko-core") {
         $command = Get-Command $candidate -ErrorAction SilentlyContinue
         if (-not $command) {
             continue
@@ -121,6 +145,7 @@ if (-not $verified) {
     Write-Warning "Neko Core installed, but the command is not visible in this shell yet. Open a new terminal or add $localBin to PATH."
 } else {
     Write-Host "Neko Core installed."
-    Write-Host "Try: neko-core --doctor"
-    Write-Host "Run: neko-core --workflow contest-strict --data-dir data --output-dir output"
+    Write-Host "Try: neko --doctor"
+    Write-Host "Run: neko --workflow contest-strict --data-dir data --output-dir output"
+    Write-Host "Alias: neko-core --doctor"
 }
