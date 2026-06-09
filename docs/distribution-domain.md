@@ -25,8 +25,8 @@ to web hosting.
 Prefer immutable release tags for stable public install endpoints:
 
 ```text
-/install.ps1 -> https://raw.githubusercontent.com/meiiie/bang_c/v0.3.1/install.ps1
-/install.sh  -> https://raw.githubusercontent.com/meiiie/bang_c/v0.3.1/install.sh
+/install.ps1 -> https://raw.githubusercontent.com/meiiie/bang_c/v0.4.0/install.ps1
+/install.sh  -> https://raw.githubusercontent.com/meiiie/bang_c/v0.4.0/install.sh
 ```
 
 The current deployed domain uses `main` while installer polish is still moving
@@ -52,7 +52,7 @@ Deploy `deploy/cloudflare/install-router.js` with
 Required Cloudflare settings:
 
 - custom domain: `neko.holilihu.online`
-- `NEKO_RELEASE_TAG`: current stable tag, for example `v0.3.1`
+- `NEKO_RELEASE_TAG`: current stable tag, for example `v0.4.0`
 - `NEKO_REPO_RAW_BASE`: `https://raw.githubusercontent.com/meiiie/bang_c`
 - `NEKO_GITHUB_URL`: `https://github.com/meiiie/bang_c`
 

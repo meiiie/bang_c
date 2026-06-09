@@ -19,6 +19,22 @@ The organizer-facing contract is intentionally narrow:
 qid,answer
 ```
 
+## Website Upload Note
+
+On 2026-06-09, the website accepted the corrected artifact only after we used a
+file named `pred.csv` with the exact runtime contract. The older downloaded
+sample/upload artifact was misleading for this development corpus and should
+not be treated as the source of truth for file naming, encoding, or global
+answer alphabet.
+
+Use the official rules and runtime contract as the source of truth:
+
+- file name: `pred.csv`;
+- columns: `qid,answer`;
+- row count and qids must match the provided input;
+- valid answer letters come from each row's choices, not from a global A-D
+  assumption.
+
 The harness must not assume a global A-D answer alphabet. The valid answer
 letters come from the options present in each input row. If a row has A-J
 choices, an E/J answer can be valid for that row. The submission checker

@@ -397,8 +397,8 @@ Required repository secrets for Docker Hub publishing:
 Create a release tag:
 
 ```powershell
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 Without Docker Hub secrets, the workflow still verifies and builds artifacts

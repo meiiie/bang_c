@@ -2,6 +2,19 @@
 
 All notable Neko Core changes are tracked here.
 
+## 0.4.0 - 2026-06-09
+
+- Added bounded autonomous `neko core --yolo` mode for strict contest runs with
+  checkpointing, auto-resume, policy enforcement, and review artifacts.
+- Added `--check-submission` to validate the final `pred.csv` name, header,
+  qids, row count, and per-row answer alphabet without hard-coding A-D.
+- Added submission readiness documentation after the website accepted the
+  corrected `pred.csv` artifact and confirmed the older sample/upload artifact
+  was not a reliable source of truth.
+- Tightened CSV export to UTF-8 without BOM and LF line endings.
+- Expanded adjudication, retry, resume, and contract tests for the current
+  public-test development corpus.
+
 ## 0.3.1 - 2026-06-09
 
 - Added pipx-based one-command installers for Windows and Unix shells.
@@ -18,4 +31,3 @@ All notable Neko Core changes are tracked here.
 - Added CLI registries for workflows, agents, tools, commands, and policy.
 - Added trace review, checkpoint/resume, run sessions, and Docker contract
   verification.
-

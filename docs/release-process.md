@@ -38,8 +38,8 @@ For model or prompt changes, also run a small real-model smoke with
 ## Tag
 
 ```powershell
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 Tag builds trigger `.github/workflows/release.yml`.
@@ -57,7 +57,7 @@ Python artifacts, but it skips Docker Hub publishing.
 Expected image after a tagged release:
 
 ```text
-<dockerhub-user>/neko-core:v0.3.1
+<dockerhub-user>/neko-core:v0.4.0
 <dockerhub-user>/neko-core:latest
 ```
 
