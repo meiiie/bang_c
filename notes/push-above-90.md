@@ -1,5 +1,20 @@
 # Push 87.26 → 90+ (research brief for the next phase)
 
+> **STATUS UPDATE 2026-06-11:** target revised to **93+**. Cited deep research done
+> (`research-93-cited-reports.md`) and **all model-independent mechanisms are BUILT and
+> stub-tested** (127 tests green): seeded temp>0 diverse sampling (T=0.8/top_p=0.95/
+> top_k=64 per Gemma guidance), cyclic choice-rotation position-bias debiasing, the
+> `tiered` strategy (agreement-gated escalation, ESC/MoT pattern), invalid-sample repair,
+> and cross-model challenger pooling wired through `run.py` (config-gated, allowlist-
+> enforced). Remaining work is GPU-bound — see the runbook at the bottom.
+
+## ⚠️ Evidence-backed AVOID list (from the cited research — do NOT do these)
+- "Are you sure?" self-verification rounds: −1…−17pp (sycophantic flips).
+- Generative elimination prompting as the default: −5…−14pp (worst on negation items).
+- Replacing CoT with pure logprob/cloze scoring: ≈−10pp on our own data (77.11 vs 87.26).
+- Whole-sequence logprob as a confidence signal (length-biased); use answer-letter
+  probability or agreement instead.
+
 Date: 2026-06-11. Baseline to beat: **CoT k=1 = 87.26** (public, 463). Gap to 90 ≈ **+13
 correct answers** (404→417 of 463). Owner's read: competitors are well above 90, so we need
 a *substantial* jump, not polish.
@@ -71,3 +86,35 @@ where they disagree is where the points are. Focus prompt/tier work there.
   (no HF token); for Qwen, find an allowed Qwen3.5≤9B GGUF (or extract from an image if gated).
 - The full 463 CoT run is ~35 min on A40; budget accordingly. Terminate promptly.
 - See `notes/worklog.md` (RunPod A40 section) for the exact provisioning + skopeo + run recipe.
+
+---
+
+## GPU-phase runbook (next session — everything below needs the real model)
+
+Budget note: RunPod balance ≈ $1.31 after the first test; an A40 is $0.44/hr and the
+experiment matrix below needs ~2–4 hours → **top up the RunPod account first** (~$5–10).
+
+1. **Provision + stage (per the worklog recipe):** A40/A6000, skopeo-extract the Gemma GGUF
+   from `hacamy12345/neko-core:gemma26b-q4`, pip install cu124 llama-cpp, scp this branch.
+   NEW: also download a **Qwen3.5 ≤9B instruct GGUF (Q4_K_M)** — Qwen GGUF repos on HF are
+   normally ungated (`huggingface_hub.hf_hub_download`, no token). Verify the exact repo id
+   at run time; set `challenger_provider=local_llamacpp`, `challenger_model_path=...`,
+   `challenger_model_id=qwen3.5-...` in `.neko-core/config.json` on the pod.
+2. **Seed determinism smoke (cheap, do first):** same question, same seed, temp 0.8 → twice;
+   confirm identical output (llama.cpp seeded sampling; CUDA batching caveat noted in the
+   research). If unstable, document and accept near-determinism.
+3. **Experiment matrix on the 463 (one run each, ~35–60 min/run):**
+   a. `tiered` (tier1=2, total=5, no challenger) vs the k=1 baseline answers → measure:
+      gold 5, tier-1 unanimity rate, answer diff vs 87.26 run, wall-clock.
+   b. `tiered` + Qwen challenger (challenger_samples=3) → same measures + how often the
+      challenger flips the pooled vote.
+   c. If time: tier1=3/total=8 (research's k dial), T=1.0 variant.
+4. **Letter-logit readout (rank-1 lever, ~free):** implement against real llama.cpp via the
+   low-level API (`llm.eval(tokens)` then read final-position logits over the letter tokens
+   after a forced "ANSWER:" suffix — do NOT use logits_all=True). Gives extraction-proof
+   answers + an MSP confidence to sharpen tier-1 routing.
+5. **Pick the winner locally** (gold + stability + unanimity-rate sanity), **owner submits
+   to leaderboard** (one submission per validated candidate, never blind).
+6. If the winner uses the challenger: rebuild the image with BOTH GGUFs baked in (size
+   check!), smoke the container offline, update Dockerfile/entrypoint defaults, repackage
+   via the crane recipe, and re-validate `--check-submission`.
