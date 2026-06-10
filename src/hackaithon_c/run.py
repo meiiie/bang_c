@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .agents import list_agents, render_agent_detail, render_agents, resolve_agent
@@ -82,7 +83,7 @@ def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
     parser.add_argument("--profiles", action="store_true", help="Print configured runtime profiles")
     parser.add_argument(
         "--provider",
-        choices=("local_llamacpp", "nvidia"),
+        choices=("local_llamacpp", "nvidia", "local_server"),
         default=None,
         help="Runtime model provider. Defaults to config/env.",
     )
@@ -126,6 +127,16 @@ def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--verify", action="store_true", help="Force a second Gemma pass when supported")
     parser.add_argument("--fail-fast", action="store_true", help="Stop on the first model/API error")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "Solve this many questions concurrently. Needs an HTTP provider "
+            "(local_server or nvidia); the in-process llama.cpp client is "
+            "single-threaded, so workers is forced to 1 there."
+        ),
+    )
     parser.add_argument("--trace-dir", default=None, help="Optional dev trace directory")
     parser.add_argument("--run-dir", default=None, help="Create a local run session with output, traces, and report")
     parser.add_argument(
@@ -164,8 +175,8 @@ def apply_yolo_defaults(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
-def main() -> int:
-    raw_argv = tuple(sys.argv[1:])
+def main(argv: tuple[str, ...] | None = None) -> int:
+    raw_argv = tuple(sys.argv[1:] if argv is None else argv)
     args = apply_yolo_defaults(parse_args(raw_argv))
 
     if args.init:
@@ -450,28 +461,26 @@ def main() -> int:
             )
         )
 
+    workers = max(1, args.workers)
+    if workers > 1 and not dry_run:
+        provider_name = effective_provider(config, args.provider)
+        if provider_name == "local_llamacpp":
+            print(
+                "Warning: --workers > 1 needs an HTTP provider (local_server or "
+                "nvidia); the in-process llama.cpp client is single-threaded. "
+                "Falling back to workers=1.",
+                file=sys.stderr,
+            )
+            workers = 1
+
     predictions = []
     pending_checkpoint = []
-    for problem in problems:
-        resumed = resumed_predictions.get(problem.qid)
-        if resumed is not None:
-            predictions.append(resumed)
-            if run_session is not None:
-                events.append(
-                    build_event(
-                        "prediction_resumed",
-                        "completed",
-                        "Reused prediction from checkpoint.",
-                        qid=resumed.qid,
-                        payload={
-                            "answer": resumed.answer,
-                            "strategy": resumed.strategy,
-                            "confidence": resumed.confidence,
-                        },
-                    )
-                )
-            continue
-        prediction = solve_problem(
+    unsolved = [
+        problem for problem in problems if resumed_predictions.get(problem.qid) is None
+    ]
+
+    def _work(problem):
+        return _solve_with_retry(
             problem,
             client,
             dry_run=dry_run,
@@ -481,60 +490,68 @@ def main() -> int:
             config=config,
             challenger=challenger,
         )
-        problem_retry = 0
-        while (
-            _is_retryable_prediction(prediction)
-            and problem_retry < config.problem_max_retries
-        ):
-            delay_seconds = _problem_retry_delay_seconds(problem_retry, config)
+
+    # Results stream in input order either way, so checkpoint cadence, events, and
+    # pred.csv ordering are identical between sequential and pooled execution.
+    executor = ThreadPoolExecutor(max_workers=workers) if workers > 1 and unsolved else None
+    result_iter = executor.map(_work, unsolved) if executor else (_work(p) for p in unsolved)
+    try:
+        for problem in problems:
+            resumed = resumed_predictions.get(problem.qid)
+            if resumed is not None:
+                predictions.append(resumed)
+                if run_session is not None:
+                    events.append(
+                        build_event(
+                            "prediction_resumed",
+                            "completed",
+                            "Reused prediction from checkpoint.",
+                            qid=resumed.qid,
+                            payload={
+                                "answer": resumed.answer,
+                                "strategy": resumed.strategy,
+                                "confidence": resumed.confidence,
+                            },
+                        )
+                    )
+                continue
+            prediction, retry_infos = next(result_iter)
+            if run_session is not None:
+                for retry_info in retry_infos:
+                    events.append(
+                        build_event(
+                            "prediction_retry_scheduled",
+                            "warning",
+                            "Retrying a transient fallback prediction.",
+                            qid=prediction.qid,
+                            payload=retry_info,
+                        )
+                    )
+            predictions.append(prediction)
+            if checkpoint_enabled:
+                pending_checkpoint.append(prediction)
+                if len(pending_checkpoint) >= args.checkpoint_every:
+                    append_checkpoint(trace_dir, pending_checkpoint)
+                    pending_checkpoint = []
             if run_session is not None:
                 events.append(
                     build_event(
-                        "prediction_retry_scheduled",
-                        "warning",
-                        "Retrying a transient fallback prediction.",
+                        "prediction_completed",
+                        "completed",
+                        f"Predicted {prediction.answer} with {prediction.strategy}.",
                         qid=prediction.qid,
                         payload={
-                            "fallback_reason": prediction.fallback_reason,
-                            "attempt": problem_retry + 1,
-                            "delay_seconds": delay_seconds,
+                            "answer": prediction.answer,
+                            "strategy": prediction.strategy,
+                            "confidence": prediction.confidence,
+                            "question_kind": prediction.question_kind,
+                            "fallback": bool(prediction.fallback_reason),
                         },
                     )
                 )
-            time.sleep(delay_seconds)
-            problem_retry += 1
-            prediction = solve_problem(
-                problem,
-                client,
-                dry_run=dry_run,
-                verify=verify,
-                strategy=strategy,
-                fail_fast=args.fail_fast,
-                config=config,
-                challenger=challenger,
-            )
-        predictions.append(prediction)
-        if checkpoint_enabled:
-            pending_checkpoint.append(prediction)
-            if len(pending_checkpoint) >= args.checkpoint_every:
-                append_checkpoint(trace_dir, pending_checkpoint)
-                pending_checkpoint = []
-        if run_session is not None:
-            events.append(
-                build_event(
-                    "prediction_completed",
-                    "completed",
-                    f"Predicted {prediction.answer} with {prediction.strategy}.",
-                    qid=prediction.qid,
-                    payload={
-                        "answer": prediction.answer,
-                        "strategy": prediction.strategy,
-                        "confidence": prediction.confidence,
-                        "question_kind": prediction.question_kind,
-                        "fallback": bool(prediction.fallback_reason),
-                    },
-                )
-            )
+    finally:
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
     if checkpoint_enabled and pending_checkpoint:
         append_checkpoint(trace_dir, pending_checkpoint)
     summary = validate_predictions(
@@ -702,6 +719,62 @@ def _is_retryable_prediction(prediction) -> bool:
 def _problem_retry_delay_seconds(attempt: int, config) -> float:
     delay = config.problem_retry_base_delay_seconds * (2**attempt)
     return min(config.problem_retry_max_delay_seconds, delay)
+
+
+def _solve_with_retry(
+    problem,
+    client,
+    *,
+    dry_run,
+    verify,
+    strategy,
+    fail_fast,
+    config,
+    challenger=None,
+):
+    """Solve one problem with the transient-fallback retry loop.
+
+    Returns (prediction, retry_infos) where retry_infos carries the payloads for
+    `prediction_retry_scheduled` events — emitted by the caller on the main
+    thread, so this function is safe to run inside a worker pool.
+    """
+    prediction = solve_problem(
+        problem,
+        client,
+        dry_run=dry_run,
+        verify=verify,
+        strategy=strategy,
+        fail_fast=fail_fast,
+        config=config,
+        challenger=challenger,
+    )
+    retry_infos: list[dict] = []
+    problem_retry = 0
+    while (
+        _is_retryable_prediction(prediction)
+        and problem_retry < config.problem_max_retries
+    ):
+        delay_seconds = _problem_retry_delay_seconds(problem_retry, config)
+        retry_infos.append(
+            {
+                "fallback_reason": prediction.fallback_reason,
+                "attempt": problem_retry + 1,
+                "delay_seconds": delay_seconds,
+            }
+        )
+        time.sleep(delay_seconds)
+        problem_retry += 1
+        prediction = solve_problem(
+            problem,
+            client,
+            dry_run=dry_run,
+            verify=verify,
+            strategy=strategy,
+            fail_fast=fail_fast,
+            config=config,
+            challenger=challenger,
+        )
+    return prediction, retry_infos
 
 
 def _normalize_cli_argv(argv: tuple[str, ...]) -> tuple[str, ...]:

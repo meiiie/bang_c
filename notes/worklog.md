@@ -509,3 +509,36 @@ best to leaderboard.
 inherently GPU-bound: stage a Qwen3.5≤9B GGUF, measure tiered (±challenger) vs k=1 on the
 463, tune k/T/tier sizes/challenger_samples, implement the letter-logit readout against
 real llama.cpp, then leaderboard-validate the winner and re-package.
+
+---
+
+## 2026-06-11 — Speed levers (zero accuracy risk) — CODE DONE ✅ (GPU validation pending)
+
+Owner asked for speed-ups that keep the score. Real motivation beyond the 10 time-pts:
+**feasibility risk** — CoT ≈4.6s/q ⟹ 2000q ≈ 2.9h, and tiered/ensemble multiply that; an
+unknown BTC timeout could be fatal. Implemented only the levers with NO accuracy coupling
+(per the research, concise-prompt/token cuts are accuracy-coupled → deferred to GPU A/B):
+
+1. **Flash-attention + n_batch flags** (`local_flash_attn`, `local_n_batch` config +
+   `HACKC_LLAMACPP_FLASH_ATTN` / `HACKC_LLAMACPP_N_BATCH` env): the A40 smoke log showed
+   "V cache padded because FA is not enabled" — enabling FA typically +10–30% tok/s.
+   Default OFF until validated on the contest GPU (no unvalidated default flips).
+2. **`local_server` provider**: an in-container llama.cpp `llama-server` on localhost via
+   the OpenAI-compatible protocol (reuses `NvidiaChatClient`; no API key; same
+   offline/self-contained guarantee — the server lives INSIDE the container). Enables
+   continuous batching. `--provider local_server` + `HACKC_LOCAL_SERVER_URL`.
+3. **`--workers N`**: solve N questions concurrently (research: batching ⇒ k samples cost
+   ~2–3× not k×; question-level concurrency expected **3–8× wall-clock**). Results stream
+   in input order → pred.csv ordering, checkpoint cadence, and events identical to
+   sequential (test-proven: workers=1 vs workers=4 byte-identical on the gold fixture).
+   Guard: in-process llama.cpp is single-threaded → workers forced to 1 with a warning
+   unless an HTTP provider is selected. Retry loop extracted to `_solve_with_retry`
+   (worker-safe; retry events emitted on the main thread).
+
+**Verification:** full suite **133 OK** (+6: flags env parsing, local_server no-key client
++ URL override, retry helper, workers e2e equivalence); compileall 0; policy PASS; doctor
+unchanged (all new paths opt-in; contest default untouched).
+
+**GPU phase addition:** launch `llama-server -m gemma.gguf --parallel 8 -ngl 99 -fa` in the
+container/pod, run harness with `--provider local_server --workers 8`, measure tok/s and
+verify answers match the in-process path on a sample before adopting.

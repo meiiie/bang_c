@@ -16,6 +16,8 @@ class LocalLlamaConfig:
     n_gpu_layers: int = -1
     n_threads: int = 0
     chat_format: str | None = None
+    flash_attn: bool = False
+    n_batch: int = 0
 
     @classmethod
     def from_env(cls, config: HarnessConfig) -> "LocalLlamaConfig":
@@ -27,6 +29,9 @@ class LocalLlamaConfig:
             or config.local_model_path
         )
         chat_format = os.environ.get("HACKC_LLAMACPP_CHAT_FORMAT", config.local_chat_format).strip()
+        flash_attn = os.environ.get(
+            "HACKC_LLAMACPP_FLASH_ATTN", "1" if config.local_flash_attn else "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         return cls(
             model_id=model_id,
             model_path=model_path,
@@ -38,6 +43,8 @@ class LocalLlamaConfig:
                 os.environ.get("HACKC_LLAMACPP_N_THREADS", str(config.local_n_threads))
             ),
             chat_format=chat_format or None,
+            flash_attn=flash_attn,
+            n_batch=int(os.environ.get("HACKC_LLAMACPP_N_BATCH", str(config.local_n_batch))),
         )
 
 
@@ -107,6 +114,10 @@ class LocalLlamaChatClient:
             kwargs["n_threads"] = self._config.n_threads
         if self._config.chat_format:
             kwargs["chat_format"] = self._config.chat_format
+        if self._config.flash_attn:
+            kwargs["flash_attn"] = True
+        if self._config.n_batch > 0:
+            kwargs["n_batch"] = self._config.n_batch
         self._llm = Llama(**kwargs)
         return self._llm
 

@@ -55,8 +55,25 @@ def build_chat_client(
                 default_retry_max_delay_seconds=config.retry_max_delay_seconds,
             )
         )
+    if selected_provider == "local_server":
+        # An in-container llama.cpp `llama-server` speaking the OpenAI-compatible
+        # protocol on localhost. Same offline/self-contained guarantee as
+        # local_llamacpp, but the server's continuous batching lets the harness
+        # solve several questions concurrently (--workers). No API key involved;
+        # llama-server ignores Authorization.
+        return NvidiaChatClient(
+            NvidiaConfig(
+                api_key="local",
+                base_url=os.environ.get("HACKC_LOCAL_SERVER_URL", config.local_server_url).rstrip("/"),
+                model=config.default_model,
+                timeout_seconds=config.timeout_seconds,
+                max_retries=config.max_retries,
+                retry_base_delay_seconds=config.retry_base_delay_seconds,
+                retry_max_delay_seconds=config.retry_max_delay_seconds,
+            )
+        )
     raise ValueError(
-        f"Unknown provider '{selected_provider}'. Use local_llamacpp or nvidia."
+        f"Unknown provider '{selected_provider}'. Use local_llamacpp, nvidia, or local_server."
     )
 
 

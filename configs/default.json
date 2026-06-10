@@ -36,6 +36,9 @@
     "local_n_gpu_layers": -1,
     "local_n_threads": 0,
     "local_chat_format": "",
+    "local_flash_attn": false,
+    "local_n_batch": 0,
+    "local_server_url": "http://127.0.0.1:8080/v1",
     "api_model": "google/gemma-4-31b-it",
     "base_url": "https://integrate.api.nvidia.com/v1",
     "allowed_model_families": ["gemma-4", "qwen3.5"],
@@ -69,6 +72,10 @@
       "nvidia": {
         "kind": "openai_compatible_api",
         "description": "Optional NVIDIA NIM API runtime for development and eval."
+      },
+      "local_server": {
+        "kind": "openai_compatible_localhost",
+        "description": "In-container llama.cpp llama-server on localhost: same offline guarantee, continuous batching enables --workers concurrency."
       }
     },
     "profiles": {

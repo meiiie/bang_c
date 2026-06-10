@@ -179,6 +179,23 @@ class HarnessConfig:
         )
 
     @property
+    def local_flash_attn(self) -> bool:
+        # Pure-speed flag (no accuracy semantics): enable llama.cpp flash attention.
+        # Default off until validated on the contest GPU; flip via config or
+        # HACKC_LLAMACPP_FLASH_ATTN=1.
+        return bool(self.runtime.get("local_flash_attn", False))
+
+    @property
+    def local_n_batch(self) -> int:
+        return int(self.runtime.get("local_n_batch", 0))
+
+    @property
+    def local_server_url(self) -> str:
+        return str(
+            self.runtime.get("local_server_url", "http://127.0.0.1:8080/v1")
+        ).strip()
+
+    @property
     def challenger_provider(self) -> str:
         return str(self.runtime.get("challenger_provider", "")).strip()
 
@@ -287,8 +304,10 @@ def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None
     profiles = raw["runtime"].get("profiles", {})
     if profiles is not None and not isinstance(profiles, dict):
         raise ValueError(f"Config {path} runtime.profiles must be an object")
-    if runtime.get("provider", "local_llamacpp") not in {"local_llamacpp", "nvidia"}:
-        raise ValueError(f"Config {path} runtime.provider must be local_llamacpp or nvidia")
+    if runtime.get("provider", "local_llamacpp") not in {"local_llamacpp", "nvidia", "local_server"}:
+        raise ValueError(
+            f"Config {path} runtime.provider must be local_llamacpp, nvidia, or local_server"
+        )
     if not runtime.get("allowed_model_families"):
         raise ValueError(f"Config {path} missing runtime.allowed_model_families")
     if not runtime.get("default_model"):
