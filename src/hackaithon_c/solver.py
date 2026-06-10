@@ -11,6 +11,12 @@ from .evidence import adjudicate_date_evidence, adjudicate_direct_evidence
 from .heuristic import fallback_answer
 from .model_client import ChatClient
 from .normalize import normalize_answer
+from .permute import (
+    original_letter,
+    rotate_problem,
+    rotation_for_sample,
+    stable_seed,
+)
 from .prompting import (
     build_prompt,
     build_reasoning_prompt,
@@ -88,6 +94,11 @@ def solve_problem(
         if strategy == "self_consistency":
             return _with_trace(
                 _solve_self_consistency(problem, profile, client, config=config),
+                trace,
+            )
+        if strategy == "tiered":
+            return _with_trace(
+                _solve_tiered(problem, profile, client, config=config),
                 trace,
             )
         return _with_trace(
@@ -744,30 +755,59 @@ def _collect_reasoning_votes(
     *,
     config: HarnessConfig,
     label: str,
+    diversify: bool = False,
+    start_index: int = 0,
 ) -> tuple[list[str], list[TraceStep]]:
-    """Sample `samples` reasoned answers from one client; return (answers, trace_steps)."""
-    prompt = build_reasoning_prompt(problem, max_tokens=config.reasoning_max_tokens)
+    """Sample `samples` reasoned answers from one client; return (answers, trace_steps).
+
+    Answers are always reported in the ORIGINAL letter space. With `diversify`,
+    sample 0 stays the deterministic anchor while later samples (a) see cyclically
+    rotated choice orders (position-bias debiasing) and (b) sample at
+    `reasoning_temperature` with a stable per-(qid, index) seed, so runs remain
+    reproducible. A sample that yields no letter gets one deterministic repair pass
+    (same `repair_invalid_output` gate the tournament path uses).
+    """
     answers: list[str] = []
     trace_steps: list[TraceStep] = []
-    for index in range(max(1, samples)):
+    for offset in range(max(1, samples)):
+        index = start_index + offset
+        rotation = rotation_for_sample(index, len(problem.choices)) if diversify else 0
+        sample_problem = rotate_problem(problem, rotation)
+        prompt = build_reasoning_prompt(sample_problem, max_tokens=config.reasoning_max_tokens)
+        sampling: dict[str, float | int] = {}
+        if diversify and index > 0:
+            sampling = {
+                "temperature": config.reasoning_temperature,
+                "top_p": config.reasoning_top_p,
+                "top_k": config.reasoning_top_k,
+                "seed": stable_seed(problem.qid, index),
+            }
         raw_answer = client.complete(
             prompt.system_prompt,
             prompt.user_prompt,
             max_tokens=prompt.max_tokens,
+            **sampling,
         )
-        normalized = normalize_answer(raw_answer, problem)
-        answers.append(normalized or "")
+        normalized = normalize_answer(raw_answer, sample_problem)
+        detail = "sample produced a valid answer letter"
+        if normalized is None:
+            repaired = _repair_invalid_answer(sample_problem, client, raw_answer, config=config)
+            if repaired is not None:
+                _, normalized = repaired
+                detail = "sample repaired to a valid answer letter"
+            else:
+                detail = "sample produced no valid answer letter"
+        mapped = original_letter(normalized, rotation, problem) if normalized else None
+        if rotation:
+            detail = f"{detail}; rotation={rotation}"
+        answers.append(mapped or "")
         trace_steps.append(
             TraceStep(
                 role="solver",
                 action=f"{label}:{index + 1}",
-                status="completed" if normalized else "warning",
-                detail=(
-                    "sample produced a valid answer letter"
-                    if normalized
-                    else "sample produced no valid answer letter"
-                ),
-                answer=normalized,
+                status="completed" if mapped else "warning",
+                detail=detail,
+                answer=mapped,
             )
         )
     return answers, trace_steps
@@ -841,6 +881,70 @@ def _solve_self_consistency(
         trace_steps,
         strategy="gemma_self_consistency",
         fallback_reason="invalid_self_consistency",
+    )
+
+
+def _solve_tiered(
+    problem: Problem,
+    profile: ProblemProfile,
+    client: ChatClient,
+    *,
+    config: HarnessConfig,
+) -> Prediction:
+    """Tiered diverse self-consistency.
+
+    Tier 1 (cheap): the deterministic anchor plus rotated-choice samples. If every
+    tier-1 sample is valid and they agree unanimously, stop — most questions end
+    here at a fraction of full-k cost. Otherwise escalate: add seeded temp>0
+    rotated samples up to `tiered_total_samples` and majority-vote over all of
+    them. Setting tiered_total_samples == tiered_tier1_samples gives pure diverse
+    self-consistency with no escalation stage.
+    """
+    tier1 = config.tiered_tier1_samples
+    total = config.tiered_total_samples
+    answers, trace_steps = _collect_reasoning_votes(
+        problem,
+        client,
+        tier1,
+        config=config,
+        label="tier1_sample",
+        diversify=True,
+    )
+    winner, votes, _ = majority_vote(answers)
+    unanimous = winner is not None and votes == len(answers)
+    escalated = False
+    if not unanimous and total > tier1:
+        escalated = True
+        trace_steps.append(
+            TraceStep(
+                role="synthesizer",
+                action="tier_escalation",
+                status="warning",
+                detail=(
+                    f"tier1 agreement={votes}/{len(answers)}; "
+                    f"escalating to {total} samples"
+                ),
+            )
+        )
+        more_answers, more_steps = _collect_reasoning_votes(
+            problem,
+            client,
+            total - tier1,
+            config=config,
+            label="tier2_sample",
+            diversify=True,
+            start_index=tier1,
+        )
+        answers = answers + more_answers
+        trace_steps = trace_steps + more_steps
+    return _vote_prediction(
+        problem,
+        profile,
+        client.model,
+        answers,
+        trace_steps,
+        strategy="gemma_tiered_escalated" if escalated else "gemma_tiered",
+        fallback_reason="invalid_tiered",
     )
 
 

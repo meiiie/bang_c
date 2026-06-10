@@ -63,7 +63,17 @@ class NvidiaChatClient:
     def model(self) -> str:
         return self._config.model
 
-    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        max_tokens: int = 12,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,  # accepted for protocol parity; OpenAI-compat APIs ignore it
+        seed: int | None = None,
+    ) -> str:
         import requests
 
         payload: dict[str, Any] = {
@@ -72,11 +82,13 @@ class NvidiaChatClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.0,
-            "top_p": 0.1,
+            "temperature": 0.0 if temperature is None else temperature,
+            "top_p": 0.1 if top_p is None else top_p,
             "max_tokens": max_tokens,
             "stream": False,
         }
+        if seed is not None:
+            payload["seed"] = seed
         headers = {
             "Authorization": f"Bearer {self._config.api_key}",
             "Content-Type": "application/json",

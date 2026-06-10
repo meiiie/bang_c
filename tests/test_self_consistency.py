@@ -28,9 +28,23 @@ class ScriptedClient:
     def __init__(self, answers: list[str]) -> None:
         self.answers = list(answers)
         self.calls = 0
+        self.sampling: list[dict] = []
 
-    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        max_tokens: int = 12,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        seed: int | None = None,
+    ) -> str:
         self.calls += 1
+        self.sampling.append(
+            {"temperature": temperature, "top_p": top_p, "top_k": top_k, "seed": seed}
+        )
         return self.answers.pop(0)
 
 
@@ -125,10 +139,22 @@ class SelfConsistencySolveTests(unittest.TestCase):
         self.assertEqual(pred.confidence, 1.0)
 
     def test_all_invalid_falls_back_to_valid_letter(self) -> None:
-        client = ScriptedClient(["I cannot decide."] * self.k)
+        # Each invalid sample now gets one deterministic repair pass (lever #5),
+        # so the script provides an (invalid sample, invalid repair) pair per k.
+        client = ScriptedClient(["I cannot decide.", "still no letter"] * self.k)
         pred = solve_problem(_problem(), client, strategy="self_consistency", config=self.config)
         self.assertIn(pred.answer, _problem().allowed_letters)
         self.assertIn("self_consistency", pred.fallback_reason or "")
+
+    def test_invalid_sample_is_rescued_by_repair(self) -> None:
+        # A truncated CoT (no ANSWER line) followed by a successful repair letter.
+        config = _config_with_samples(1)
+        client = ScriptedClient(["...rambling reasoning that got cut off", "B"])
+        pred = solve_problem(_problem(), client, strategy="self_consistency", config=config)
+        self.assertEqual(pred.answer, "B")
+        self.assertEqual(pred.strategy, "gemma_self_consistency")
+        self.assertEqual(pred.confidence, 1.0)
+        self.assertEqual(client.calls, 2)
 
 
 class CrossModelChallengeTests(unittest.TestCase):

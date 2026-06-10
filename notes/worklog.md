@@ -433,3 +433,57 @@ The local repo now matches it. No repackage needed.
 (calculation/principle/evidence — the CoT path doesn't call them; pause-trigger, owner sign-off);
 tiering for the time score; temp>0 self-consistency for real calibration. See
 `notes/research-directions.md`.
+
+---
+
+## 2026-06-11 — 93+ push, increment 1: tiered diverse self-consistency — CODE DONE ✅ (GPU measurement pending)
+
+Goal 87.26 → 93+ (+27 of 463). Ran a 3-agent cited research workflow
+(`notes/research-93-cited-reports.md`) AND implemented the core mechanisms, local-tested.
+
+**Research highlights (cited in the report):**
+- Self-consistency: most gain by k=5–10; math +12–18pp, knowledge +1.5–4pp. Voting works
+  best at higher T; **Gemma-4 tuned operating point is T=1.0/top_p=0.95/top_k=64 and low T
+  degrades it** → diversified samples use T=0.8 (config).
+- **Position bias is a major MCQ error source**; cyclic-permutation voting +1.2pp (full
+  +4.9pp), debias flips more wrong→right. Our rotation scheme matches the literature.
+- **Tiered/agreement-gated escalation** (MoT cascades, Adaptive-Consistency, ESC): equal
+  accuracy at 40–60% compute; agreement-of-2 is the best uncalibrated routing signal.
+- **AVOID (evidence-backed):** "are you sure" self-verification (−1…−17pp, sycophancy);
+  generative elimination prompting (−5…−14pp — relevant: the legacy elimination prompt!);
+  replacing CoT with pure logprob scoring (−10pp on our own data).
+- Qwen3.5-9B ≈ Gemma-4-26B on MMLU-Pro (82.5 vs 82.6) but Gemma +5pp multilingual →
+  ensemble viable, Gemma stays the authority. Dual-greedy tier-1 (Gemma+Qwen agree → lock)
+  is the recommended GPU-phase architecture; llama.cpp continuous batching makes k samples
+  ~2–3× wall-clock, not k×.
+- Net literature-anchored estimate: **+4–7pp → 91.5–94**; 93 is the optimistic-middle.
+
+**Implemented (all stub-tested, 124 tests green, policy PASS, contract valid):**
+- `complete()` protocol + both clients: optional `temperature/top_p/top_k/seed` (None =
+  the exact deterministic behavior that scored 87.26).
+- NEW `permute.py`: cyclic choice rotation + original-letter mapping + `stable_seed`
+  (sha256 of qid|index → reproducible temp>0 sampling).
+- `_collect_reasoning_votes`: `diversify` mode — sample 0 = deterministic anchor;
+  samples 1.. = rotated choices + seeded T=0.8/top_p=0.95/top_k=64; invalid samples get
+  one deterministic repair pass (lever #5 — fixes the 7-fallback class).
+- NEW strategy `tiered` (`_solve_tiered`): tier-1 = anchor + rotated sample(s); unanimous
+  → stop (cheap); disagreement → escalate to `tiered_total_samples` and vote over all.
+  Workflow `tiered-consistency` (phase=development until GPU-measured).
+- `build_challenger_client(config)`: config-gated second local model (Qwen) for the
+  ensemble lever; returns None unless configured.
+- Config keys: `reasoning_temperature` 0.8, `reasoning_top_p` 0.95, `reasoning_top_k` 64,
+  `tiered_tier1_samples` 2, `tiered_total_samples` 5, `challenger_provider/model_path/model_id`.
+- Tests: `test_tiered_consistency.py` (permute math round-trip; position-biased stub
+  triggers escalation and the rotated vote outvotes the bias; content-robust stub stops at
+  tier 1 with 2 calls; seeded sampling params asserted; challenger builder gating) +
+  updated self-consistency tests for the repair pass. The k=1 contest path is UNTOUCHED.
+
+**Honest framing:** mechanisms are validated by stubs + literature, but accuracy claims
+require the real model. Tier-1-unanimity rate, k, T, and the tier thresholds are
+GPU-phase tuning. The 87.26 image/path remains the safe fallback.
+
+**Next (GPU phase):** (1) letter-logit readout after forced "ANSWER:" (rank-1
+accuracy-per-cost in the research: ~free, +0.5–1.5pp, also yields the MSP routing signal)
+— needs llama.cpp low-level API, build against the real model; (2) obtain a Qwen3.5-8/9B
+GGUF and run dual-greedy tier-1; (3) measure tiered vs k=1 on the 463 + tune; (4) submit
+best to leaderboard.

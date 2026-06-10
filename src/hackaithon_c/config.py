@@ -150,6 +150,47 @@ class HarnessConfig:
         return max(1, int(self.runtime.get("challenger_samples", 3)))
 
     @property
+    def reasoning_temperature(self) -> float:
+        # Sampling temperature for DIVERSIFIED reasoning samples only (tiered strategy).
+        # The anchor sample and the k=1 contest path always run deterministically.
+        # 0.8 per Gemma guidance: Gemma-4's tuned operating point is T=1.0/top_p=0.95/
+        # top_k=64 and quality degrades at low T; voting literature favors T 0.8-1.0.
+        return float(self.runtime.get("reasoning_temperature", 0.8))
+
+    @property
+    def reasoning_top_p(self) -> float:
+        return float(self.runtime.get("reasoning_top_p", 0.95))
+
+    @property
+    def reasoning_top_k(self) -> int:
+        return int(self.runtime.get("reasoning_top_k", 64))
+
+    @property
+    def tiered_tier1_samples(self) -> int:
+        # Tier 1 = anchor + rotated-choice samples; unanimous agreement stops early.
+        return max(1, int(self.runtime.get("tiered_tier1_samples", 2)))
+
+    @property
+    def tiered_total_samples(self) -> int:
+        # Escalation budget when tier 1 disagrees (total samples incl. tier 1).
+        return max(
+            self.tiered_tier1_samples,
+            int(self.runtime.get("tiered_total_samples", 5)),
+        )
+
+    @property
+    def challenger_provider(self) -> str:
+        return str(self.runtime.get("challenger_provider", "")).strip()
+
+    @property
+    def challenger_model_path(self) -> str:
+        return str(self.runtime.get("challenger_model_path", "")).strip()
+
+    @property
+    def challenger_model_id(self) -> str:
+        return str(self.runtime.get("challenger_model_id", "")).strip()
+
+    @property
     def max_retries(self) -> int:
         return int(self.runtime.get("max_retries", 6))
 
@@ -285,7 +326,7 @@ def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None
         if not markers.get(key):
             raise ValueError(f"Config {path} missing profiling markers: {key}")
 
-    valid_strategies = {"auto", "direct", "verify", "tournament", "self_consistency"}
+    valid_strategies = {"auto", "direct", "verify", "tournament", "self_consistency", "tiered"}
     for name, workflow in raw.get("workflows", {}).items():
         if workflow.get("strategy") not in valid_strategies:
             raise ValueError(f"Config {path} workflow {name} has invalid strategy")

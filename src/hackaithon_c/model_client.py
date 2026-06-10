@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Protocol
 
 from .config import HarnessConfig
@@ -13,7 +14,20 @@ class ChatClient(Protocol):
     def model(self) -> str:
         ...
 
-    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        max_tokens: int = 12,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        seed: int | None = None,
+    ) -> str:
+        """temperature/top_p/seed default to None = the provider's deterministic
+        defaults (temperature 0). Diversified sampling passes explicit values; a
+        fixed seed keeps temp>0 sampling reproducible run-to-run."""
         ...
 
 
@@ -43,4 +57,31 @@ def build_chat_client(
         )
     raise ValueError(
         f"Unknown provider '{selected_provider}'. Use local_llamacpp or nvidia."
+    )
+
+
+def build_challenger_client(config: HarnessConfig) -> ChatClient | None:
+    """Build the optional second-model (challenger) client for cross-model ensembles.
+
+    Returns None when no challenger is configured — every caller must degrade
+    gracefully. Only the local provider is supported for the contest path (the
+    container is offline); the model file must be baked into the image.
+    """
+    provider = config.challenger_provider
+    model_path = config.challenger_model_path
+    if not provider or not model_path:
+        return None
+    if provider != "local_llamacpp":
+        raise ValueError(
+            f"Unsupported challenger_provider '{provider}'. Use local_llamacpp."
+        )
+    return LocalLlamaChatClient(
+        LocalLlamaConfig(
+            model_id=config.challenger_model_id or model_path,
+            model_path=Path(model_path),
+            n_ctx=config.local_n_ctx,
+            n_gpu_layers=config.local_n_gpu_layers,
+            n_threads=config.local_n_threads,
+            chat_format=None,
+        )
     )

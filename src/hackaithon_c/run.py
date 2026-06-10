@@ -120,7 +120,7 @@ def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Use deterministic heuristic only")
     parser.add_argument(
         "--strategy",
-        choices=("auto", "direct", "verify", "tournament", "self_consistency"),
+        choices=("auto", "direct", "verify", "tournament", "self_consistency", "tiered"),
         default=None,
         help="Solving strategy",
     )

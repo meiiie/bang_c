@@ -43,8 +43,16 @@
     "default_strategy": "auto",
     "self_consistency_samples": 1,
     "reasoning_max_tokens": 2048,
+    "reasoning_temperature": 0.8,
+    "reasoning_top_p": 0.95,
+    "reasoning_top_k": 64,
+    "tiered_tier1_samples": 2,
+    "tiered_total_samples": 5,
     "self_consistency_challenge_threshold": 0.75,
     "challenger_samples": 3,
+    "challenger_provider": "",
+    "challenger_model_path": "",
+    "challenger_model_id": "",
     "max_retries": 6,
     "retry_base_delay_seconds": 1.5,
     "retry_max_delay_seconds": 30,
@@ -124,6 +132,13 @@
       "verify": false,
       "dry_run": false,
       "phase": "runtime"
+    },
+    "tiered-consistency": {
+      "description": "CANDIDATE for 93+: tiered diverse self-consistency. Tier 1 = anchor + rotated-choice sample (position-bias debias); unanimous -> stop. Disagreement -> escalate to seeded temp>0 rotated samples and majority-vote. Pending real-model measurement before promotion.",
+      "strategy": "tiered",
+      "verify": false,
+      "dry_run": false,
+      "phase": "development"
     }
   },
   "profiling": {

@@ -50,17 +50,34 @@ class LocalLlamaChatClient:
     def model(self) -> str:
         return self._config.model_id
 
-    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        max_tokens: int = 12,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        seed: int | None = None,
+    ) -> str:
         llm = self._load()
-        result = llm.create_chat_completion(
-            messages=[
+        kwargs: dict[str, Any] = {
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.0,
-            top_p=0.1,
-            max_tokens=max_tokens,
-        )
+            # None = the proven deterministic defaults; explicit values are used by
+            # diversified sampling (seeded, so still reproducible run-to-run).
+            "temperature": 0.0 if temperature is None else temperature,
+            "top_p": 0.1 if top_p is None else top_p,
+            "max_tokens": max_tokens,
+        }
+        if top_k is not None:
+            kwargs["top_k"] = top_k
+        if seed is not None:
+            kwargs["seed"] = seed
+        result = llm.create_chat_completion(**kwargs)
         return _extract_chat_content(result)
 
     def _load(self) -> Any:
