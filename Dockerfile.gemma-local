@@ -66,4 +66,4 @@ RUN mkdir -p /data /output \
     && chmod +x /usr/local/bin/neko-entrypoint
 
 ENTRYPOINT ["neko-entrypoint"]
-CMD ["--workflow", "contest-strict", "--data-dir", "/data", "--output-dir", "/output", "--run-dir", "/output/neko-run", "--auto-resume", "--checkpoint-every", "1"]
+CMD ["--workflow", "self-consistency", "--data-dir", "/data", "--output-dir", "/output", "--run-dir", "/output/neko-run", "--auto-resume", "--checkpoint-every", "1"]

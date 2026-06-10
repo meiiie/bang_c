@@ -33,6 +33,8 @@ class ProblemProfile:
     prompt_variant: str
     should_verify: bool
     should_tournament: bool
+    features: tuple[str, ...] = ()
+    diagnostics: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

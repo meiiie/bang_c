@@ -43,7 +43,7 @@ from hackaithon_c.model_inventory import (
 from hackaithon_c.normalize import normalize_answer
 from hackaithon_c.nvidia_client import NvidiaConfig, _retry_delay_seconds
 from hackaithon_c.policy import evaluate_policy, evaluate_policy_specs, render_policy_report
-from hackaithon_c.prompting import build_prompt, build_verifier_prompt
+from hackaithon_c.prompting import build_prompt, build_verifier_prompt, tournament_variants
 from hackaithon_c.project import init_project
 from hackaithon_c.principles import list_principle_rules
 from hackaithon_c.review import render_trace_review, review_trace_dir
@@ -285,6 +285,62 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(profile.kind, "calculation")
         self.assertTrue(profile.should_verify)
         self.assertTrue(profile.should_tournament)
+
+    def test_classifier_does_not_treat_province_tinh_as_calculation(self) -> None:
+        problem = Problem(
+            qid="test_province_tinh",
+            question="Khi doi can cuoc cong dan tai cap tinh Ca Mau, can nop giay to nao?",
+            choices=("Ho so A", "Ho so B", "Ho so C", "Ho so D"),
+        )
+
+        profile = classify_problem(problem, self.config)
+
+        self.assertEqual(profile.kind, "short")
+        self.assertIn("has_legal_admin", profile.features)
+        self.assertNotIn("has_calculation", profile.features)
+        self.assertIn("ignored_calculation_marker=tinh", profile.diagnostics)
+
+    def test_classifier_routes_negative_before_broad_value_marker(self) -> None:
+        problem = Problem(
+            qid="test_negative_value",
+            question="Chon dap an sai ve gia tri tu tuong cua tac pham.",
+            choices=("Noi dung A", "Noi dung B", "Noi dung C", "Noi dung D"),
+        )
+
+        profile = classify_problem(problem, self.config)
+
+        self.assertEqual(profile.kind, "negative")
+        self.assertIn("has_negative", profile.features)
+        self.assertNotIn("has_calculation", profile.features)
+        self.assertIn("ignored_calculation_marker=gia tri", profile.diagnostics)
+
+    def test_classifier_does_not_treat_phuong_sai_as_negative(self) -> None:
+        problem = Problem(
+            qid="test_phuong_sai",
+            question="Trong thong ke, phuong sai cua du lieu 1, 2, 3 la bao nhieu?",
+            choices=("0", "1", "2", "3", "4"),
+        )
+
+        profile = classify_problem(problem, self.config)
+
+        self.assertEqual(profile.kind, "calculation")
+        self.assertIn("has_calculation", profile.features)
+        self.assertNotIn("has_negative", profile.features)
+        self.assertIn("ignored_negative_marker=sai", profile.diagnostics)
+
+    def test_classifier_marks_many_choice_calculation_as_compound(self) -> None:
+        problem = Problem(
+            qid="test_compound_many_choice_calculation",
+            question="Tinh 2 + 2 bang bao nhieu?",
+            choices=("0", "1", "2", "3", "4", "5"),
+        )
+
+        profile = classify_problem(problem, self.config)
+
+        self.assertEqual(profile.kind, "calculation")
+        self.assertIn("has_many_choices", profile.features)
+        self.assertIn("has_calculation", profile.features)
+        self.assertEqual(tournament_variants(profile)[0], "calculation")
 
     def test_classifier_handles_translated_negative_question(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1549,6 +1605,40 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("repair=C", prediction.raw_answer)
         self.assertEqual(prediction.trace[1].detail, "variant output repaired to a valid answer letter")
 
+    def test_tournament_tie_uses_tiebreaker_before_verifier(self) -> None:
+        problem = Problem(
+            qid="test_tournament_tie",
+            question="Chon dap an dung nhat.",
+            choices=("A one", "B two", "C three", "D four", "E five"),
+        )
+        client = FakeClient(["A", "B", "C", "B", "B"])
+
+        prediction = solve_problem(
+            problem,
+            client,  # type: ignore[arg-type]
+            strategy="tournament",
+            verify=False,
+            config=self.config,
+        )
+
+        self.assertEqual(prediction.answer, "B")
+        self.assertIn("tiebreak=B=>B", prediction.raw_answer)
+        self.assertIn("verifier=B=>B", prediction.raw_answer)
+        self.assertEqual(
+            [step.role for step in prediction.trace],
+            [
+                "classifier",
+                "solver",
+                "solver",
+                "solver",
+                "synthesizer",
+                "tie-breaker",
+                "verifier",
+            ],
+        )
+        self.assertEqual(prediction.trace[4].status, "warning")
+        self.assertIn("tied=A,B,C", prediction.trace[4].detail)
+
     def test_tournament_applies_calculation_adjudicator(self) -> None:
         problem = Problem(
             qid="test_tournament_cylinder_rate",
@@ -1759,6 +1849,89 @@ class ContestContractTest(unittest.TestCase):
 
         self.assertEqual(review.verdict, "warn")
         self.assertIn("low_confidence", rendered)
+
+    def test_trace_review_reports_prediction_risk_signals(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "public_test.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "test_risk",
+                            "question": "Tinh 2 + 2 bang bao nhieu?",
+                            "choices": ["0", "1", "2", "3", "4"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            problem = load_problems(path)[0]
+            prediction = Prediction(
+                qid=problem.qid,
+                answer="B",
+                model="fake/gemma-4",
+                raw_answer="A|B",
+                strategy="gemma_tournament",
+                confidence=0.72,
+                trace=(
+                    TraceStep(
+                        "classifier",
+                        "profile_problem",
+                        "completed",
+                        (
+                            "kind=calculation; variant=calculation; verify=True; "
+                            "tournament=True; features=has_many_choices,has_calculation; "
+                            "diagnostics=ignored_calculation_marker=tinh"
+                        ),
+                    ),
+                    TraceStep("solver", "tournament:direct", "completed", "ok", "A"),
+                    TraceStep("solver", "tournament:evidence", "completed", "ok", "B"),
+                    TraceStep(
+                        "synthesizer",
+                        "majority_vote",
+                        "warning",
+                        "votes=1/2; distribution=A:1,B:1; tied=A,B",
+                        "A",
+                    ),
+                    TraceStep("tie-breaker", "answer_only_check", "completed", "ok", "B"),
+                ),
+            )
+            trace_dir = Path(temp_dir) / "traces"
+            output_path = Path(temp_dir) / "output" / "pred.csv"
+            summary = validate_predictions(
+                [problem],
+                [prediction],
+                self.config,
+                trace_enabled=True,
+            )
+            write_trace(trace_dir, [prediction])
+            write_summary(trace_dir / "run-summary.json", summary)
+            write_run_manifest(
+                trace_dir / "run-manifest.json",
+                build_run_manifest(
+                    config=self.config,
+                    input_path=path,
+                    output_path=output_path,
+                    trace_dir=trace_dir,
+                    workflow="risk-review-test",
+                    strategy="tournament",
+                    dry_run=False,
+                    verify=True,
+                    model="fake/gemma-4",
+                    limit=1,
+                    summary=summary,
+                    argv=("--strategy", "tournament"),
+                ),
+            )
+
+            review = review_trace_dir(trace_dir)
+            codes = {finding.code for finding in review.findings}
+
+        self.assertEqual(review.verdict, "warn")
+        self.assertIn("risk_agent_disagreement", codes)
+        self.assertIn("risk_tournament_tie", codes)
+        self.assertIn("risk_broad_marker_ignored", codes)
+        self.assertIn("risk_compound_many_choice_calculation", codes)
 
     def test_review_tasks_turn_trace_findings_into_action_queue(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1,0 +1,194 @@
+[
+  {
+    "qid": "gold_vi_read_01",
+    "lang": "vi",
+    "category": "reading",
+    "question": "Hà Nội là thủ đô của Việt Nam, nằm bên bờ sông Hồng. Theo đoạn văn, Hà Nội nằm bên bờ con sông nào?",
+    "choices": ["Sông Hồng", "Sông Mê Kông", "Sông Đà", "Sông Sài Gòn"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_vi_neg_01",
+    "lang": "vi",
+    "category": "negative",
+    "question": "Đáp án nào sau đây KHÔNG phải là một thành phố của Việt Nam?",
+    "choices": ["Hà Nội", "Đà Nẵng", "Tokyo", "Huế"],
+    "answer": "C"
+  },
+  {
+    "qid": "gold_vi_math_01",
+    "lang": "vi",
+    "category": "calculation",
+    "question": "Một sản phẩm có giá 500.000 đồng được giảm giá 20%. Giá sau khi giảm là bao nhiêu?",
+    "choices": ["400.000 đồng", "450.000 đồng", "480.000 đồng", "300.000 đồng"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_vi_geo_trap_01",
+    "lang": "vi",
+    "category": "geography",
+    "question": "Tỉnh nào sau đây nằm ở vùng cực Nam của Việt Nam?",
+    "choices": ["Cà Mau", "Lạng Sơn", "Cao Bằng", "Hà Giang"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_vi_gk_01",
+    "lang": "vi",
+    "category": "general",
+    "question": "Ai là tác giả của tác phẩm Truyện Kiều?",
+    "choices": ["Nguyễn Du", "Hồ Xuân Hương", "Nguyễn Trãi", "Nguyễn Đình Chiểu"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_en_read_01",
+    "lang": "en",
+    "category": "reading",
+    "question": "Paris is the capital of France and sits on the banks of the Seine river. According to the text, which river does Paris sit on?",
+    "choices": ["The Thames", "The Seine", "The Danube", "The Rhine"],
+    "answer": "B"
+  },
+  {
+    "qid": "gold_en_neg_01",
+    "lang": "en",
+    "category": "negative",
+    "question": "Which of the following is NOT a traditional primary color?",
+    "choices": ["Red", "Blue", "Green", "Yellow"],
+    "answer": "C"
+  },
+  {
+    "qid": "gold_en_math_01",
+    "lang": "en",
+    "category": "calculation",
+    "question": "What is 15 percent of 200?",
+    "choices": ["15", "20", "30", "45"],
+    "answer": "C"
+  },
+  {
+    "qid": "gold_en_gk_01",
+    "lang": "en",
+    "category": "general",
+    "question": "What is the chemical formula for water?",
+    "choices": ["CO2", "H2O", "O2", "NaCl"],
+    "answer": "B"
+  },
+  {
+    "qid": "gold_ko_gk_01",
+    "lang": "ko",
+    "category": "general",
+    "question": "대한민국의 수도는 어디입니까?",
+    "choices": ["서울", "부산", "도쿄", "베이징"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_ko_neg_01",
+    "lang": "ko",
+    "category": "negative",
+    "question": "다음 중 행성이 아닌 것은 무엇입니까?",
+    "choices": ["지구", "화성", "태양", "목성"],
+    "answer": "C"
+  },
+  {
+    "qid": "gold_zh_gk_01",
+    "lang": "zh",
+    "category": "general",
+    "question": "中国的首都是哪座城市？",
+    "choices": ["北京", "上海", "东京", "首尔"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_zh_neg_01",
+    "lang": "zh",
+    "category": "negative",
+    "question": "下列哪一个不是哺乳动物？",
+    "choices": ["狗", "猫", "鱼", "牛"],
+    "answer": "C"
+  },
+  {
+    "qid": "gold_math_arith_01",
+    "lang": "vi",
+    "category": "calculation",
+    "question": "12 nhân 8 bằng bao nhiêu?",
+    "choices": ["84", "96", "108", "88"],
+    "answer": "B"
+  },
+  {
+    "qid": "gold_math_arith_02",
+    "lang": "en",
+    "category": "calculation",
+    "question": "If a train travels 60 kilometers in 1.5 hours at constant speed, what is its speed in kilometers per hour?",
+    "choices": ["30", "40", "45", "90"],
+    "answer": "B"
+  },
+  {
+    "qid": "gold_en_logic_01",
+    "lang": "en",
+    "category": "general",
+    "question": "All roses are flowers. Some flowers fade quickly. Based only on these statements, which conclusion is guaranteed to be true?",
+    "choices": ["All roses fade quickly", "Some roses fade quickly", "All roses are flowers", "No roses are flowers"],
+    "answer": "C"
+  },
+  {
+    "qid": "gold_fr_neg_01",
+    "lang": "fr",
+    "category": "negative",
+    "question": "Laquelle des affirmations suivantes est incorrecte?",
+    "choices": ["Paris est en France", "Berlin est en Allemagne", "Tokyo est en Chine", "Rome est en Italie"],
+    "answer": "C"
+  },
+  {
+    "qid": "gold_fr_math_01",
+    "lang": "fr",
+    "category": "calculation",
+    "question": "Combien font 7 multiplié par 6?",
+    "choices": ["36", "42", "48", "54"],
+    "answer": "B"
+  },
+  {
+    "qid": "gold_de_gk_01",
+    "lang": "de",
+    "category": "general",
+    "question": "Was ist die Hauptstadt von Deutschland?",
+    "choices": ["Berlin", "München", "Hamburg", "Köln"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_es_read_01",
+    "lang": "es",
+    "category": "reading",
+    "question": "Texto: El Amazonas es el río más largo del mundo.\nPregunta: Según el texto, ¿cuál es el río más largo?",
+    "choices": ["El Nilo", "El Amazonas", "El Danubio", "El Misisipi"],
+    "answer": "B"
+  },
+  {
+    "qid": "gold_ru_gk_01",
+    "lang": "ru",
+    "category": "general",
+    "question": "Какой город является столицей России?",
+    "choices": ["Москва", "Санкт-Петербург", "Киев", "Минск"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_ar_gk_01",
+    "lang": "ar",
+    "category": "general",
+    "question": "ما هي عاصمة مصر؟",
+    "choices": ["القاهرة", "الرياض", "بغداد", "دمشق"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_th_gk_01",
+    "lang": "th",
+    "category": "general",
+    "question": "เมืองหลวงของประเทศไทยคือเมืองใด?",
+    "choices": ["กรุงเทพมหานคร", "เชียงใหม่", "ภูเก็ต", "ขอนแก่น"],
+    "answer": "A"
+  },
+  {
+    "qid": "gold_ko_manychoice_01",
+    "lang": "ko",
+    "category": "many_choice",
+    "question": "다음 중 가장 큰 수는 무엇입니까?",
+    "choices": ["1", "5", "3", "9", "7", "2"],
+    "answer": "D"
+  }
+]

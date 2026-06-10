@@ -127,6 +127,29 @@ class HarnessConfig:
         return str(self.runtime.get("default_strategy", "auto"))
 
     @property
+    def self_consistency_samples(self) -> int:
+        # k=1 (single deterministic CoT) is the validated contest default: on the real
+        # Gemma-4-26B at temperature 0 the samples are identical, so k>1 only adds cost.
+        # Leaderboard 2026-06-10: CoT k=1 = 87.26 vs the letter-only baseline 77.11.
+        # The multi-sample voting mechanism is still exercised by tests with explicit k>=2.
+        return max(1, int(self.runtime.get("self_consistency_samples", 1)))
+
+    @property
+    def reasoning_max_tokens(self) -> int:
+        # 2048 validated on the real Gemma-4-26B (A40, 2026-06-10): 512 truncated the
+        # chain-of-thought before the "ANSWER:" line, causing ~30% invalid-output
+        # fallbacks and wrong answers on calculation/reading items.
+        return int(self.runtime.get("reasoning_max_tokens", 2048))
+
+    @property
+    def self_consistency_challenge_threshold(self) -> float:
+        return float(self.runtime.get("self_consistency_challenge_threshold", 0.75))
+
+    @property
+    def challenger_samples(self) -> int:
+        return max(1, int(self.runtime.get("challenger_samples", 3)))
+
+    @property
     def max_retries(self) -> int:
         return int(self.runtime.get("max_retries", 6))
 
@@ -262,7 +285,7 @@ def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None
         if not markers.get(key):
             raise ValueError(f"Config {path} missing profiling markers: {key}")
 
-    valid_strategies = {"auto", "direct", "verify", "tournament"}
+    valid_strategies = {"auto", "direct", "verify", "tournament", "self_consistency"}
     for name, workflow in raw.get("workflows", {}).items():
         if workflow.get("strategy") not in valid_strategies:
             raise ValueError(f"Config {path} workflow {name} has invalid strategy")

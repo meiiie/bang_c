@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from .risk import collect_prediction_risks
+
 
 Severity = Literal["info", "warn", "fail"]
 Verdict = Literal["pass", "warn", "fail"]
@@ -140,6 +142,15 @@ def review_trace_dir(trace_dir: Path, *, low_confidence_threshold: float = 0.5) 
             )
 
         findings.extend(_review_trace_steps(qid, trace_steps))
+        for signal in collect_prediction_risks(prediction):
+            findings.append(
+                ReviewFinding(
+                    severity=signal.severity,
+                    code=f"risk_{signal.code}",
+                    message=signal.message,
+                    qid=qid,
+                )
+            )
 
     if not findings:
         findings.append(

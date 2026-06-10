@@ -68,7 +68,10 @@ changes, and tournament synthesis issues.
 Run `neko --review-trace <trace-dir>` after experiments to get a compact
 reviewer verdict. A `WARN` verdict is expected for heuristic or low-confidence
 development runs; a `FAIL` verdict means trace artifacts are missing, counts do
-not match, the prediction contract is invalid, or a trace step is blocked.
+not match, the prediction contract is invalid, or a trace step is blocked. The
+reviewer also emits deterministic risk signals for tournament ties, solver or
+verifier disagreement, broad markers that were intentionally ignored, and
+compound profiles such as many-choice calculation questions.
 Run `neko --review-tasks <trace-dir> --run-dir <path>` to convert those
 findings into a queue of concrete follow-up tasks.
 Run `scripts/resolve-tasks.ps1` to rerun qid-scoped tasks with a stronger

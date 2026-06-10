@@ -87,17 +87,21 @@ Runtime modules:
 - `exporter.py`: writes contest output and dev traces.
 - `review.py`: reads dev traces after a run and reports reviewer findings
   without invoking a model.
+- `risk.py`: collects deterministic prediction-risk signals from trace rows,
+  including tournament ties, agent disagreement, broad-marker guards, compound
+  profiles, and review-target confidence gaps.
 
 Dev traces are structured as agent steps on each prediction. Current roles are
-`classifier`, `solver`, `repair`, `verifier`, and `synthesizer`. This gives the
-team a Claude Code-like review timeline without changing the contest artifact:
-`pred.csv` remains only `qid,answer`.
+`classifier`, `solver`, `repair`, `synthesizer`, `tie-breaker`, `verifier`,
+and deterministic adjudicators. This gives the team a Claude Code-like review
+timeline without changing the contest artifact: `pred.csv` remains only
+`qid,answer`.
 
 Trace review is intentionally separate from solving. `--review-trace` can be
 run after any trace-enabled workflow to catch low confidence, fallback paths,
-trace warnings, missing roles, and blocked steps. This mirrors the
-execute-then-verify split from coding agents while keeping the contest runtime
-simple.
+trace warnings, missing roles, blocked steps, and deterministic risk signals.
+This mirrors the execute-then-verify split from coding agents while keeping the
+contest runtime simple.
 
 Run manifests are written as `run-manifest.json` only for trace-enabled
 development runs. They capture config/input hashes and selected runtime options,

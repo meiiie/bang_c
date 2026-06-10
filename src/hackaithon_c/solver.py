@@ -4,18 +4,30 @@ from collections import Counter
 from dataclasses import replace
 
 from .calculation import adjudicate_calculation
+from .calibration import agreement_confidence, majority_vote, vote_distribution
 from .classifier import classify_problem
 from .config import HarnessConfig
 from .evidence import adjudicate_date_evidence, adjudicate_direct_evidence
 from .heuristic import fallback_answer
 from .model_client import ChatClient
 from .normalize import normalize_answer
-from .prompting import build_prompt, build_repair_prompt, build_verifier_prompt, tournament_variants
+from .prompting import (
+    build_prompt,
+    build_reasoning_prompt,
+    build_repair_prompt,
+    build_tiebreak_prompt,
+    build_verifier_prompt,
+    tournament_variants,
+)
 from .principles import adjudicate_principle
 from .schema import Prediction, Problem, ProblemProfile, TraceStep
 
 
 SolverStrategy = str
+
+# Agreement at or above this fraction is treated as a confident self-consistency vote;
+# below it the item is flagged (warning) as an escalation candidate for later phases.
+_CONFIDENT_AGREEMENT = 0.6
 
 
 def solve_problem(
@@ -71,6 +83,11 @@ def solve_problem(
         if strategy == "tournament":
             return _with_trace(
                 _solve_tournament(problem, profile, client, config=config, verify=verify),
+                trace,
+            )
+        if strategy == "self_consistency":
+            return _with_trace(
+                _solve_self_consistency(problem, profile, client, config=config),
                 trace,
             )
         return _with_trace(
@@ -568,19 +585,63 @@ def _solve_tournament(
         )
 
     counts = Counter(valid_answers)
-    answer, votes = counts.most_common(1)[0]
-    confidence = 0.78 + min(0.15, 0.05 * (votes - 1))
+    votes = max(counts.values())
+    tied_answers = tuple(
+        answer
+        for answer in problem.allowed_letters
+        if counts.get(answer, 0) == votes
+    )
+    answer = tied_answers[0]
+    distribution = ",".join(
+        f"{letter}:{counts[letter]}"
+        for letter in problem.allowed_letters
+        if counts.get(letter)
+    )
+    tie = len(tied_answers) > 1
+    confidence = 0.72 if tie else 0.78 + min(0.15, 0.05 * (votes - 1))
+    detail = f"votes={votes}/{len(valid_answers)}; distribution={distribution}"
+    if tie:
+        detail = f"{detail}; tied={','.join(tied_answers)}"
     trace_steps.append(
         TraceStep(
             role="synthesizer",
             action="majority_vote",
-            status="completed",
-            detail=f"votes={votes}/{len(valid_answers)}",
+            status="warning" if tie else "completed",
+            detail=detail,
             answer=answer,
         )
     )
 
-    if verify or votes == 1:
+    if tie:
+        raw_tiebreak, tiebreak = _break_tie(
+            problem,
+            client,
+            tied_answers,
+        )
+        if tiebreak in tied_answers:
+            attempts.append(("tiebreak", raw_tiebreak, tiebreak))
+            answer = tiebreak
+            confidence = max(confidence, 0.76)
+            trace_steps.append(
+                TraceStep(
+                    role="tie-breaker",
+                    action="answer_only_check",
+                    status="completed",
+                    detail="tie-breaker selected a tied answer",
+                    answer=tiebreak,
+                )
+            )
+        else:
+            trace_steps.append(
+                TraceStep(
+                    role="tie-breaker",
+                    action="answer_only_check",
+                    status="warning",
+                    detail="tie-breaker output was not one of the tied answers",
+                )
+            )
+
+    if verify or tie or votes == 1:
         raw_verifier, verified = _verify(problem, client, answer, config=config)
         if verified is not None:
             attempts.append(("verifier", raw_verifier, verified))
@@ -676,6 +737,197 @@ def _solve_tournament(
     )
 
 
+def _collect_reasoning_votes(
+    problem: Problem,
+    client: ChatClient,
+    samples: int,
+    *,
+    config: HarnessConfig,
+    label: str,
+) -> tuple[list[str], list[TraceStep]]:
+    """Sample `samples` reasoned answers from one client; return (answers, trace_steps)."""
+    prompt = build_reasoning_prompt(problem, max_tokens=config.reasoning_max_tokens)
+    answers: list[str] = []
+    trace_steps: list[TraceStep] = []
+    for index in range(max(1, samples)):
+        raw_answer = client.complete(
+            prompt.system_prompt,
+            prompt.user_prompt,
+            max_tokens=prompt.max_tokens,
+        )
+        normalized = normalize_answer(raw_answer, problem)
+        answers.append(normalized or "")
+        trace_steps.append(
+            TraceStep(
+                role="solver",
+                action=f"{label}:{index + 1}",
+                status="completed" if normalized else "warning",
+                detail=(
+                    "sample produced a valid answer letter"
+                    if normalized
+                    else "sample produced no valid answer letter"
+                ),
+                answer=normalized,
+            )
+        )
+    return answers, trace_steps
+
+
+def _vote_prediction(
+    problem: Problem,
+    profile: ProblemProfile,
+    model: str,
+    answers: list[str],
+    trace_steps: list[TraceStep],
+    *,
+    strategy: str,
+    fallback_reason: str,
+) -> Prediction:
+    """Turn collected votes into a Prediction with agreement-based confidence, or fall
+    back if no sample produced a valid letter."""
+    winner, votes, total = majority_vote(answers)
+    if winner is None:
+        raw = " | ".join(f"s{index + 1}={answer or '?'}" for index, answer in enumerate(answers))
+        return _fallback_prediction(
+            problem, profile, model, raw, fallback_reason, trace_steps=tuple(trace_steps)
+        )
+    confidence = agreement_confidence(votes, total)
+    distribution = vote_distribution(answers)
+    steps = list(trace_steps)
+    steps.append(
+        TraceStep(
+            role="synthesizer",
+            action="agreement_vote",
+            status="completed" if confidence >= _CONFIDENT_AGREEMENT else "warning",
+            detail=f"winner={winner}; agreement={votes}/{total}; distribution={distribution}",
+            answer=winner,
+        )
+    )
+    return Prediction(
+        qid=problem.qid,
+        answer=winner,
+        model=model,
+        raw_answer=f"{strategy} winner={winner} agreement={votes}/{total} dist={distribution}",
+        strategy=strategy,
+        confidence=confidence,
+        question_kind=profile.kind,
+        prompt_variant="reasoning",
+        attempts=len(answers),
+        trace=tuple(steps),
+    )
+
+
+def _solve_self_consistency(
+    problem: Problem,
+    profile: ProblemProfile,
+    client: ChatClient,
+    *,
+    config: HarnessConfig,
+) -> Prediction:
+    """Reasoning + self-consistency: sample k reasoned answers, majority-vote, confidence
+    = agreement fraction (calibrated, not hard-coded)."""
+    answers, trace_steps = _collect_reasoning_votes(
+        problem,
+        client,
+        config.self_consistency_samples,
+        config=config,
+        label="reasoning_sample",
+    )
+    return _vote_prediction(
+        problem,
+        profile,
+        client.model,
+        answers,
+        trace_steps,
+        strategy="gemma_self_consistency",
+        fallback_reason="invalid_self_consistency",
+    )
+
+
+def solve_with_challenge(
+    problem: Problem,
+    client: ChatClient,
+    challenger: ChatClient | None,
+    *,
+    config: HarnessConfig,
+) -> Prediction:
+    """Tiered, cross-model strategy: run self-consistency with the primary model; if the
+    agreement is below the challenge threshold, gather extra reasoned votes from an
+    INDEPENDENT challenger model and re-tally over the combined pool. A different model
+    breaks the same-model self-confirmation bias, and escalation only fires on uncertain
+    items so the time budget is spent where it changes the answer. Degrades to plain
+    self-consistency when no challenger is provided.
+
+    Not yet wired into the CLI dispatch: constructing a second provider client needs a
+    real model to validate, so the CLI keeps `challenger=None` until then. The logic here
+    is fully unit-tested with stub clients.
+    """
+    profile = classify_problem(problem, config)
+    answers, trace_steps = _collect_reasoning_votes(
+        problem,
+        client,
+        config.self_consistency_samples,
+        config=config,
+        label="reasoning_sample",
+    )
+    _, votes, total = majority_vote(answers)
+    agreement = agreement_confidence(votes, total)
+
+    if challenger is not None and agreement < config.self_consistency_challenge_threshold:
+        challenger_answers, challenger_trace = _collect_reasoning_votes(
+            problem,
+            challenger,
+            config.challenger_samples,
+            config=config,
+            label="challenger_sample",
+        )
+        trace_steps = trace_steps + [
+            TraceStep(
+                role="challenger",
+                action="cross_model_escalation",
+                status="completed",
+                detail=(
+                    f"primary_agreement={votes}/{total}; "
+                    f"threshold={config.self_consistency_challenge_threshold}; "
+                    f"challenger={challenger.model}"
+                ),
+            )
+        ] + challenger_trace
+        return _vote_prediction(
+            problem,
+            profile,
+            client.model,
+            answers + challenger_answers,
+            trace_steps,
+            strategy="gemma_self_consistency_challenged",
+            fallback_reason="invalid_self_consistency_challenged",
+        )
+
+    return _vote_prediction(
+        problem,
+        profile,
+        client.model,
+        answers,
+        trace_steps,
+        strategy="gemma_self_consistency",
+        fallback_reason="invalid_self_consistency",
+    )
+
+
+def _break_tie(
+    problem: Problem,
+    client: ChatClient,
+    tied_answers: tuple[str, ...],
+) -> tuple[str, str | None]:
+    prompt = build_tiebreak_prompt(problem, tied_answers)
+    raw_tiebreak = client.complete(
+        prompt.system_prompt,
+        prompt.user_prompt,
+        max_tokens=prompt.max_tokens,
+    )
+    return raw_tiebreak, normalize_answer(raw_tiebreak, problem)
+
+
 def _verify(
     problem: Problem,
     client: ChatClient,
@@ -766,6 +1018,10 @@ def _classification_step(profile: ProblemProfile) -> TraceStep:
     )
     if profile.reasons:
         detail = f"{detail}; reasons={','.join(profile.reasons)}"
+    if profile.features:
+        detail = f"{detail}; features={','.join(profile.features)}"
+    if profile.diagnostics:
+        detail = f"{detail}; diagnostics={','.join(profile.diagnostics)}"
     return TraceStep(
         role="classifier",
         action="profile_problem",

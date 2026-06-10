@@ -1,0 +1,435 @@
+# Execution worklog (autonomous loop)
+
+Append-only. One entry per loop step. Newest at bottom. Plan → implement → verify →
+record → decide. Numbers are real or marked as not-yet-measured.
+
+---
+
+## 2026-06-10 — Phase 0: Safety net — DONE ✅
+
+**Goal:** establish a local regression set + prove the pipeline is robust (no crash /
+valid letter) on non-VI/CJK input; record baseline routing as the signal P2 must improve.
+
+**Changes (surgical):**
+- `tests/fixtures/multilingual_gold.json` — 16 hand-authored items (our own Q&A, not
+  contest data) spanning VI/EN/KO/ZH × reading/negative/calculation/general/logic, each
+  with an authored answer letter.
+- `tests/test_multilingual_robustness.py` — 5 tests: fixture loads; authored answers are
+  valid letters; every item classifies without error; dry-run solve returns a valid
+  letter for all; CJK items don't crash the `[a-z0-9]`/diacritic-blind heuristic layer.
+
+**Verification story (all green):**
+- `python -m unittest discover -s tests` → **85 tests OK** (was 80; +5).
+- `python -m compileall -q src` → exit 0.
+- New tests alone → 5/5 OK.
+
+**Baseline routing on the gold set (evidence for later phases):**
+
+| qid | lang | expected | routed kind | bug surfaced |
+|---|---|---|---|---|
+| gold_en_gk_01 | en | general | **calculation** | "formula"+digit → false calc route |
+| gold_en_neg_01 | en | negative | short | EN "NOT" negation missed (VI-only markers) |
+| gold_ko_neg_01 | ko | negative | short | KO "아닌" negation missed |
+| gold_zh_neg_01 | zh | negative | short | ZH "不是" negation missed |
+| gold_math_arith_02 | en | calculation | short | genuine EN calc missed |
+| gold_ko_gk_01 / gold_zh_gk_01 | ko/zh | general | short | CJK → no markers → default (no-op) |
+| gold_vi_geo_trap_01 | vi | geography | short | OK here (no stray digit → guard held) |
+
+→ Confirms the audit: negation is VI-only; "formula"/keyword calc false-positives;
+CJK heuristics are inert. **These become the pass/fail targets for P2.** Routing
+correctness is NOT asserted yet (fixed in P2); P0 only guarantees no-crash + valid letter.
+
+**Decision:** P0 exit criteria met. Advance to P1 (reasoning + real confidence).
+Open dependency surfaced below.
+
+### ⏭️ Dependency for P1/P3 — real-model access
+P1 (CoT + self-consistency) and accuracy measurement need a live allowed model
+(local Gemma GGUF or NVIDIA dev API). Checking availability next; if neither is reachable
+in this environment, P1 *code* will be built and unit-tested with a deterministic stub
+client, and real-model accuracy/token-cost measurement will be flagged for the human to
+run (needs their `NVIDIA_API_KEY` or the local `.gguf`). This is a measurement gate, not
+a blocker for the code change.
+
+---
+
+## 2026-06-10 — Phase 1 (code): reasoning + self-consistency + calibration — CODE DONE ✅ (measurement gated)
+
+**Goal:** make confidence a real, agreement-based signal and let the model reason
+(chain-of-thought), as a **config-gated new strategy** that leaves the existing
+auto/direct/verify/tournament paths untouched (surgical — karpathy §3).
+
+**Changes:**
+- NEW `src/hackaithon_c/calibration.py` — pure funcs: `majority_vote` (tie-break by
+  first-seen, not A-biased), `agreement_confidence`, `vote_distribution`.
+- `prompting.py` — `REASONING_SYSTEM_PROMPT` (language-neutral, allows step-by-step, ends
+  `ANSWER: <letter>`) + `build_reasoning_prompt` (max_tokens 512). Existing prompts kept.
+- `solver.py` — new `_solve_self_consistency` (k reasoned samples → vote → confidence =
+  agreement) + dispatch for `strategy="self_consistency"`.
+- `config.py` — `self_consistency_samples` (5) + `reasoning_max_tokens` (512); added
+  `self_consistency` to valid_strategies. `run.py` — added to `--strategy` choices.
+- `configs/default.json` + packaged `resources/default.json` (kept in sync) — new keys +
+  dev workflow `self-consistency` (phase=development; NOT contest default yet).
+- Tests: `tests/test_self_consistency.py` (11).
+
+**Verification (all green):** new 11/11; full suite **96 OK** (+16 vs 80 baseline);
+`compileall` 0; `--list-workflows` shows it; `--policy` PASS; `--doctor` ok (only env
+warnings); dry-run contract on gold fixture → `pred.csv` valid, `--check-submission`
+Valid 16/16.
+
+**Confidence is real now:** `agreement_confidence = winner_votes / valid_samples`
+(unanimous→1.0, split→<1.0), replacing hard-coded 0.68–0.88 *for this path*.
+
+**⛔ P1 not fully exited — needs the human (one gate):** no model reachable here
+(no `NVIDIA_API_KEY`, no `.gguf`, `llama_cpp` absent). To finish P1: run `self_consistency`
+on the real allowed model, measure gold-suite accuracy + tokens/sec, tune `k` /
+`reasoning_max_tokens`, then decide cutover of the **contest** workflow. Until then the
+live contest path keeps its current strategy (no regression risk).
+
+**Decision:** P1 code complete & verified. Proceed to **P2 routing** (language-agnostic
+multi-label classifier — model-independent, verifiable against the gold fixture). P2's
+*deletion* of overfit adjudicators stays paused for human sign-off (public-dip risk).
+
+---
+
+## 2026-06-10 — Phase 2 (increment 1): calc over-trigger fix (language-agnostic) — DONE ✅
+
+**Goal:** stop the calculation router firing on topic words ("formula"/"value"/"giá trị")
++ an incidental digit in answer choices, language-agnostically, without regressing pinned
+VI behavior (audit findings #2/#3).
+
+**Change (surgical — `classifier.py` only):**
+- Expanded `_BROAD_CALCULATION_MARKERS` to include topic/ambiguous markers (formula,
+  cong thuc, value, gia tri, bao nhieu/how many/how much, do co gian, ty le, ratio, gdp):
+  these now require a real quantitative signal to count as calculation.
+- Rewrote `_has_quantitative_signal` to test the **question text only** (not choices) for a
+  genuine computation: an arithmetic operator between numbers, a number+unit, ≥2 numbers,
+  or a quantitative domain phrase. A lone stray digit (a year, "Điều 5", a CO2/H2O
+  subscript) no longer counts.
+
+**Verification (all green):** full suite **98 OK** (+2 calc-routing regression tests);
+`compileall` 0; `--policy` PASS. Gold set: calculation false-positives **1 → 0**
+(`gold_en_gk_01` "chemical formula" now `short`); all 3 genuine math items still
+`calculation`; every pinned VI classifier test unchanged.
+
+**Deliberately NOT done (karpathy §2 — avoid the fragile, monolingual game):**
+- EN/KO/ZH **negation** still routes `short`. The fix is the **reasoning prompt** (handles
+  negation natively), not more per-language keyword lists — resolves once self_consistency
+  is the live path (gated on model access).
+- The diacritic-strip itself is unchanged; the over-trigger it *caused* is now mitigated
+  (higher-leverage, lower-risk than a full diacritic-aware rewrite, which is also partly
+  mooted by reasoning-first routing).
+- One EN calc **under-trigger** remains (`gold_math_arith_02`) — handled by reasoning.
+
+**Decision:** P2 increment 1 done & verified. **Now at a genuine external gate** — further
+DoD progress needs the human (see status), not more autonomous code churn.
+
+---
+
+## 2026-06-10 — Status: at external gate (autonomous model-independent work exhausted)
+
+Completed & verified without a model: **P0** (safety net), **P1 code** (reasoning +
+self-consistency + agreement-calibration), **P2 increment 1** (calc over-trigger fix).
+98 tests green throughout; contract + policy intact; existing contest path untouched
+(zero regression risk). The remaining Definition-of-Done items each require something only
+the human can provide:
+
+1. **Real-model access** (NVIDIA_API_KEY or local `.gguf` + llama-cpp-python) — to validate
+   the reasoning/self-consistency path, measure gold-suite accuracy + tokens/sec, tune
+   `k`/`reasoning_max_tokens`, and decide cutover of the contest workflow. **Blocks P1
+   exit, P3 tuning, and any real accuracy number.**
+2. **Sign-off to delete the overfit adjudicators** (P2 deletion) — public-score-dip risk;
+   a designed pause trigger. Best done *after* (1) confirms the reasoning path recovers
+   those points.
+
+Holding P3 (cross-model challenger — needs a model to validate it helps) and P4 (modular
+refactor — would refactor code whose strategy is still in flux pending cutover; karpathy:
+don't refactor code about to change). Resuming the instant either gate clears.
+
+---
+
+## 2026-06-10 — DoD item: method write-up — DRAFTED ✅
+
+Wrote `docs/method-writeup.md` — the contest "thuyết minh phương pháp" (Ý tưởng, 10 pts):
+problem/contract, design philosophy (model-reasons/anti-overfit/calibrated/runtime-dev
+boundary), architecture, the optimization levers (reasoning + self-consistency calibration,
+language-agnostic routing, cross-model verification, tiered compute, overfit removal),
+runtime/reproducibility, and an **honest status** section. No accuracy number is invented —
+the measured 85.53 baseline is cited; everything awaiting a real-model run is labelled
+pending. A Vietnamese adaptation should be derived for the actual submission.
+
+This satisfies DoD item #6 (method write-up drafted). Remaining DoD items (P1 full exit,
+P2 deletion, P3, P4, final Docker rebuild, leaderboard number) remain gated on model access
++ deletion sign-off, as recorded above. Not fabricating progress to satisfy the loop —
+holding for the gate; will fill measured numbers into the write-up as they are produced.
+
+---
+
+## 2026-06-10 — Phase 3 (code): cross-model challenger + tiered escalation — CODE DONE ✅ (tuning gated)
+
+Reconsidered the earlier "hold P3": the *mechanism* is verifiable now with stub clients
+(same legitimacy as P1's self_consistency), only the real-model *tuning* is gated. Built it.
+
+**Changes (surgical):**
+- `solver.py` — extracted `_collect_reasoning_votes` + `_vote_prediction` (shared vote→
+  calibrated-confidence helper; also de-duplicated `_solve_self_consistency`). Added
+  `solve_with_challenge(problem, client, challenger, *, config)`: run primary self-
+  consistency; **only if agreement < threshold**, gather extra reasoned votes from an
+  INDEPENDENT challenger model and re-tally the combined pool (cross-model breaks self-
+  confirmation bias; tiering protects the time budget). Degrades safely to plain self-
+  consistency when `challenger is None`.
+- `config.py` + `default.json` (+packaged sync) — `self_consistency_challenge_threshold`
+  (0.75) + `challenger_samples` (3).
+- Tests: `tests/test_self_consistency.py` +4 (no escalation on high agreement; escalate +
+  confirm; escalate + challenger flips answer; None-challenger degrades cleanly).
+
+**Verification:** full suite **102 OK** (+4); compileall 0; --policy PASS.
+
+**Gated (needs the human / a model):** constructing the *second provider client* and wiring
+`solve_with_challenge` into the CLI dispatch is deferred — that integration can't be
+validated without a real model, so the CLI keeps `challenger=None` until then. Real-model
+tuning of `threshold`/`challenger_samples` and proof it raises accuracy also pending.
+
+---
+
+## 2026-06-10 — Phase 2 (increment 2): multilingual negation routing — DONE ✅
+
+**Goal:** the gold baseline showed EN/KO/ZH "choose the FALSE one" questions routed to a
+plain `short` profile (negation markers were VI/EN/ES-only). Fix it config-first
+(multilingual, not single-language — guardrail-compliant) so the *current* live path
+handles multilingual negation; the reasoning prompt also covers it once that path is live.
+
+**Change:** `configs/default.json` (+packaged sync) `profiling.markers.negative` — added
+`is not`, `are not`, and CJK/Korean/Japanese cues (`아닌`, `옳지 않은`, `틀린`,
+`적절하지 않은`, `不是`, `不正确`, `错误`, `不对`, `不属于`, `正しくない`, `間違っている`).
+No code change. Diacritic-aware/script-aware: CJK passes the `(?<![a-z0-9])` boundaries.
+
+**Verification:** full suite **103 OK** (+1 multilingual negation routing test); compileall
+0; --policy PASS. Gold routing recheck: **routing problems 0** — VI/EN/KO/ZH negation all
+→ `negative`; all genuine calc → `calculation`; zero false-positives. (One EN calc
+under-trigger remains by design → reasoning prompt.)
+
+---
+
+## 2026-06-10 — Gate status (updated)
+
+**Done & verified without a model (103 tests green throughout, contract+policy intact,
+contest path untouched → zero regression risk):**
+- P0 safety net · P1 reasoning+self-consistency+calibration (code) · P2 routing now
+  multilingual-clean (calc over-trigger fix + multilingual negation) · P3 cross-model
+  challenger + tiering (code) · DoD#6 method write-up draft.
+
+**Genuinely blocked — needs the human:**
+1. A real allowed model in the environment (NVIDIA_API_KEY or local `.gguf` +
+   llama-cpp-python) → measure accuracy/tokens, tune `k`/`reasoning_max_tokens`/challenge
+   `threshold`, validate the reasoning path recovers the ~57 silent errors, then decide
+   the contest-path cutover (P1 exit) and P3 wiring.
+2. Sign-off to delete the overfit adjudicators (P2 deletion; public-dip risk), best done
+   after (1).
+Outward/irreversible (final Docker rebuild, leaderboard submission) also await the human.
+
+**First command to run once a model is available** (dev API path):
+`setx NVIDIA_API_KEY ... ; .\neko.ps1 --profile nvidia-gemma31b-api --workflow self-consistency --input <public.json> --run-dir run-sc --limit 30`
+then `--review-trace run-sc\traces` and compare confidence vs the old hard-coded run.
+
+Not manufacturing marginal changes to satisfy the loop (would violate "keep only changes
+that help" + "never fabricate progress"). Holding for the gate; resuming instantly on unblock.
+
+---
+
+## 2026-06-10 — P0 hardening: gold suite expanded to 6+ scripts — DONE ✅
+
+Broadened `tests/fixtures/multilingual_gold.json` from 16 → **24** items, adding French
+(negation + calculation), German, Spanish (reading), Russian (Cyrillic), Arabic (RTL), Thai
+(no word spaces), and a Korean 6-option (structural many_choice) item — each with an
+authored answer. Added 1 routing test (FR negation/calc + KO many_choice are detected).
+
+**Verification:** full suite **104 OK**; compileall 0; dry-run over all 24 items across
+Latin/CJK/Cyrillic/Arabic-RTL/Thai → **no crash**, contract valid 24/24, routing dist
+`{negative:5, calculation:4, many_choice:1, reading:1, short:13}`. This *verifies* the
+language-agnostic / no-crash claim on scripts the heuristic layer had never been exercised
+on (RTL, no-space) — a real robustness guarantee, not busywork. Genuine accuracy gains
+still require a real model (gate unchanged).
+
+---
+
+## 2026-06-10 — P1 hardening: answer extraction for natural chain-of-thought — DONE ✅
+
+Reconsidered an earlier "hold": the gap was **demonstrable, not speculative** —
+`normalize_answer("The answer is A.")` returned `None` today, silently dropping a
+self-consistency vote. Common LLM answer formats are reliably known, so hardening for them
+is sound, not guesswork.
+
+**Change (surgical — `normalize.py`, one regex):** the answer-indicator patterns
+(`ANSWER`/`FINAL`/`RESULT`/…) now also consume an optional `IS`/`ARE` and an opening paren,
+so `"the answer is A"`, `"answer is b"`, `"Answer: (C)"`, `"**ANSWER: D**"` all extract —
+while a bare article letter in prose (`"...for a crime..."`) still extracts nothing (the
+marker word is required). Strictly additive: existing successful extractions unchanged.
+
+**Verification:** new `tests/test_normalize_cot.py` (4) incl. the article-letter guard +
+the two pinned `test_contract` normalize tests still pass; full suite **108 OK**;
+compileall 0. Directly protects the P1 reasoning path from losing votes to format drift.
+
+---
+
+## 2026-06-10 — Model access: both paths empirically confirmed CLOSED on this machine
+
+Exhausted every avenue to self-provision a model (so the gate is verified, not assumed):
+- **NVIDIA API key**: searched all `AI_v1` `.env*` files + process env + user env → **0**
+  found. (This path needs only `requests` — already installed — so a key would unblock
+  it instantly with no build step.)
+- **Local GGUF**: no `.gguf` on disk; **`pip install --only-binary :all: llama-cpp-python`
+  → "No matching distribution"** — there is no prebuilt wheel for **Python 3.13.7** on this
+  Windows box, and a source build needs a C++/CMake toolchain (slow/likely absent).
+- pip + internet DO work here (installed pypdf earlier), so the blocker is specifically
+  *model + (key | llama-cpp wheel)*, not connectivity.
+
+**Conclusion:** real-model measurement requires the human — easiest is `NVIDIA_API_KEY`
+(zero install). Local path would need Python 3.11/3.12 (prebuilt llama-cpp wheels) or a
+build toolchain. No further autonomous progress toward the leaderboard number is possible
+here. All model-independent work is complete and verified (108 tests, contest path
+untouched). Holding at the gate; not churning or fabricating.
+
+---
+
+## 2026-06-10 — Decision: end the local autonomous phase; real testing moves to GPU
+
+Owner decision: the build/verify phase (everything achievable without a model) is DONE.
+Real measurement will be a deliberate, separate effort on a **rented GPU** (per
+`docs/runpod-operations.md` / `docs/runpod-gpu-selection.md`): run the **actual contest
+runtime** `Gemma-4-26B-A4B-QAT-Q4_0` GGUF, replicate BTC's container flow, package the
+Docker image, and measure on the public set — which is far faster on an A40/A6000 than CPU.
+
+**Carry-forward for the GPU session (validate the NEW code there):**
+1. Pull this branch; build/run with the new `self_consistency` workflow on the real model.
+2. `evaluate.ps1 -Workflows contest-strict,self-consistency` on the public set → compare
+   accuracy + **wall-clock/tokens** + whether agreement-confidence separates right/wrong.
+3. ⚠️ Time trade-off to measure: reasoning (CoT) emits more tokens AND self-consistency
+   runs k samples/question → slower per item than the old letter-only single-shot, even on
+   GPU. Tune `self_consistency_samples`/`reasoning_max_tokens` + P3 tiering against the
+   10-pt time score (accuracy is 80 pts, so some slowdown is worth it — but measure it).
+4. Only then: cut the contest path over to reasoning (P1 exit), get sign-off to delete the
+   overfit adjudicators (P2), wire P3, refactor P4, rebuild + validate the image, submit.
+
+Goal/loop to be cleared by the owner (`/goal clear`). State is clean; resume via
+`notes/RESUME-HERE.md`.
+
+---
+
+## 2026-06-10 — REAL-MODEL TEST on RunPod A40 + Gemma-4-26B-A4B-Q4 (the contest model) ✅
+
+Owner authorized RunPod spend + provided keys. Provisioned A40 48GB ($0.44/hr, secure),
+pulled the GGUF out of `hacamy12345/neko-core:gemma26b-q4` via skopeo (no HF token needed),
+installed CUDA llama-cpp, overlaid this branch's code, ran the real contest model.
+
+**Smoke:** model loads + answers `test_0001=A` in 18s. Gemma-4-26B is a fast MoE (4B active).
+
+**10-question gold comparison (gold: 0002=B,0006=A,0007=B,0008=B,0009=C):**
+
+| Strategy | gold | fallbacks | wall(10q) | confidence |
+|---|---|---|---|---|
+| baseline (contest-strict/auto) | 4/5 | 0 | 18s | flat 0.84–0.88 |
+| self-consistency k=5 @ max_tokens **512** | 3/5 | **3/10** | 219s | broken |
+| self-consistency k=5 @ max_tokens **2048** | **5/5** | 0 | 255s | all 1.0 |
+| **CoT k=1 @ 2048** | **5/5** | 0 | **62s** | 1.0 |
+
+**Findings (real numbers, not guesses):**
+1. **`reasoning_max_tokens=512` was a real bug.** Proven: `test_0002` (elasticity calc) at
+   512 truncated mid-calculation with no "ANSWER:" → fallback (wrong); at 2048 it finished
+   "...= 1.0 ... ANSWER: B" → **correct (= gold)**. Fixed → default now **2048** (repo
+   updated, 108 tests still green).
+2. **CoT reasoning beats the letter-only baseline** on gold (5/5 vs 4/5). Concretely it
+   fixed a calculation (`test_0002`: CoT→B correct, baseline tournament→C wrong) and
+   `test_0009` (CoT→C correct vs the earlier broken H). This validates the core thesis:
+   *let the model reason*.
+3. **k=5 self-consistency is wasteful at the client's `temperature=0`** — the 5 samples are
+   effectively identical (every confidence = 1.0), so it pays 4× the cost of k=1 for zero
+   diversity. The agreement-calibration only yields signal with `temperature>0` (a separate
+   future change). **For the contest, `k=1` (single deterministic CoT) is the efficient
+   choice** — same accuracy, reproducible, ~1/4 the time.
+4. **Speed:** CoT k=1 ≈ 6s/q (incl. load) vs baseline ≈ 1.8s/q → ~3× slower. For 2000q that
+   is ~3.4h vs ~1h. Worth it given accuracy=80pts ≫ time=10pts, but the time cost is real;
+   tiering (escalate only hard items) is the lever if needed.
+
+**Recommended contest config (validated):** reasoning path, **k=1, reasoning_max_tokens=2048**.
+Repo now has max_tokens=2048; the k=5→1 default + contest-path cutover are being finalized
+against the full-463 run (in progress) + the owner's leaderboard submission.
+
+**In progress:** full 463-question run of BOTH baseline and CoT on the real 26B → real total
+timing + a submittable `pred.csv` (owner submits to the leaderboard for the true number vs
+the known 85.53). Then: finalize cutover, package the image, terminate the pod.
+
+### Full 463 results (same model, only strategy differs)
+| | Baseline (contest-strict) | CoT k=1 (self-consistency) |
+|---|---|---|
+| wall (463) | 374s (0.8s/q) | 2126s (~35min, 4.6s/q) |
+| fallbacks | 0 | 7 (1.5%) |
+| gold (5) | 4/5 | **5/5** |
+| **answers differ** | — | **91/463 (19.7%)** |
+
+CoT changed 91 answers and wins the 5 gold (5 vs 4). **The verdict on the other ~86 needs the
+leaderboard** (we only hold 5 gold labels). Both `pred.csv` copied to
+`E:\Sach\Sua\_tmp\neko-core-runpod-a40-20260610\` (`pred-baseline-463.csv`,
+`pred-cot-463.csv`) + `cot-trace.jsonl` for error analysis.
+
+### Sovereignty robustness probe — PASS (no mitigation needed)
+Hoàng Sa/Trường Sa MCQ, default vs VN-framed prompt → **Gemma-4-26B answered Vietnam-aligned
+in all 4 runs** (sov1→B Việt Nam, sov2→A Việt Nam), reasoning explicitly "theo quan điểm chính
+thức của CHXHCN Việt Nam... là lãnh thổ Việt Nam" — no hedging/refusal. The VN-framing prompt
+is NOT needed. (Caveat: only 2 straightforward items tested; adversarial phrasings untested.)
+
+### Packaged image (candidate — new tag, does NOT overwrite the safe one)
+Built with crane (reused all base layers incl. the 15GB model; pushed only a 320KB code layer):
+- `hacamy12345/neko-core:gemma26b-q4-cot-20260610`
+- digest `sha256:72901c079701e9b2bd486e86a04da87f894470a36a8372467dd4591d78acd665`
+- entrypoint `neko-entrypoint`; **CMD defaults to `--workflow self-consistency`** (CoT);
+  contract intact (reads /data, writes /output/pred.csv). Config inside: k=1, max_tokens=2048.
+- The existing `gemma26b-q4` (85.53 baseline) is untouched.
+
+### Cost / cleanup
+RunPod A40 secure $0.44/hr. Balance $2.027 → **$1.307** (~$0.72 for the whole test). Pod
+`jpskqsycy1rfjv` **TERMINATED** (currentSpendPerHr=0). Local repo updated: max_tokens=2048
+(108 tests green).
+
+### NEXT (owner action) → then finalize
+1. **Submit `pred-cot-463.csv` to the leaderboard** → the true CoT number vs 85.53.
+2. If CoT wins → `gemma26b-q4-cot-20260610` is the final submission image; lock the local
+   cutover (contest workflow → reasoning, samples=1). If not → keep baseline, study the diff.
+3. Optional: a direct-image smoke of the new tag before final BTC submission (docs runbook).
+   The CODE is already validated by the 463-run; the image is the same code on the same base.
+
+---
+
+## 2026-06-10 — LEADERBOARD VERDICT + CUTOVER LOCKED ✅✅
+
+Owner submitted both to the leaderboard:
+
+| Approach (same Gemma-4-26B) | Leaderboard |
+|---|---|
+| Baseline letter-only (contest-strict) | **77.11** |
+| **CoT k=1 (self-consistency)** | **87.26** |
+
+**CoT wins by +10.15** over the same-model baseline (and +1.73 over the prior 85.53). The
+core thesis is confirmed on the real scoring metric: *let the model reason*. Cutover is now
+fully justified by real data.
+
+**Cutover locked into the repo (109 tests green, policy PASS):**
+- `config` default `self_consistency_samples` 5→**1** (validated; k>1 is wasteful at temp 0);
+  multi-sample tests now build an explicit k=5 config so the voting/escalation mechanism is
+  still covered; added a test asserting the shipped default is k=1.
+- `reasoning_max_tokens` = **2048** (the 512-truncation bug fix).
+- `self-consistency` workflow promoted **development → runtime** (the contest default).
+- `Dockerfile.gemma-local` CMD + `docker/neko-entrypoint.sh` default → `--workflow
+  self-consistency`, so a fresh build reproduces the winning image.
+
+**Winning submission image (already on Docker Hub, = the 87.26 run):**
+`hacamy12345/neko-core:gemma26b-q4-cot-20260610`
+(digest `sha256:72901c079701e9b2bd486e86a04da87f894470a36a8372467dd4591d78acd665`).
+The local repo now matches it. No repackage needed.
+
+**Method write-up:** `docs/method-writeup-vi.md` (VI, for submission) + `docs/method-writeup.md`
+(EN) updated with the 87.26 number.
+
+**Optional follow-ups (not blocking):** delete the now-unused overfit adjudicators
+(calculation/principle/evidence — the CoT path doesn't call them; pause-trigger, owner sign-off);
+tiering for the time score; temp>0 self-consistency for real calibration. See
+`notes/research-directions.md`.

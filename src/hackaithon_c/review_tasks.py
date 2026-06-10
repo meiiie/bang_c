@@ -75,6 +75,8 @@ def _task_from_finding(finding: ReviewFinding, *, index: int) -> ReviewTask:
 def _priority(finding: ReviewFinding) -> str:
     if finding.severity == "fail":
         return "high"
+    if finding.code in {"risk_agent_disagreement", "risk_tournament_tie"}:
+        return "medium"
     if finding.code in {"fallback_path", "trace_warning", "low_confidence"}:
         return "medium"
     return "low"
@@ -93,6 +95,16 @@ def _recommended_action(finding: ReviewFinding) -> str:
         return "Inspect the raw model output and input shape before changing prompts."
     if finding.code == "trace_warning":
         return "Compare solver, repair, verifier, and synthesizer steps for drift."
+    if finding.code == "risk_agent_disagreement":
+        return "Inspect competing answers in the trace and rerun with a focused adjudicator."
+    if finding.code == "risk_tournament_tie":
+        return "Inspect the tie-breaker and verifier prompts before trusting the selected answer."
+    if finding.code == "risk_broad_marker_ignored":
+        return "Confirm the ignored broad marker is not the real task type before changing classifier rules."
+    if finding.code.startswith("risk_compound_"):
+        return "Check whether the selected strategy covered every detected task feature."
+    if finding.code == "risk_quality_low_confidence":
+        return "Queue for human or stronger-model review if this item affects leaderboard accuracy."
     if finding.code in {"trace_blocked", "invalid_contract", "trace_count_mismatch"}:
         return "Fix the contract or blocked trace before trusting this run."
     if finding.code in {"missing_summary", "missing_trace", "missing_manifest"}:

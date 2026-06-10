@@ -41,6 +41,10 @@
     "allowed_model_families": ["gemma-4", "qwen3.5"],
     "allowed_embedding_families": ["bge-m3", "qwen-rerank"],
     "default_strategy": "auto",
+    "self_consistency_samples": 1,
+    "reasoning_max_tokens": 2048,
+    "self_consistency_challenge_threshold": 0.75,
+    "challenger_samples": 3,
     "max_retries": 6,
     "retry_base_delay_seconds": 1.5,
     "retry_max_delay_seconds": 30,
@@ -113,6 +117,13 @@
       "verify": true,
       "dry_run": false,
       "phase": "development"
+    },
+    "self-consistency": {
+      "description": "CONTEST DEFAULT: chain-of-thought reasoning (k=1) with answer extraction. Language-neutral. Leaderboard 2026-06-10: 87.26 vs 77.11 letter-only baseline.",
+      "strategy": "self_consistency",
+      "verify": false,
+      "dry_run": false,
+      "phase": "runtime"
     }
   },
   "profiling": {
@@ -159,7 +170,20 @@
         "falso",
         "excepto",
         "no es correcto",
-        "no es correcta"
+        "no es correcta",
+        "is not",
+        "are not",
+        "아닌",
+        "옳지 않은",
+        "틀린",
+        "적절하지 않은",
+        "不是",
+        "不正确",
+        "错误",
+        "不对",
+        "不属于",
+        "正しくない",
+        "間違っている"
       ],
       "calculation": [
         "tinh",

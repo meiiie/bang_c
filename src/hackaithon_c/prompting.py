@@ -19,6 +19,18 @@ Rules:
 - Do not include explanation, punctuation, or markdown."""
 
 
+REASONING_SYSTEM_PROMPT = """You are a careful exam solver for multiple-choice questions.
+The question may be written in any language (Vietnamese, English, Chinese, Korean, ...).
+Read it in its own language; do not assume any particular language.
+Think step by step to find the single best option. Pay attention to:
+- negation (words meaning "not", "incorrect", "except", "false") — these flip the target;
+- any calculation the question requires — compute it before comparing to the options.
+Use only the information in the question and its options.
+Finish with a final line in exactly this format:
+ANSWER: <letter>
+where <letter> is one of the available option letters."""
+
+
 @dataclass(frozen=True)
 class PromptBundle:
     system_prompt: str
@@ -71,6 +83,24 @@ def build_verifier_prompt(problem: Problem, candidate_answer: str) -> PromptBund
     return PromptBundle(SYSTEM_PROMPT, user_prompt, "verifier", max_tokens=64)
 
 
+def build_tiebreak_prompt(problem: Problem, tied_answers: tuple[str, ...]) -> PromptBundle:
+    tied_options = []
+    for letter in tied_answers:
+        if letter in problem.allowed_letters:
+            index = problem.allowed_letters.index(letter)
+            tied_options.append(f"{letter}. {problem.choices[index]}")
+    user_prompt = (
+        "Break the tie between candidate answers for this multiple-choice item.\n"
+        "Do not assume the first candidate is correct. Compare the tied options "
+        "against the question and all answer choices from scratch.\n"
+        "Return only the best tied answer letter.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Tied candidates:\n{chr(10).join(tied_options)}\n\n"
+        f"Return exactly one letter from: {', '.join(tied_answers)}"
+    )
+    return PromptBundle(SYSTEM_PROMPT, user_prompt, "tiebreak", max_tokens=64)
+
+
 def build_repair_prompt(problem: Problem, invalid_answer: str) -> PromptBundle:
     user_prompt = (
         "Your previous response did not follow the required format.\n"
@@ -82,10 +112,23 @@ def build_repair_prompt(problem: Problem, invalid_answer: str) -> PromptBundle:
     return PromptBundle(SYSTEM_PROMPT, user_prompt, "repair", max_tokens=16)
 
 
+def build_reasoning_prompt(problem: Problem, *, max_tokens: int = 512) -> PromptBundle:
+    user_prompt = (
+        "Solve this multiple-choice question. Reason briefly, then commit to one letter.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Available letters: {_letters(problem)}\n"
+        "End your answer with a line: ANSWER: <letter>"
+    )
+    return PromptBundle(REASONING_SYSTEM_PROMPT, user_prompt, "reasoning", max_tokens=max_tokens)
+
+
 def tournament_variants(profile: ProblemProfile) -> tuple[str, ...]:
-    if profile.kind == "calculation":
+    features = set(profile.features)
+    if "has_calculation" in features and "has_many_choices" in features:
+        return ("calculation", "direct", "elimination")
+    if "has_calculation" in features or profile.kind == "calculation":
         return ("calculation", "direct")
-    if profile.kind in {"many_choice", "negative"}:
+    if "has_negative" in features or profile.kind in {"many_choice", "negative"}:
         return ("elimination", "direct", "evidence")
     if profile.kind == "reading":
         return ("evidence", "direct")

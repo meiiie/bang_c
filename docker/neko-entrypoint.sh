@@ -17,7 +17,7 @@ if [[ "$#" -gt 0 ]]; then
 fi
 
 exec python -m hackaithon_c.run \
-  --workflow contest-strict \
+  --workflow self-consistency \
   --data-dir /data \
   --output-dir /output \
   --run-dir /output/neko-run \

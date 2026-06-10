@@ -12,7 +12,10 @@ def normalize_answer(raw_answer: str, problem: Problem) -> str | None:
         return text
 
     for marker in ("ANSWER", "FINAL", "RESULT", "DAP AN", "KET QUA"):
-        pattern = rf"\b{marker}\b\s*[:=\-]?\s*([A-Z])\b"
+        # Accept natural chain-of-thought endings too: "ANSWER: A", "the answer is A",
+        # "Answer: (C)". The leading marker word is required, so bare article letters in
+        # prose ("...for a crime...") are never extracted.
+        pattern = rf"\b{marker}\b(?:\s+(?:IS|ARE))?\s*[:=\-]?\s*\(?\s*([A-Z])\b"
         matches = re.findall(pattern, text)
         for candidate in reversed(matches):
             if candidate in allowed:
