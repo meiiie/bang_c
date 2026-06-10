@@ -487,3 +487,25 @@ accuracy-per-cost in the research: ~free, +0.5–1.5pp, also yields the MSP rout
 — needs llama.cpp low-level API, build against the real model; (2) obtain a Qwen3.5-8/9B
 GGUF and run dual-greedy tier-1; (3) measure tiered vs k=1 on the 463 + tune; (4) submit
 best to leaderboard.
+
+---
+
+## 2026-06-11 — 93+ push, increment 2: cross-model tiered escalation wired end-to-end ✅
+
+- `_solve_tiered` now accepts an optional independent `challenger`: tier-1 unanimity never
+  consults it (cheap path intact); on disagreement the escalation pool adds
+  `challenger_samples` diversified challenger votes (rotations continue past the primary's
+  indices so the second model sees different choice orders). Primary's votes come first →
+  first-seen tie-break favors Gemma (the +5pp-multilingual authority, per research).
+- `run.py` builds the challenger once from config (`build_challenger_client`) and
+  **enforces the contest model-family allowlist on it** (`validate_runtime_model`) — a
+  non-allowed second model is rejected at startup, same as the primary.
+- Tests +3 (agreement never consults challenger; pooled escalation vote incl. challenger
+  flip; None-challenger unchanged): full suite **127 OK**, compileall 0, policy PASS.
+- Everything stays config-gated OFF (`challenger_*` empty) until a Qwen3.5 GGUF is staged
+  in the GPU phase. The k=1 87.26 contest path remains untouched.
+
+**State: all model-independent 93+ mechanisms are now built and tested.** What remains is
+inherently GPU-bound: stage a Qwen3.5≤9B GGUF, measure tiered (±challenger) vs k=1 on the
+463, tune k/T/tier sizes/challenger_samples, implement the letter-logit readout against
+real llama.cpp, then leaderboard-validate the winner and re-package.

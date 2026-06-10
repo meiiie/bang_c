@@ -31,7 +31,7 @@ from .events import build_event, load_events, render_events, write_events
 from .exporter import write_predictions, write_trace
 from .loader import filter_problems_by_qids, find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
-from .model_client import build_chat_client, effective_provider
+from .model_client import build_challenger_client, build_chat_client, effective_provider
 from .model_inventory import classify_model, collect_model_inventory, render_model_inventory
 from .policy import evaluate_policy, render_policy_report
 from .project import init_project
@@ -364,6 +364,7 @@ def main() -> int:
         problems = problems[: args.limit]
 
     client = None
+    challenger = None
     if not dry_run:
         try:
             client = build_chat_client(config, provider=args.provider)
@@ -372,6 +373,14 @@ def main() -> int:
             return 2
         try:
             validate_runtime_model(client.model, config)
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
+        try:
+            challenger = build_challenger_client(config)
+            if challenger is not None:
+                # The contest model-family allowlist applies to the second model too.
+                validate_runtime_model(challenger.model, config)
         except ValueError as error:
             print(f"Error: {error}", file=sys.stderr)
             return 2
@@ -470,6 +479,7 @@ def main() -> int:
             strategy=strategy,
             fail_fast=args.fail_fast,
             config=config,
+            challenger=challenger,
         )
         problem_retry = 0
         while (
@@ -501,6 +511,7 @@ def main() -> int:
                 strategy=strategy,
                 fail_fast=args.fail_fast,
                 config=config,
+                challenger=challenger,
             )
         predictions.append(prediction)
         if checkpoint_enabled:

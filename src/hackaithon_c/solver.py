@@ -45,6 +45,7 @@ def solve_problem(
     strategy: SolverStrategy = "auto",
     fail_fast: bool = False,
     config: HarnessConfig | None = None,
+    challenger: ChatClient | None = None,
 ) -> Prediction:
     if config is None:
         from .config import load_config
@@ -98,7 +99,7 @@ def solve_problem(
             )
         if strategy == "tiered":
             return _with_trace(
-                _solve_tiered(problem, profile, client, config=config),
+                _solve_tiered(problem, profile, client, config=config, challenger=challenger),
                 trace,
             )
         return _with_trace(
@@ -890,15 +891,19 @@ def _solve_tiered(
     client: ChatClient,
     *,
     config: HarnessConfig,
+    challenger: ChatClient | None = None,
 ) -> Prediction:
-    """Tiered diverse self-consistency.
+    """Tiered diverse self-consistency, optionally cross-model.
 
     Tier 1 (cheap): the deterministic anchor plus rotated-choice samples. If every
     tier-1 sample is valid and they agree unanimously, stop — most questions end
     here at a fraction of full-k cost. Otherwise escalate: add seeded temp>0
-    rotated samples up to `tiered_total_samples` and majority-vote over all of
-    them. Setting tiered_total_samples == tiered_tier1_samples gives pure diverse
-    self-consistency with no escalation stage.
+    rotated samples up to `tiered_total_samples`, plus — when an independent
+    challenger model is configured — `challenger_samples` diversified votes from
+    it (decorrelated errors), and majority-vote over the whole pool. The primary
+    model's votes come first, so first-seen tie-breaking favors the stronger
+    multilingual model. Setting tiered_total_samples == tiered_tier1_samples gives
+    pure diverse self-consistency with no escalation stage.
     """
     tier1 = config.tiered_tier1_samples
     total = config.tiered_total_samples
@@ -913,8 +918,9 @@ def _solve_tiered(
     winner, votes, _ = majority_vote(answers)
     unanimous = winner is not None and votes == len(answers)
     escalated = False
-    if not unanimous and total > tier1:
+    if not unanimous and (total > tier1 or challenger is not None):
         escalated = True
+        challenger_note = f"; challenger={challenger.model}" if challenger is not None else ""
         trace_steps.append(
             TraceStep(
                 role="synthesizer",
@@ -922,21 +928,34 @@ def _solve_tiered(
                 status="warning",
                 detail=(
                     f"tier1 agreement={votes}/{len(answers)}; "
-                    f"escalating to {total} samples"
+                    f"escalating to {total} samples{challenger_note}"
                 ),
             )
         )
-        more_answers, more_steps = _collect_reasoning_votes(
-            problem,
-            client,
-            total - tier1,
-            config=config,
-            label="tier2_sample",
-            diversify=True,
-            start_index=tier1,
-        )
-        answers = answers + more_answers
-        trace_steps = trace_steps + more_steps
+        if total > tier1:
+            more_answers, more_steps = _collect_reasoning_votes(
+                problem,
+                client,
+                total - tier1,
+                config=config,
+                label="tier2_sample",
+                diversify=True,
+                start_index=tier1,
+            )
+            answers = answers + more_answers
+            trace_steps = trace_steps + more_steps
+        if challenger is not None:
+            challenger_answers, challenger_steps = _collect_reasoning_votes(
+                problem,
+                challenger,
+                config.challenger_samples,
+                config=config,
+                label="challenger_sample",
+                diversify=True,
+                start_index=total,
+            )
+            answers = answers + challenger_answers
+            trace_steps = trace_steps + challenger_steps
     return _vote_prediction(
         problem,
         profile,

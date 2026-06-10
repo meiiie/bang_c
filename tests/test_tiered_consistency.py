@@ -155,6 +155,41 @@ class TieredStrategyTests(unittest.TestCase):
         self.assertEqual(pred.strategy, "gemma_tiered")
 
 
+class CrossModelTieredTests(unittest.TestCase):
+    """When a challenger is configured, the tiered escalation pools its votes."""
+
+    def test_tier1_agreement_never_consults_challenger(self) -> None:
+        primary = ContentAwareClient("beta")
+        challenger = ContentAwareClient("gamma")
+        pred = solve_problem(
+            _problem(), primary, strategy="tiered", config=_config(), challenger=challenger
+        )
+        self.assertEqual(pred.answer, "B")
+        self.assertEqual(pred.strategy, "gemma_tiered")
+        self.assertEqual(challenger.calls, 0)
+
+    def test_escalation_pools_challenger_votes(self) -> None:
+        # Position-biased primary disagrees at tier 1 -> escalate. Primary's 5 votes
+        # scatter (A,B,C,D,B); a content-robust challenger adds 3 unanimous "C" votes
+        # (mapped back through its rotations) -> pooled C:4 of 8 wins.
+        primary = PositionBiasedClient()
+        challenger = ContentAwareClient("gamma")
+        pred = solve_problem(
+            _problem(), primary, strategy="tiered", config=_config(), challenger=challenger
+        )
+        self.assertEqual(pred.strategy, "gemma_tiered_escalated")
+        self.assertEqual(primary.calls, 5)
+        self.assertEqual(challenger.calls, 3)  # config challenger_samples default
+        self.assertEqual(pred.answer, "C")
+        self.assertAlmostEqual(pred.confidence, 4 / 8)
+
+    def test_no_challenger_keeps_prior_behavior(self) -> None:
+        primary = PositionBiasedClient()
+        pred = solve_problem(_problem(), primary, strategy="tiered", config=_config())
+        self.assertEqual(pred.answer, "B")
+        self.assertEqual(primary.calls, 5)
+
+
 class ChallengerBuilderTests(unittest.TestCase):
     def test_unconfigured_returns_none(self) -> None:
         self.assertIsNone(build_challenger_client(load_config()))
