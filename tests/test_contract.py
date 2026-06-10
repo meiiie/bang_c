@@ -33,6 +33,7 @@ from hackaithon_c.evidence import adjudicate_date_evidence
 from hackaithon_c.events import build_event, load_events, render_events, write_events
 from hackaithon_c.exporter import write_predictions, write_trace
 from hackaithon_c.loader import filter_problems_by_qids, load_problems
+from hackaithon_c.local_client import LocalLlamaChatClient, LocalLlamaConfig
 from hackaithon_c.manifest import build_run_manifest, write_run_manifest
 from hackaithon_c.model_inventory import (
     classify_model,
@@ -57,6 +58,7 @@ from hackaithon_c.run import (
     _problem_retry_delay_seconds,
     apply_yolo_defaults,
     parse_args,
+    render_runtime_profiles,
     validate_runtime_model,
 )
 from hackaithon_c.schema import Prediction, Problem, TraceStep
@@ -311,6 +313,15 @@ class ContestContractTest(unittest.TestCase):
         self.assertEqual(self.config.brand_name, "Neko Core")
         self.assertEqual(self.config.output_columns, ("qid", "answer"))
         self.assertIn("private_test.csv", self.config.input_candidates)
+        self.assertEqual(self.config.active_profile, "gemma26b-q4-local")
+        self.assertEqual(self.config.provider, "local_llamacpp")
+        self.assertEqual(
+            self.config.default_model,
+            "google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0",
+        )
+        self.assertEqual(self.config.api_model, "google/gemma-4-31b-it")
+        self.assertEqual(self.config.local_model_file, "gemma-4-26B_q4_0-it.gguf")
+        self.assertEqual(self.config.local_model_path, "/models/gemma-4-26B_q4_0-it.gguf")
         self.assertIn("gemma-4", self.config.allowed_model_families)
         self.assertIn("bge-m3", self.config.allowed_embedding_families)
         self.assertEqual(self.config.max_retries, 6)
@@ -323,6 +334,19 @@ class ContestContractTest(unittest.TestCase):
         self.assertTrue(ascii_logo(self.config))
         self.assertIn("Neko Core", version_line(self.config))
 
+    def test_runtime_profiles_can_override_provider_without_source_changes(self) -> None:
+        api_config = load_config(profile="nvidia-gemma31b-api")
+        rendered = render_runtime_profiles(self.config)
+
+        self.assertEqual(api_config.active_profile, "nvidia-gemma31b-api")
+        self.assertEqual(api_config.provider, "nvidia")
+        self.assertEqual(api_config.default_model, "google/gemma-4-31b-it")
+        self.assertIn("gemma26b-q4-local (active)", rendered)
+        self.assertIn("nvidia-gemma31b-api", rendered)
+
+        with self.assertRaisesRegex(ValueError, "Unknown runtime profile"):
+            load_config(profile="missing-profile")
+
     def test_package_exposes_neko_command_alias(self) -> None:
         pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
 
@@ -332,15 +356,23 @@ class ContestContractTest(unittest.TestCase):
     def test_cli_accepts_core_namespace_alias(self) -> None:
         self.assertEqual(_normalize_cli_argv(("core", "--doctor")), ("--doctor",))
         self.assertEqual(_normalize_cli_argv(("--doctor",)), ("--doctor",))
+        self.assertEqual(parse_args(("--profile", "nvidia-gemma31b-api")).profile, "nvidia-gemma31b-api")
 
     def test_docker_default_run_is_checkpointed_and_auto_resumable(self) -> None:
         dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+        gemma_dockerfile = Path("Dockerfile.gemma-local").read_text(encoding="utf-8")
 
         self.assertIn('"contest-strict"', dockerfile)
         self.assertIn('"--run-dir"', dockerfile)
         self.assertIn('"/output/neko-run"', dockerfile)
         self.assertIn('"--auto-resume"', dockerfile)
         self.assertIn('"--checkpoint-every"', dockerfile)
+        self.assertIn("HACKC_PROFILE=nvidia-gemma31b-api", dockerfile)
+        self.assertIn("HACKC_PROVIDER=nvidia", dockerfile)
+        self.assertIn("HACKC_PROVIDER=local_llamacpp", gemma_dockerfile)
+        self.assertIn("gemma-4-26B_q4_0-it.gguf", gemma_dockerfile)
+        self.assertIn("LLAMA_CPP_EXTRA_INDEX_URL", gemma_dockerfile)
+        self.assertIn("--mount=type=secret,id=HF_TOKEN", gemma_dockerfile)
 
     def test_problem_retry_helpers_retry_transient_fallbacks_only(self) -> None:
         transient = Prediction(
@@ -383,6 +415,17 @@ class ContestContractTest(unittest.TestCase):
             10.0,
         )
         self.assertEqual(_retry_delay_seconds(3, None, config), 10.0)
+
+    def test_local_llama_client_fails_closed_when_model_file_is_missing(self) -> None:
+        client = LocalLlamaChatClient(
+            LocalLlamaConfig(
+                model_id="google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0",
+                model_path=Path("missing-model-for-test.gguf"),
+            )
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Local model file not found"):
+            client.complete("system", "user")
 
     def test_text_normalization_handles_vietnamese_d_stroke(self) -> None:
         self.assertEqual(
@@ -704,6 +747,8 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("Neko Core doctor", report)
         self.assertTrue(any(check.name == "config" and check.status == "ok" for check in checks))
         self.assertTrue(any(check.name == "input" and check.status == "warn" for check in checks))
+        self.assertTrue(any(check.name == "provider" and check.detail == "local_llamacpp" for check in checks))
+        self.assertTrue(any(check.name == "local_model" and check.status == "warn" for check in checks))
 
     def test_capability_registry_separates_runtime_from_development(self) -> None:
         capabilities = collect_capabilities(self.config)
@@ -861,6 +906,7 @@ class ContestContractTest(unittest.TestCase):
         self.assertNotIn("nvidia/nv-embed-v1: ", rendered)
 
     def test_runtime_model_validation_fails_closed_on_disallowed_models(self) -> None:
+        validate_runtime_model("google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0", self.config)
         validate_runtime_model("google/gemma-4-31b-it", self.config)
         validate_runtime_model("qwen/qwen3.5-8b-instruct", self.config)
 

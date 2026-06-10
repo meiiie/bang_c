@@ -12,6 +12,9 @@ dist/
 *.egg-info/
 *.log
 *.trace.jsonl
+models/
+*.gguf
+*.safetensors
 __pycache__/
 *.pyc
 .pytest_cache/

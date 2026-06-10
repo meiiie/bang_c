@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .config import HarnessConfig
+from .model_client import effective_provider
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,12 @@ def collect_capabilities(config: HarnessConfig) -> tuple[Capability, ...]:
             "enabled",
             "Schema config plus multilingual markers",
         ),
-        Capability("model_completion", "runtime", "enabled", config.default_model),
+        Capability(
+            "model_completion",
+            "runtime",
+            "enabled",
+            f"{effective_provider(config)}: {config.default_model}",
+        ),
         Capability(
             "repair_invalid_output",
             "runtime",

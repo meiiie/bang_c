@@ -32,7 +32,7 @@ configs/default.json
   -> schema
   -> configurable profiler
   -> prompt strategy
-  -> NVIDIA/OpenAI-compatible model client
+  -> provider-neutral chat client
   -> answer normalizer
   -> optional verifier/tournament
   -> validation summary
@@ -63,7 +63,8 @@ Runtime modules:
   resume without trusting stale input or config state.
 - `compare.py`: compares two trace-enabled runs using manifests and prediction
   trace rows.
-- `config.py`: loads schema-versioned harness config.
+- `config.py`: loads schema-versioned harness config, project-local config,
+  named runtime profiles, and CLI/env profile overrides.
 - `loader.py`: reads CSV/JSON input and maps it to `Problem`.
 - `manifest.py`: writes reproducible run metadata for trace-enabled runs.
 - `model_inventory.py`: probes provider model inventory and filters Bang C
@@ -71,7 +72,11 @@ Runtime modules:
 - `schema.py`: owns shared dataclasses.
 - `classifier.py`: profiles item shape using config markers and thresholds.
 - `prompting.py`: builds prompt variants from the profile.
-- `nvidia_client.py`: provider boundary.
+- `model_client.py`: provider factory and shared chat-client protocol.
+- `local_client.py`: local `llama.cpp`/GGUF provider for the self-contained
+  Gemma contest image.
+- `nvidia_client.py`: optional NVIDIA/OpenAI-compatible API provider for
+  development and future extension.
 - `policy.py`: audits runtime/development boundaries across command, tool, and
   agent registries.
 - `solver.py`: strategy orchestration.
@@ -181,7 +186,8 @@ The config layer stores:
 
 - input filename candidates;
 - output contract;
-- model defaults;
+- provider registry, runtime profiles, local Gemma model path, and optional API
+  model defaults;
 - allowed LLM and embedding/rerank families;
 - retry/timeout policy;
 - multilingual profiling markers;
@@ -192,6 +198,14 @@ The config layer stores:
 When no `--config` path is provided, the loader checks this project-local
 config before `configs/default.json`. This mirrors agent CLI practice: runtime
 source stays stable while a team can tune local harness profiles.
+
+Runtime profiles are also config-owned. The current config exposes
+`gemma26b-q4-local` for the self-contained contest image and
+`nvidia-gemma31b-api` for explicit API-based development. Select them through
+`--profile <name>` or `HACKC_PROFILE=<name>`, and inspect them through
+`--profiles`. This follows the same direction seen in Codex/Claude-style
+systems: base config, named profiles, local project config, environment/CLI
+overrides, and read-only doctor/status commands to show the effective runtime.
 
 When a new language or question marker appears, update config first. Only change
 code when the runtime contract itself needs a new capability.
@@ -216,6 +230,11 @@ It must not depend on:
 - hidden trace state;
 - API keys committed to source.
 
+For the current Bang C direction, the final scoring image should prefer
+`provider=local_llamacpp` with `Gemma 4 26B A4B QAT Q4_0 GGUF` already present
+under `/models`. The NVIDIA provider remains an explicit development/API
+extension, not a hidden scoring dependency.
+
 Development may use those tools to improve the harness, but the final container
 must be able to reproduce from source plus the allowed runtime environment.
 
@@ -224,10 +243,11 @@ must be able to reproduce from source plus the allowed runtime environment.
 Add a new technique only through one of these extension points:
 
 1. Config marker/threshold/model/rubric update.
-2. New prompt variant in `prompting.py`.
-3. New profile rule in `classifier.py` backed by config.
-4. New strategy in `solver.py`.
-5. New validation or scoring check in `evaluation.py`.
+2. New runtime profile or provider-registry entry in config.
+3. New prompt variant in `prompting.py`.
+4. New profile rule in `classifier.py` backed by config.
+5. New strategy in `solver.py`.
+6. New validation or scoring check in `evaluation.py`.
 
 Avoid adding cross-cutting branches inside unrelated modules.
 

@@ -35,9 +35,9 @@ def collect_model_inventory(
     payload: Any | None = None,
 ) -> ModelInventoryReport:
     base_url = os.environ.get("NVIDIA_BASE_URL", config.base_url).rstrip("/")
-    effective_model = os.environ.get("HACKC_LLM_MODEL", config.default_model).strip()
+    effective_model = os.environ.get("HACKC_LLM_MODEL", config.api_model).strip()
     if not effective_model:
-        effective_model = config.default_model
+        effective_model = config.api_model
 
     if payload is None:
         api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
@@ -45,7 +45,7 @@ def collect_model_inventory(
             return _report(
                 status="warn",
                 base_url=base_url,
-                default_model=config.default_model,
+                default_model=config.api_model,
                 effective_model=effective_model,
                 model_ids=(),
                 allowed_llm_families=config.allowed_model_families,
@@ -58,7 +58,7 @@ def collect_model_inventory(
             return _report(
                 status="fail",
                 base_url=base_url,
-                default_model=config.default_model,
+                default_model=config.api_model,
                 effective_model=effective_model,
                 model_ids=(),
                 allowed_llm_families=config.allowed_model_families,
@@ -69,7 +69,7 @@ def collect_model_inventory(
     return _report(
         status="ok",
         base_url=base_url,
-        default_model=config.default_model,
+        default_model=config.api_model,
         effective_model=effective_model,
         model_ids=tuple(_extract_model_ids(payload)),
         allowed_llm_families=config.allowed_model_families,
@@ -131,7 +131,7 @@ def classify_model(
     if "qwen3.5" in llm_families and (
         "qwen3.5" in normalized or "qwen-3.5" in normalized
     ):
-        size_b = _extract_billion_params(normalized)
+        size_b = _extract_qwen3_5_billion_params(normalized)
         if size_b is not None and size_b <= 9:
             return ModelInventoryItem(model_id, "llm", True, "qwen3.5 <= 9B")
         if size_b is None:
@@ -223,3 +223,14 @@ def _extract_billion_params(value: str) -> float | None:
     if not match:
         return None
     return float(match.group(1))
+
+
+def _extract_qwen3_5_billion_params(value: str) -> float | None:
+    marker_index = value.find("qwen3.5")
+    marker_length = len("qwen3.5")
+    if marker_index < 0:
+        marker_index = value.find("qwen-3.5")
+        marker_length = len("qwen-3.5")
+    if marker_index < 0:
+        return _extract_billion_params(value)
+    return _extract_billion_params(value[marker_index + marker_length :])

@@ -83,6 +83,8 @@ See `docs/distribution-domain.md` for the Cloudflare routing plan.
 - Allowed embedding/rerank family:
   - `BGE-M3`
   - `Qwen-Rerank`
+- Chosen contest runtime: `Gemma 4 26B A4B QAT Q4_0 GGUF`, packaged into
+  the local Docker image so BTC does not need an NVIDIA API key.
 
 ## Config-First Harness
 
@@ -90,20 +92,47 @@ Runtime behavior is configured through `configs/default.json`:
 
 - input file candidates;
 - output filename and columns;
-- default model and NVIDIA base URL;
+- runtime profile selection;
+- provider registry, local Gemma model path, and optional NVIDIA API model;
 - retry/timeout policy;
 - multilingual profiling markers;
 - classifier thresholds;
 - harness rubric weights.
 
-Use `--config path\to\config.json` to run a different profile. The goal is to
-adapt to private-test variation without editing source code.
+Current runtime profiles:
 
-## Current Local NVIDIA Probe
+- `gemma26b-q4-local`: default self-contained contest path.
+- `nvidia-gemma31b-api`: explicit development/API path.
 
-The local Wiii NVIDIA key can list models through
-`https://integrate.api.nvidia.com/v1/models`. As of 2026-06-08, the useful
-matches include:
+Inspect and select profiles without editing source:
+
+```powershell
+neko --profiles
+neko --profile nvidia-gemma31b-api --doctor
+$env:HACKC_PROFILE = "gemma26b-q4-local"
+```
+
+Use `--config path\to\config.json` for a different config file and
+`--profile <name>` or `HACKC_PROFILE` for one named runtime profile inside that
+config. The goal is to adapt to private-test variation without editing source
+code.
+
+## Runtime Provider Direction
+
+The final contest direction is local-first:
+
+- default provider: `local_llamacpp`;
+- default local model: `google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0`;
+- expected GGUF file: `/models/gemma-4-26B_q4_0-it.gguf`;
+- final Docker image should be self-contained and should not require
+  `NVIDIA_API_KEY`.
+
+NVIDIA remains an optional provider for development and future extension. Set
+`--profile nvidia-gemma31b-api` plus `NVIDIA_API_KEY`, or set
+`HACKC_PROVIDER=nvidia` explicitly, to use the OpenAI-compatible API path. The
+local Wiii NVIDIA key can list models through
+`https://integrate.api.nvidia.com/v1/models`. As of 2026-06-08, useful API
+matches included:
 
 - `google/gemma-4-31b-it`
 - `baai/bge-m3`
@@ -141,10 +170,9 @@ without validation.
 Or install manually:
 
 ```powershell
-$env:NVIDIA_API_KEY = "<set outside git>"
 python -m pip install -r requirements.txt
 $env:PYTHONPATH = "$PWD/src"
-python -m hackaithon_c.run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
+python -m hackaithon_c.run --workflow quick-dry-run --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5
 ```
 
 After bootstrap, use the local CLI shim:
@@ -175,6 +203,8 @@ CLI fast paths inspired by Claude Code:
   for each CLI or script surface.
 - `--command <name>`: inspect one command, for example `--command run` or
   `--command trace-review`.
+- `--profiles`: print named runtime profiles from the active config.
+- `--profile <name>`: select one runtime profile for this invocation.
 - `--policy`: audit runtime/development boundaries across registry surfaces.
   The solve path also enforces this gate before loading input or model state.
 - `--model-inventory`: probe NVIDIA `/models` and filter models by Bang C
@@ -207,6 +237,13 @@ or runtime:
 
 ```powershell
 .\neko.ps1 --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-strict --auto-resume --checkpoint-every 1
+```
+
+For explicit NVIDIA development runs:
+
+```powershell
+$env:NVIDIA_API_KEY = "<set outside git>"
+.\neko.ps1 --profile nvidia-gemma31b-api --workflow contest-strict --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --run-dir run-nvidia
 ```
 
 The shorter autonomous preset is:
@@ -247,6 +284,24 @@ iterate qid-by-qid and keep a checkpoint:
 `--auto-resume` reuses qids already recorded in
 `traces/predictions.checkpoint.jsonl` after checking the input/config/workflow
 metadata, and clears stale checkpoints when the input/config no longer match.
+
+## RunPod Development GPU
+
+RunPod is a development accelerator for building and profiling the local Gemma
+image; it is not a hidden dependency for BTC scoring.
+
+Recommended current default: RTX A6000 48 GB community. Use A40 48 GB as the
+fallback when A6000 is unavailable, and L40S/A100/H100 only when wall-clock
+speed is worth the extra spend.
+
+Read-only shortlist:
+
+```powershell
+$env:RUNPOD_API_KEY = "<set outside git>"
+.\scripts\runpod-gpu-shortlist.ps1 -MinMemoryGB 48
+```
+
+See `docs/runpod-gpu-selection.md`.
 The final `pred.csv` is still written only after the full prediction set passes
 the contest contract validation.
 
@@ -318,9 +373,20 @@ $env:PYTHONPATH = "$PWD/src"
 .\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --limit 5 --dry-run
 ```
 
-Gemma 4 with a second verifier pass:
+Local Gemma 4 with a second verifier pass:
 
 ```powershell
+python -m pip install -r requirements-local.txt
+$env:HACKC_PROVIDER = "local_llamacpp"
+$env:HACKC_LOCAL_MODEL_PATH = "C:\models\gemma-4-26B_q4_0-it.gguf"
+.\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --strategy verify
+```
+
+NVIDIA API experiment with a second verifier pass:
+
+```powershell
+$env:HACKC_PROVIDER = "nvidia"
+$env:NVIDIA_API_KEY = "<set outside git>"
 $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
 .\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 5 --strategy verify
 ```
@@ -328,6 +394,7 @@ $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
 Auto strategy with selective tournament:
 
 ```powershell
+$env:HACKC_PROVIDER = "nvidia"
 $env:HACKC_LLM_MODEL = "google/gemma-4-31b-it"
 .\neko.ps1 --input "C:\Users\Admin\Downloads\public-test_1780368312.json" --output-dir output --trace-dir traces --limit 10 --strategy auto
 ```
@@ -355,30 +422,68 @@ Trace mode writes:
 
 ## Docker
 
-Build:
+Lightweight API/development image:
 
 ```powershell
 docker build -t neko-core:dev .
 ```
 
-Run with a mounted data folder:
+Run the lightweight image only when explicitly using the NVIDIA provider:
 
 ```powershell
 docker run --rm `
+  -e HACKC_PROVIDER=nvidia `
   -e NVIDIA_API_KEY=$env:NVIDIA_API_KEY `
   -v C:\path\to\data:/data `
   -v C:\path\to\output:/output `
   neko-core:dev
 ```
 
-The official release workflow is designed to push a Docker Hub image when the
-repository has `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets configured.
-For a manual release:
+Self-contained Gemma local contest image:
 
 ```powershell
-docker build -t <dockerhub-user>/neko-core:latest .
-docker push <dockerhub-user>/neko-core:latest
+.\scripts\build-gemma-image.ps1 -Image <dockerhub-user>/neko-core:gemma26b-q4
 ```
+
+Pinned image currently available from Docker Hub:
+
+```text
+hacamy12345/neko-core:gemma26b-q4
+hacamy12345/neko-core:gemma26b-q4-20260610
+hacamy12345/neko-core@sha256:7034f3a4da3d00bc2de8d7d5ea56422cdeb5e74651a90beba220a962dc0f6760
+```
+
+If the Gemma repository requires authentication in your environment, set
+`HF_TOKEN` outside git before building. The token is passed as a Docker BuildKit
+secret and is not stored in the final image.
+
+Run the self-contained image with a mounted data folder:
+
+```powershell
+docker run --rm `
+  -v C:\path\to\data:/data `
+  -v C:\path\to\output:/output `
+  hacamy12345/neko-core:gemma26b-q4
+```
+
+The expected output is `C:\path\to\output\pred.csv`.
+
+The official release workflow is designed to push a Docker Hub image when the
+repository has `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets configured.
+The GitHub-hosted release workflow intentionally builds the lightweight image;
+the Gemma image is large and should be built/pushed from a machine with enough
+disk, RAM, and stable network. For a manual Gemma image release:
+
+```powershell
+.\scripts\build-gemma-image.ps1 -Image <dockerhub-user>/neko-core:gemma26b-q4
+docker push <dockerhub-user>/neko-core:gemma26b-q4
+```
+
+For RunPod builders that cannot run Docker-in-Docker, use
+`Dockerfile.gemma-local.kaniko`. The 2026-06-10 successful build used a large
+RTX A6000 builder, Kaniko, and then validated the pushed digest on an A40 pod.
+See `docs/runpod-operations.md` for the pinned digest, launch notes, and cleanup
+rules.
 
 ## Release
 

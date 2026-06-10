@@ -1,0 +1,48 @@
+# Kaniko-compatible final contest image.
+#
+# Use this when building on a RunPod pod that cannot run Docker-in-Docker.
+# It intentionally does not accept HF_TOKEN as a build argument, because build
+# arguments may be retained in image metadata. For gated models, use
+# Dockerfile.gemma-local with BuildKit secrets on a real Docker builder.
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+ARG MODEL_REPO=google/gemma-4-26B-A4B-it-qat-q4_0-gguf
+ARG MODEL_FILE=gemma-4-26B_q4_0-it.gguf
+ARG LLAMA_CPP_EXTRA_INDEX_URL=https://abetlen.github.io/llama-cpp-python/whl/cu124
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
+    HACKC_DATA_DIR=/data \
+    HACKC_OUTPUT_DIR=/output \
+    HACKC_PROVIDER=local_llamacpp \
+    HACKC_LOCAL_MODEL_ID=google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 \
+    HACKC_LOCAL_MODEL_PATH=/models/gemma-4-26B_q4_0-it.gguf \
+    HACKC_LLAMACPP_N_CTX=8192 \
+    HACKC_LLAMACPP_N_GPU_LAYERS=-1
+
+WORKDIR /app
+
+COPY requirements.txt requirements-local.txt ./
+RUN if [ -n "${LLAMA_CPP_EXTRA_INDEX_URL}" ]; then \
+        python -m pip install --no-cache-dir --extra-index-url "${LLAMA_CPP_EXTRA_INDEX_URL}" -r requirements-local.txt; \
+    else \
+        python -m pip install --no-cache-dir -r requirements-local.txt; \
+    fi
+
+RUN MODEL_REPO="${MODEL_REPO}" MODEL_FILE="${MODEL_FILE}" python -c \
+    "import os; from pathlib import Path; from huggingface_hub import hf_hub_download; model_repo=os.environ['MODEL_REPO']; model_file=os.environ['MODEL_FILE']; target_dir=Path('/models'); target_dir.mkdir(parents=True, exist_ok=True); downloaded=hf_hub_download(repo_id=model_repo, filename=model_file, local_dir=target_dir); target=target_dir / model_file; assert target.exists(), f'Downloaded model was not found at expected path: {target} (got {downloaded})'; print(f'Downloaded {model_repo}/{model_file} to {target}')" \
+    && test -s "/models/${MODEL_FILE}"
+
+COPY src ./src
+COPY configs ./configs
+COPY docker/neko-entrypoint.sh /usr/local/bin/neko-entrypoint
+COPY README.md ./
+
+RUN mkdir -p /data /output \
+    && chmod +x /usr/local/bin/neko-entrypoint \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}" \
+    && python -m hackaithon_c.run --doctor
+
+ENTRYPOINT ["neko-entrypoint"]
+CMD ["--workflow", "contest-strict", "--data-dir", "/data", "--output-dir", "/output", "--run-dir", "/output/neko-run", "--auto-resume", "--checkpoint-every", "1"]

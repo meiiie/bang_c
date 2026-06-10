@@ -8,3 +8,6 @@ data/
 output/
 traces/
 *.log
+models/
+*.gguf
+*.safetensors

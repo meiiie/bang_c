@@ -4,7 +4,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/src \
     HACKC_DATA_DIR=/data \
-    HACKC_OUTPUT_DIR=/output
+    HACKC_OUTPUT_DIR=/output \
+    HACKC_PROFILE=nvidia-gemma31b-api \
+    HACKC_PROVIDER=nvidia
 
 WORKDIR /app
 

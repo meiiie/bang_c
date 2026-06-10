@@ -27,7 +27,17 @@ The submission should not run Wiii full-stack. It should be a small container:
 
 ## Model Direction
 
-Prefer `Gemma-4 Series`.
+Use `Gemma-4 Series`, specifically `Gemma 4 26B A4B QAT Q4_0 GGUF`, as the
+primary local contest model.
+
+The final Docker image should carry:
+
+```text
+google/gemma-4-26B-A4B-it-qat-q4_0-gguf / gemma-4-26B_q4_0-it.gguf
+```
+
+This matches BTC's clarification that teams should download models themselves,
+and avoids requiring the organizer to supply our NVIDIA API key.
 
 Local NVIDIA model discovery on 2026-06-08 found:
 
@@ -35,8 +45,8 @@ Local NVIDIA model discovery on 2026-06-08 found:
 - `baai/bge-m3`
 
 `google/gemma-4-31b-it` was also smoke-tested through the local NVIDIA key on
-one public-test item, including the optional verifier pass. It returned a valid
-answer letter and produced `pred.csv`.
+one public-test item, including the optional verifier pass. It remains useful
+for development comparison only; it is not the preferred final scoring path.
 
 `qwen-rerank` was not visible in the local NVIDIA `/v1/models` response at the
 time of probing, so rerank should remain an adapter boundary until confirmed.
@@ -52,7 +62,7 @@ Use a task-specific harness, inspired by Codex/Odysseus/Wiii:
 3. Solve with Gemma 4 using a strict one-letter prompt.
 4. Normalize answer robustly.
 5. Verify or run a small tournament only for risky items.
-6. Fall back to deterministic overlap only if the model/API path fails.
+6. Fall back to deterministic overlap only if the model path fails.
 7. Trace raw output and strategy in dev mode.
 8. Loop on public-test failures and low-confidence traces.
 9. Keep the final image free of web crawlers, subagents, UI, and hidden state.

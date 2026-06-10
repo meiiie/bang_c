@@ -61,6 +61,31 @@ Expected image after a tagged release:
 <dockerhub-user>/neko-core:latest
 ```
 
+The tagged GitHub workflow builds the lightweight image. The Gemma local image
+is too large for routine GitHub-hosted builds and should be built from a machine
+with enough disk/RAM/network:
+
+```powershell
+.\scripts\build-gemma-image.ps1 -Image <dockerhub-user>/neko-core:gemma26b-q4
+docker push <dockerhub-user>/neko-core:gemma26b-q4
+```
+
+Set `HF_TOKEN` outside git only if Hugging Face requires authentication for the
+model download. Docker BuildKit passes it as a build secret, not an image env.
+
+Current manually published Gemma image:
+
+```text
+hacamy12345/neko-core:gemma26b-q4
+hacamy12345/neko-core:gemma26b-q4-20260610
+hacamy12345/neko-core@sha256:7034f3a4da3d00bc2de8d7d5ea56422cdeb5e74651a90beba220a962dc0f6760
+```
+
+The 2026-06-10 large-image build used `Dockerfile.gemma-local.kaniko` on
+RunPod because nested Docker was blocked in the stock pod. If the image is
+rebuilt on RunPod, follow `docs/runpod-operations.md` and keep the final
+runtime free of API keys.
+
 ## Rollback
 
 If a release fails after tag creation:

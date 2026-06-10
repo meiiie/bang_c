@@ -8,8 +8,8 @@ from .classifier import classify_problem
 from .config import HarnessConfig
 from .evidence import adjudicate_date_evidence, adjudicate_direct_evidence
 from .heuristic import fallback_answer
+from .model_client import ChatClient
 from .normalize import normalize_answer
-from .nvidia_client import NvidiaChatClient
 from .prompting import build_prompt, build_repair_prompt, build_verifier_prompt, tournament_variants
 from .principles import adjudicate_principle
 from .schema import Prediction, Problem, ProblemProfile, TraceStep
@@ -20,7 +20,7 @@ SolverStrategy = str
 
 def solve_problem(
     problem: Problem,
-    client: NvidiaChatClient | None,
+    client: ChatClient | None,
     *,
     dry_run: bool = False,
     verify: bool = False,
@@ -113,7 +113,7 @@ def solve_problem(
 def _solve_auto(
     problem: Problem,
     profile: ProblemProfile,
-    client: NvidiaChatClient,
+    client: ChatClient,
     *,
     config: HarnessConfig,
     force_verify: bool,
@@ -132,7 +132,7 @@ def _solve_auto(
 def _solve_direct(
     problem: Problem,
     profile: ProblemProfile,
-    client: NvidiaChatClient,
+    client: ChatClient,
     *,
     config: HarnessConfig,
     verify: bool,
@@ -518,7 +518,7 @@ def _solve_direct(
 def _solve_tournament(
     problem: Problem,
     profile: ProblemProfile,
-    client: NvidiaChatClient,
+    client: ChatClient,
     *,
     config: HarnessConfig,
     verify: bool,
@@ -678,7 +678,7 @@ def _solve_tournament(
 
 def _verify(
     problem: Problem,
-    client: NvidiaChatClient,
+    client: ChatClient,
     candidate_answer: str,
     *,
     config: HarnessConfig,
@@ -707,7 +707,7 @@ def _verification_detail(raw_verifier: str) -> str:
 
 def _repair_invalid_answer(
     problem: Problem,
-    client: NvidiaChatClient,
+    client: ChatClient,
     invalid_answer: str,
     *,
     config: HarnessConfig,

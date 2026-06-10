@@ -31,8 +31,8 @@ from .events import build_event, load_events, render_events, write_events
 from .exporter import write_predictions, write_trace
 from .loader import filter_problems_by_qids, find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
+from .model_client import build_chat_client, effective_provider
 from .model_inventory import classify_model, collect_model_inventory, render_model_inventory
-from .nvidia_client import NvidiaChatClient, NvidiaConfig
 from .policy import evaluate_policy, render_policy_report
 from .project import init_project
 from .review import render_trace_review, review_trace_dir
@@ -60,6 +60,7 @@ def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
     normalized_argv = _normalize_cli_argv(tuple(sys.argv[1:] if argv is None else argv))
     parser = argparse.ArgumentParser(description="Neko Core inference harness")
     parser.add_argument("--config", default=None, help="Harness config JSON path")
+    parser.add_argument("--profile", default=None, help="Named runtime profile from config")
     parser.add_argument("--data-dir", default="/data", help="Contest input directory")
     parser.add_argument("--output-dir", default=None, help="Contest output directory")
     parser.add_argument("--input", default=None, help="Explicit input JSON/CSV for local dev")
@@ -78,6 +79,13 @@ def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
     parser.add_argument("--command", default=None, help="Print one harness command contract")
     parser.add_argument("--policy", action="store_true", help="Audit harness runtime/development policy")
     parser.add_argument("--model-inventory", action="store_true", help="Probe provider models and Bang C eligibility")
+    parser.add_argument("--profiles", action="store_true", help="Print configured runtime profiles")
+    parser.add_argument(
+        "--provider",
+        choices=("local_llamacpp", "nvidia"),
+        default=None,
+        help="Runtime model provider. Defaults to config/env.",
+    )
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
     parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
@@ -165,7 +173,11 @@ def main() -> int:
         print(result.message)
         return 0
 
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config, profile=args.profile)
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
 
     if args.version:
         print(version_line(config))
@@ -223,6 +235,10 @@ def main() -> int:
         report = evaluate_policy(config)
         print(render_policy_report(report))
         return 1 if report.verdict == "fail" else 0
+
+    if args.profiles:
+        print(render_runtime_profiles(config))
+        return 0
 
     if args.model_inventory:
         report = collect_model_inventory(config)
@@ -296,7 +312,12 @@ def main() -> int:
 
     if args.doctor:
         input_path = Path(args.input) if args.input else None
-        checks = collect_doctor_checks(config, data_dir=Path(args.data_dir), input_path=input_path)
+        checks = collect_doctor_checks(
+            config,
+            data_dir=Path(args.data_dir),
+            input_path=input_path,
+            provider=args.provider,
+        )
         print(render_doctor_report(checks))
         return 0
 
@@ -344,16 +365,11 @@ def main() -> int:
 
     client = None
     if not dry_run:
-        client = NvidiaChatClient(
-            NvidiaConfig.from_env(
-                default_base_url=config.base_url,
-                default_model=config.default_model,
-                default_timeout_seconds=config.timeout_seconds,
-                default_max_retries=config.max_retries,
-                default_retry_base_delay_seconds=config.retry_base_delay_seconds,
-                default_retry_max_delay_seconds=config.retry_max_delay_seconds,
-            )
-        )
+        try:
+            client = build_chat_client(config, provider=args.provider)
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
         try:
             validate_runtime_model(client.model, config)
         except ValueError as error:
@@ -409,6 +425,7 @@ def main() -> int:
                 "Run session started.",
                 payload={
                     "workflow": workflow.name if workflow else None,
+                    "provider": effective_provider(config, args.provider),
                     "strategy": strategy,
                     "dry_run": dry_run,
                     "verify": verify,
@@ -640,6 +657,20 @@ def validate_runtime_model(model_id: str, config) -> None:
         f"{model_id} ({selected.reason}). "
         "Use a Gemma-4 model or a Qwen3.5 model with size <= 9B."
     )
+
+
+def render_runtime_profiles(config) -> str:
+    lines = ["Neko Core runtime profiles"]
+    profiles = config.runtime_profiles
+    if not profiles:
+        lines.append("- none")
+        return "\n".join(lines)
+    for name, profile in profiles.items():
+        marker = " (active)" if name == config.active_profile else ""
+        provider = profile.get("provider", config.provider)
+        model = profile.get("default_model", config.default_model)
+        lines.append(f"- {name}{marker}: provider={provider}, model={model}")
+    return "\n".join(lines)
 
 
 def _is_retryable_prediction(prediction) -> bool:

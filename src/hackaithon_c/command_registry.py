@@ -119,6 +119,15 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             guardrail="Provider metadata only; does not send contest questions.",
         ),
         CommandSpec(
+            name="profiles",
+            phase="runtime",
+            category="config",
+            option="--profiles",
+            description="Print configured runtime profiles and the active profile.",
+            example="neko --profiles",
+            guardrail="Read-only; use --profile or HACKC_PROFILE to select one run.",
+        ),
+        CommandSpec(
             name="yolo",
             phase="runtime",
             category="autonomy",
@@ -201,6 +210,15 @@ def list_commands(config: HarnessConfig) -> tuple[CommandSpec, ...]:
             description="Run workflow comparisons and synthesize eval reports.",
             example=".\\scripts\\evaluate.ps1 -InputPath C:\\data\\public_test.json -Limit 10",
             guardrail="Eval artifacts inform changes; final runtime remains narrow.",
+        ),
+        CommandSpec(
+            name="runpod-gpu-shortlist",
+            phase="development",
+            category="infrastructure",
+            option="scripts/runpod-gpu-shortlist.ps1",
+            description="List RunPod GPU candidates from account metadata without creating pods.",
+            example=".\\scripts\\runpod-gpu-shortlist.ps1 -MinMemoryGB 48",
+            guardrail="Read-only infrastructure metadata; requires RUNPOD_API_KEY outside git and does not spend money.",
         ),
     )
 

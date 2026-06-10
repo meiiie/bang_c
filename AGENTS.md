@@ -20,11 +20,20 @@ as one system.
 
 - Do not hard-code public-test answers, qids, leaderboard observations, or
   private-test assumptions.
+- Current contest runtime direction is local-first with
+  `Gemma 4 26B A4B QAT Q4_0 GGUF`
+  (`google/gemma-4-26B-A4B-it-qat-q4_0-gguf`,
+  `gemma-4-26B_q4_0-it.gguf`) packaged into the final Docker image. NVIDIA is
+  an explicit optional provider for development/eval/future extension, not a
+  hidden BTC scoring dependency.
 - Do not assume the private test language is Vietnamese. The input may contain
   English, French, Spanish, Vietnamese, mixed-language content, or translated
   variants.
 - Keep data-dependent markers, thresholds, model defaults, and rubric weights in
   `configs/default.json` or another explicit config file.
+- Keep provider/model/runtime selection in `runtime.profiles` and
+  `provider_registry`. Prefer `--profile`, `HACKC_PROFILE`, or project-local
+  `.neko-core/config.json` over solver-level branches or one-off edits.
 - Keep runtime source modular. Avoid god files. Prefer small modules with clear
   contracts: loader, config, profiler/classifier, prompt builder, solver,
   normalizer, evaluator, exporter.
