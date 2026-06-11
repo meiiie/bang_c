@@ -1,62 +1,124 @@
-# ▶ RESUME HERE
+# ▶ RESUME HERE — next-session entry point (updated 2026-06-11)
 
-Single entry point for the next session/agent. Read this first, then `EXECUTOR-PLAYBOOK.md`.
+Read this FIRST. It is self-contained: project identity, rules, current state, the exact
+next task (level 2), and how to continue without losing context.
 
-## State as of 2026-06-10 (all model-independent work done, verified)
+---
 
-| Phase | Status | Evidence |
-|---|---|---|
-| P0 safety net | ✅ done | 24-item gold suite, 6+ scripts (Latin/CJK/Cyrillic/Arabic-RTL/Thai), 0 crash |
-| P1 reasoning + self-consistency + calibration | ✅ **code** done | `calibration.py`, `self_consistency` strategy; **not yet measured/cut over** |
-| P2 routing (calc over-trigger + multilingual negation) | ✅ done | gold routing 0 errors; live path improved |
-| P3 cross-model challenger + tiering | ✅ **code** done | `solve_with_challenge`; gated off (challenger=None) |
-| P4 modular refactor | ⏸ deferred | would churn legacy code slated for deletion |
-| Method write-up (DoD #6) | ✅ draft | `docs/method-writeup.md` |
+## 0. Identity & where you are
 
-**104 unit tests green. Contest path untouched → zero regression risk.** Full detail in
-`notes/worklog.md`.
+- **The real project is Neko Core** at `E:\Sach\Sua\bang_c` (github.com/meiiie/bang_c).
+  The shell may open in `E:\Sach\Sua\AI_v1` (Wiii) — that is CONTEXT ONLY. `cd` to bang_c.
+- It is the **HackAIthon 2026 Bảng C** entry: an OFFLINE self-contained Docker harness that
+  reads `/data/*_test.csv|json`, writes `/output/pred.csv` (`qid,answer`; per-row letters,
+  NEVER hard-coded A–D). Scoring on a 2000-question multilingual private test:
+  **Accuracy 80 / Time 10 / Idea 10.**
+- Allowed models ONLY: Gemma-4 family + Qwen3.5≤9B; embedders BGE-m3 / Qwen-Rerank.
+  Runtime: `Gemma-4-26B-A4B QAT Q4_0 GGUF` via llama-cpp-python (offline).
 
-## ✅ REAL-MODEL TEST DONE (2026-06-10, RunPod A40 + Gemma-4-26B) — see worklog
+## 1. Rules / SKILL (non-negotiable — these OVERRIDE convenience)
 
-Tested on the actual contest model. Headline: **CoT reasoning (k=1, max_tokens=2048) beats the
-baseline on the 5 gold (5/5 vs 4/5)** and changed 91/463 answers (concentrated on calculation,
-38%). Found+fixed a real bug (max_tokens=512 truncated CoT). Sovereignty probe PASS (model is
-Vietnam-aligned, no mitigation needed). Packaged candidate image
-`hacamy12345/neko-core:gemma26b-q4-cot-20260610` (CoT default). Pod terminated (~$0.72 spent).
+- **karpathy-guidelines**: think before coding (state assumptions, surface trade-offs);
+  simplicity (minimum code, no speculative features/abstractions); surgical changes (touch
+  only what the task needs, match existing style); goal-driven (every change has a
+  verification story).
+- **AGENTS.md** + `docs/operations/`: config-first, no god files, no hard-coded answers,
+  offline runtime, keep Vietnamese diacritics, never commit secrets/.env/model weights.
+- **Anti-overfit (owner's repeated demand)**: every lever MUST generalize to the 2000
+  private test. Nothing tuned to the 463 public questions. Negative results are valuable.
+- **Honesty**: report real measured numbers; mark anything not-yet-measured as such.
+- Notes discipline: investigations in `notes/` (one dated file per topic), durable
+  takeaways in `notes/lessons.md`, an append-only journal in `notes/worklog.md`.
 
-**The verdict is NOT final** — the 91 differing answers need the leaderboard (only 5 gold
-labels held locally). NEXT (owner): **submit `E:\Sach\Sua\_tmp\neko-core-runpod-a40-20260610\
-pred-cot-463.csv` to the leaderboard** → compare to 85.53. If CoT wins, lock the cutover
-(contest workflow → reasoning, samples=1) and that image is the final submission.
+## 2. Current state (2026-06-11) — confirmed + built
 
-## ✅ Unblock → then run, in order
+- **Leaderboard CONFIRMED**: CoT self-consistency = **87.26** vs letter-only baseline 77.11
+  (+10.15). Contest default workflow = `self-consistency` (k=1, reasoning_max_tokens=2048).
+- **GPU session 2 done** (RunPod A5000 community $0.16/h, ~$0.40 total, pod terminated).
+  Measured a 4-variant battery on 150 labeled ViGEText exam MCQs:
+  - old Q4_0 k=1 = 89.33% | UD-Q4_K_XL k=1 = 88.00% | +few-shot = 88.67% | tiered = 90.00%
+  - All within n=150 noise (±2.6pp). **REJECTED**: quant-swap to UD-Q4_K_XL (measured
+    NEGATIVE — keep the current Q4_0); blanket few-shot (flat); blanket tiered (3× slower,
+    no real gain). Do NOT re-try these.
+- **GROUND-TRUTH PIVOT (most important doc: `notes/public-test-composition-2026-06-11.md`)**:
+  analyzed the REAL 463 public test. ViGEText is a BAD proxy. Real composition:
+  ~22% reading-comprehension (passage GIVEN → RAG useless), ~25-30% cross-domain
+  quantitative (heavy among the 29% that are 10-CHOICE), ~54% factual grab-bag (only a
+  ~10-15% VN-legal/admin/Party slice is RAG-addressable). Context never truncates (max
+  ~3.4k tok). Owner: test is "nhiều logic" + "toán tổng quát mọi lĩnh vực (Hóa/Lý/Lượng tử)".
+- **Verified error-lever analysis** (`notes/error-lever-analysis-2026-06-11.md`, 33-agent
+  adversarial workflow): RAG 0 clean wins (gated on reasoning); TIR 2 clean wins (numeric
+  only); ~6/16 ViGEText "errors" are DEFECTIVE GOLDS. Build order: TIR → reading-comp → RAG.
+- **LEVEL 1 BUILT & COMMITTED (155 tests green)**: Tool-Integrated Reasoning + router.
+  - `tool_runtime.py` (offline `python -I -S` sandbox: extract_code + run_python, wall-clock
+    timeout, temp cwd, bounded output), `prompting.py` (build_tir_code_prompt /
+    build_tir_answer_prompt), `solver.py` (`_solve_tir` k-pass SC-on-setup, degrades to
+    reasoning; `_solve_router`: quantitative→TIR else→self_consistency), config
+    (tir_samples/tir_exec_timeout_seconds/tir_code_max_tokens; valid_strategies+={tir,router}),
+    `tir` + `router` dev workflows. **Default path UNCHANGED** (self-consistency).
 
-1. Provide a model (NVIDIA path is easiest — needs no build, only `requests`):
-   ```powershell
-   setx NVIDIA_API_KEY "<key>"     # then open a NEW terminal   (dev: Gemma-4-31b)
-   ```
-   Local GGUF path needs a working `llama-cpp-python`. NOTE (verified 2026-06-10): there is
-   **no prebuilt wheel for Python 3.13** on this machine, so the local path requires either
-   Python 3.11/3.12 (which have prebuilt wheels) or a C++/CMake build toolchain, plus the
-   GGUF at `C:\models\gemma-4-26B_q4_0-it.gguf` and `pip install -r requirements-local.txt`.
-2. Measure P1 (reasoning vs current) on a sample:
-   ```powershell
-   cd E:\Sach\Sua\bang_c
-   .\scripts\evaluate.ps1 -InputPath "C:\Users\Admin\Downloads\public-test_1780368312.json" `
-     -Workflows contest-strict,self-consistency -Limit 40
-   ```
-   Compare answer stability + whether agreement-based confidence separates right/wrong
-   better than the old hard-coded confidence. Record real numbers in `docs/method-writeup.md`
-   and `notes/worklog.md`.
-3. If reasoning wins → tune `self_consistency_samples` / `reasoning_max_tokens`, then make
-   it the contest path (P1 exit). Then harden `normalize_answer` against the *actual* CoT
-   formats the model emits (don't guess formats blind).
-4. **PAUSE for human sign-off** before deleting the overfit adjudicators (P2; public-dip
-   risk) and before any leaderboard submission.
-5. Then P3 wiring (build a 2nd provider client, `solve_with_challenge`) → P4 refactor →
-   rebuild + validate the Gemma Docker image → record the leaderboard number.
+## 3. ▶ NEXT TASK — LEVEL 2: reading-comprehension grounding mode
 
-## Guardrails (unchanged)
+Targets the ~22% passage bucket. Failure mode is NOT missing knowledge (text is supplied) —
+it is distractor traps seen in the real test:
+- test_0001: an option that is true but cited to the WRONG source (Mishna vs Deuteronomy).
+- test_0003: a true fact about the subject that doesn't ANSWER this question.
+- test_0004: a plausible consequence the passage doesn't actually state.
+The contest-default self-consistency uses a GENERIC reasoning prompt; these traps slip
+through. Build the passage analog of TIR (TIR grounds on Python output; this grounds on a
+passage quote):
+
+1. `prompting.py` → `build_reading_prompt(problem, *, max_tokens, exemplars=())`: instruct
+   the model to (a) QUOTE the exact passage span that answers the question; (b) check EACH
+   option against the passage; (c) reject true-but-off-topic, wrong-attribution, and
+   outside-the-passage inference; (d) end `ANSWER: <letter>`. Reuse `_format_problem` /
+   `_letters`. Use REASONING_SYSTEM_PROMPT or a reading-specialized system prompt.
+2. `solver.py` → in `_solve_router`, route passage questions
+   (`profile.kind == "reading"` or `"has_long_context" in profile.features`) to a new
+   `_solve_reading` that votes over self-consistency samples using build_reading_prompt
+   (mirror `_collect_reasoning_votes`/`_solve_self_consistency`; consider a `reading_*`
+   prompt path so few-shot/diversify still apply). Quantitative still → TIR; else → SC.
+3. `config.py`: add only if needed (e.g. `reading_samples`); reuse existing SC knobs first
+   (simplicity). Keep the default path unchanged; reading mode lives in the `router` dev
+   workflow.
+4. `tests/test_reading.py` (scripted clients): a model that quotes the WRONG source must be
+   gated; a model that picks a true-but-off-topic option must be rejected by the prompt
+   contract; router sends a passage question to reading mode and a calc question to TIR.
+5. Verify: `python -m unittest discover -s tests` (all green) + `python -m hackaithon_c.run
+   --policy` (PASS). Sync `configs/default.json` → `src/hackaithon_c/resources/default.json`
+   (`Copy-Item`). Commit with a verification story. Append to `notes/worklog.md`.
+
+Ship OFF by default (in `router`), pending GPU measurement — like TIR. It is a prompt +
+routing change, NO new infra. Generalizes (passage-grounding is universal), no overfit.
+
+## 4. Then: LEVEL 3 + measurement
+
+- **Level 3 (lowest priority)**: targeted RAG for the ~10-15% VN-legal/admin/Party factual
+  slice ONLY (fire-safety, Cà Mau ID procedure, HCM Thought). Gated, measured first.
+  Corpus: vi-wiki parquet (filter <500-char stubs) + VN legal corpus (YuITC MIT 214MB /
+  th1nhng0 CC-BY); BGE-m3 GGUF (llama-server --embedding) + BM25 hybrid; Qwen3-Reranker.
+  RAG is USELESS for reading-comp (text already given) — only the legal/admin factual slice.
+- **GPU measurement session** (gate on owner; ~$0.40 last time): re-rent RunPod, stage
+  UD-Q4_K_XL (ungated HF) + old Q4_0 (skopeo from `hacamy12345/neko-core:gemma26b-q4`) +
+  ViGEText (`uitnlp/ViGEText_17to23` test, ungated) + ViMMRC (reading proxy). Measure
+  `router` vs `self-consistency` PER BUCKET (quantitative on ViGEText-math/phys/chem;
+  reading on ViMMRC). Promote router to the contest default ONLY if it wins per-bucket with
+  no overall regression. NOTE: community pods have old CPUs (no AVX512) → prebuilt
+  llama-cpp wheels SIGILL → must source-build (see `notes/lessons.md`). Scripts hygiene:
+  write file → scp → `tr -d '\r'` → bash (PowerShell/ssh quoting + sandbox bite otherwise).
+
+## 5. Credentials (read from files, NEVER commit/echo; pause before spend/publish)
+
+- RunPod API key: `C:\Users\Admin\Downloads\rpa_FIYHE0EN38IUDYZC9TAT6WJ2S2UHZ9P.txt`.
+  Balance ~$0.87 — TOP UP before a GPU session.
+- Docker Hub: user `hacamy12345`, PAT in `C:\Users\Admin\Downloads\1. Run.txt`. Published
+  image `hacamy12345/neko-core:gemma26b-q4`.
+- Public test (questions only, NO labels): `C:\Users\Admin\Downloads\public-test_1780368312.json`.
+- PAUSE for owner sign-off before: leaderboard submission, GPU/RunPod spend, publishing or
+  overwriting the Docker image.
+
+## 6. Guardrails (unchanged)
 No hard-coded answers/formulas; no single-language live-path heuristics; keep Vietnamese
-diacritics; runtime container offline/self-contained; `pred.csv` (`qid,answer`, per-row
-letters) always valid; report real numbers, never fabricate.
+diacritics; runtime offline/self-contained; `pred.csv` (`qid,answer`, per-row letters)
+always valid; report real numbers, never fabricate; default contest path stays
+`self-consistency` until a lever is GPU-measured and proven to generalize.
