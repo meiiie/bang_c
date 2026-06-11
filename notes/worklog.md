@@ -682,3 +682,24 @@ humanities) and re-measure where errors actually fall before committing to TIR v
 Do NOT ship the quant swap, few-shot, or blanket-tiered based on this evidence.
 
 **Cost so far:** ~2h × $0.16 ≈ $0.32. Pod kept for the next measurement.
+
+---
+
+## 2026-06-11 — HUM-weighted measurement + pod terminated; pivot to ground-truth strategy
+
+- **HUM-weighted (humanities-heavy ViGEText, old Q4_0 k=1): 161/180 = 89.44%.** Per-subject:
+  history 91%, civic 93%, geography 85%, chem 93%, bio 87%, math 80%, phys 90%. Nearly
+  identical to the balanced 89.33% → on ViGEText the model is ~89% regardless of slice;
+  the earlier "history floor" was largely noise.
+- **KEY pivot:** analyzed the REAL 463 public test (see
+  `notes/public-test-composition-2026-06-11.md`). ViGEText is a BAD proxy — the contest is
+  ~22% reading-comprehension (passage given), ~25-30% cross-domain quantitative (heavy in
+  the 29% that are 10-CHOICE), ~54% factual grab-bag (only a ~10-15% VN-legal/admin/Party
+  slice is RAG-addressable). Context never truncates (max ~3.4k tok). Owner confirmed:
+  "nhiều logic" + "toán tổng quát mọi lĩnh vực". RAG is useless for the reading-comp bucket
+  (text is already in the prompt).
+- **Pod terminated** (ozflrk35xr9osd). Total GPU session 2 cost ≈ $0.40 (balance $1.27→$0.87).
+  Further ViGEText measurement is low-value until new code exists to test.
+- **Next (local, no GPU):** build the question-type ROUTER — (1) TIR/Python-exec for the
+  quantitative slice, (2) reading-comp grounding mode, (3) targeted RAG for the legal slice
+  (last). Measure each on its matching proxy next GPU session.
