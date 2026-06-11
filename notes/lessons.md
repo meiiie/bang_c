@@ -63,3 +63,17 @@ Durable lessons learned while building Neko Core. Newest on top.
   specifically is a liability on the 2000-question multilingual private test.
 - **Notebook discipline.** Investigations live in `notes/` with file:line evidence,
   one dated file per topic; `lessons.md` captures the durable takeaways.
+
+## 2026-06-12 (GPU session — PowerShell→ssh→bash quoting)
+
+- **PowerShell→ssh→bash inline quoting: use a SINGLE-QUOTED outer string.** Repeatedly
+  hit parser errors running inline ssh from PowerShell: `<`, `||`, `$(...)`, `\"` inside a
+  DOUBLE-quoted PS string get interpreted by PowerShell (`The '<' operator is reserved`,
+  `'||' is not a valid statement separator`), or the `\"` escaping unbalances quotes so PS
+  sees bash operators bare. FIX: wrap the remote command in **single quotes** so PowerShell
+  passes it to ssh verbatim and bash parses it —
+  `ssh ... root@host 'for d in a b; do n=$(wc -l < f); echo "$d $n"; done'`.
+  Bash `$var`/`$(...)` stay intact (PS does not expand inside single quotes).
+- **For anything non-trivial, still prefer: write .sh file → scp → `tr -d '\r'` → bash.**
+  The single-quote trick is for quick one-liners; multi-line/heredoc scripts must go through
+  a file (CRLF + quoting bite otherwise). Both confirmed this session.
