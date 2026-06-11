@@ -156,6 +156,50 @@ def build_reasoning_prompt(
     return PromptBundle(REASONING_SYSTEM_PROMPT, user_prompt, "reasoning", max_tokens=max_tokens)
 
 
+TIR_SYSTEM_PROMPT = """You solve quantitative multiple-choice questions by writing and \
+running a short Python program. The question may be in any language.
+Write ONE self-contained Python 3 program (standard library only) that computes the \
+quantity the question asks for and prints the final numeric result clearly.
+Rules:
+- Put the program in a single ```python ... ``` code block.
+- Use only the numbers and relationships stated in the question; show the final value with print().
+- Do not guess an option letter yet — just compute and print the result.
+Return only the reasoning needed to set up the computation, then the code block."""
+
+
+def build_tir_code_prompt(problem: Problem, *, max_tokens: int = 1024) -> PromptBundle:
+    """Round 1 of tool-integrated reasoning: ask for a Python program that computes the
+    answer. The model must NOT pick a letter yet — it computes a numeric result that the
+    follow-up round maps onto the options (separates correct computation from option-matching)."""
+    user_prompt = (
+        "Solve this quantitative question by writing a Python program that computes the "
+        "required value.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        "Write a single self-contained ```python``` program (standard library only) that "
+        "computes the answer and prints the final numeric result. Do not select an option "
+        "letter yet."
+    )
+    return PromptBundle(TIR_SYSTEM_PROMPT, user_prompt, "tir_code", max_tokens=max_tokens)
+
+
+def build_tir_answer_prompt(
+    problem: Problem, code: str, execution_output: str, *, max_tokens: int = 96
+) -> PromptBundle:
+    """Round 2 of TIR: given the program's executed output, pick the matching option letter."""
+    output = execution_output.strip() or "(no output)"
+    user_prompt = (
+        "You wrote a Python program to solve this question and it has been executed.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Your program:\n```python\n{code[:2000]}\n```\n\n"
+        f"Execution output:\n{output[:1500]}\n\n"
+        "Using the computed result, choose the option whose value matches it most closely. "
+        "If the output looks wrong or errored, fall back to your best reasoning.\n"
+        f"Available letters: {_letters(problem)}\n"
+        "End with a line: ANSWER: <letter>"
+    )
+    return PromptBundle(REASONING_SYSTEM_PROMPT, user_prompt, "tir_answer", max_tokens=max_tokens)
+
+
 @lru_cache(maxsize=8)
 def load_exemplars(path: str) -> tuple[dict, ...]:
     """Load few-shot exemplars from a JSON list file; empty path -> no exemplars."""

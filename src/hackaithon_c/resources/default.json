@@ -50,6 +50,9 @@
     "reasoning_top_p": 0.95,
     "reasoning_top_k": 64,
     "reasoning_few_shot_path": "",
+    "tir_samples": 1,
+    "tir_exec_timeout_seconds": 5.0,
+    "tir_code_max_tokens": 1024,
     "tiered_tier1_samples": 2,
     "tiered_total_samples": 5,
     "self_consistency_challenge_threshold": 0.75,
@@ -144,6 +147,20 @@
     "tiered-consistency": {
       "description": "CANDIDATE for 93+: tiered diverse self-consistency. Tier 1 = anchor + rotated-choice sample (position-bias debias); unanimous -> stop. Disagreement -> escalate to seeded temp>0 rotated samples and majority-vote. Pending real-model measurement before promotion.",
       "strategy": "tiered",
+      "verify": false,
+      "dry_run": false,
+      "phase": "development"
+    },
+    "tir": {
+      "description": "Tool-integrated reasoning: model writes + EXECUTES Python (offline sandbox) to compute, then maps the result onto an option. For the public test's ~25-30% cross-domain quantitative slice. Pending real-model measurement.",
+      "strategy": "tir",
+      "verify": false,
+      "dry_run": false,
+      "phase": "development"
+    },
+    "router": {
+      "description": "CANDIDATE: question-type router on the real-test composition -- quantitative -> TIR (Python exec), everything else -> diverse self-consistency. The 'good combination' for the mixed humanities+math contest. Pending real-model measurement.",
+      "strategy": "router",
       "verify": false,
       "dry_run": false,
       "phase": "development"

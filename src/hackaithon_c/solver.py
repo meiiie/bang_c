@@ -22,12 +22,15 @@ from .prompting import (
     build_reasoning_prompt,
     build_repair_prompt,
     build_tiebreak_prompt,
+    build_tir_answer_prompt,
+    build_tir_code_prompt,
     build_verifier_prompt,
     load_exemplars,
     tournament_variants,
 )
 from .principles import adjudicate_principle
 from .schema import Prediction, Problem, ProblemProfile, TraceStep
+from .tool_runtime import extract_code, run_python
 
 
 SolverStrategy = str
@@ -101,6 +104,16 @@ def solve_problem(
         if strategy == "tiered":
             return _with_trace(
                 _solve_tiered(problem, profile, client, config=config, challenger=challenger),
+                trace,
+            )
+        if strategy == "tir":
+            return _with_trace(
+                _solve_tir(problem, profile, client, config=config),
+                trace,
+            )
+        if strategy == "router":
+            return _with_trace(
+                _solve_router(problem, profile, client, config=config, challenger=challenger),
                 trace,
             )
         return _with_trace(
@@ -971,6 +984,146 @@ def _solve_tiered(
         strategy="gemma_tiered_escalated" if escalated else "gemma_tiered",
         fallback_reason="invalid_tiered",
     )
+
+
+def _is_quantitative(profile: ProblemProfile) -> bool:
+    """Route to tool-integrated reasoning only for genuine computation questions."""
+    return profile.kind == "calculation" or "has_calculation" in profile.features
+
+
+def _solve_tir(
+    problem: Problem,
+    profile: ProblemProfile,
+    client: ChatClient,
+    *,
+    config: HarnessConfig,
+) -> Prediction:
+    """Tool-integrated reasoning: the model writes a Python program, we EXECUTE it
+    offline, then the model maps the computed result onto an option letter. Voting over
+    `tir_samples` independent passes is self-consistency on the SETUP (the failure mode is
+    a mis-modeled problem solved deterministically-wrong, not arithmetic slips). Any pass
+    that yields no code, no execution, or no valid letter contributes an empty vote; if no
+    pass produces a valid answer the item degrades to plain self-consistency reasoning so
+    pred.csv stays complete.
+    """
+    answers: list[str] = []
+    trace_steps: list[TraceStep] = []
+    for index in range(config.tir_samples):
+        sampling: dict[str, float | int] = {}
+        if index > 0:
+            sampling = {
+                "temperature": config.reasoning_temperature,
+                "top_p": config.reasoning_top_p,
+                "top_k": config.reasoning_top_k,
+                "seed": stable_seed(problem.qid, 1000 + index),
+            }
+        code_prompt = build_tir_code_prompt(problem, max_tokens=config.tir_code_max_tokens)
+        raw_code = client.complete(
+            code_prompt.system_prompt,
+            code_prompt.user_prompt,
+            max_tokens=code_prompt.max_tokens,
+            **sampling,
+        )
+        code = extract_code(raw_code)
+        if code is None:
+            answers.append("")
+            trace_steps.append(
+                TraceStep(
+                    role="tir",
+                    action=f"code:{index + 1}",
+                    status="warning",
+                    detail="model produced no python code block",
+                )
+            )
+            continue
+        result = run_python(code, timeout_seconds=config.tir_exec_timeout_seconds)
+        trace_steps.append(
+            TraceStep(
+                role="tir",
+                action=f"exec:{index + 1}",
+                status="completed" if result.ok else "warning",
+                detail=result.summary,
+            )
+        )
+        answer_prompt = build_tir_answer_prompt(
+            problem, code, result.stdout or result.stderr
+        )
+        raw_answer = client.complete(
+            answer_prompt.system_prompt,
+            answer_prompt.user_prompt,
+            max_tokens=answer_prompt.max_tokens,
+        )
+        normalized = normalize_answer(raw_answer, problem)
+        if normalized is None:
+            repaired = _repair_invalid_answer(problem, client, raw_answer, config=config)
+            normalized = repaired[1] if repaired is not None else None
+        answers.append(normalized or "")
+        trace_steps.append(
+            TraceStep(
+                role="tir",
+                action=f"answer:{index + 1}",
+                status="completed" if normalized else "warning",
+                detail="execution-grounded answer" if normalized else "no valid letter",
+                answer=normalized,
+            )
+        )
+
+    if not any(answers):
+        trace_steps.append(
+            TraceStep(
+                role="tir",
+                action="degrade",
+                status="warning",
+                detail="no TIR pass produced a valid letter; falling back to reasoning",
+            )
+        )
+        fallback_answers, fallback_steps = _collect_reasoning_votes(
+            problem,
+            client,
+            config.self_consistency_samples,
+            config=config,
+            label="tir_fallback_sample",
+        )
+        return _vote_prediction(
+            problem,
+            profile,
+            client.model,
+            fallback_answers,
+            trace_steps + fallback_steps,
+            strategy="gemma_tir_degraded",
+            fallback_reason="invalid_tir",
+        )
+    return _vote_prediction(
+        problem,
+        profile,
+        client.model,
+        answers,
+        trace_steps,
+        strategy="gemma_tir",
+        fallback_reason="invalid_tir",
+    )
+
+
+def _solve_router(
+    problem: Problem,
+    profile: ProblemProfile,
+    client: ChatClient,
+    *,
+    config: HarnessConfig,
+    challenger: ChatClient | None = None,
+) -> Prediction:
+    """The 'good combination': route each question to the mode that fits its type.
+
+    Quantitative questions (the public test's ~25-30% cross-domain math/physics/chem/
+    economics slice, heavy among the 10-choice items) go through tool-integrated
+    reasoning — Python execution kills the arithmetic/balance slips that closed-book CoT
+    makes. Everything else (reading comprehension over supplied passages, civics/history/
+    logic) goes through diverse self-consistency, where careful reasoning + voting is the
+    documented lever and retrieval/code add nothing.
+    """
+    if _is_quantitative(profile):
+        return _solve_tir(problem, profile, client, config=config)
+    return _solve_self_consistency(problem, profile, client, config=config)
 
 
 def solve_with_challenge(

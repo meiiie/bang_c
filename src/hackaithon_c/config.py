@@ -174,6 +174,23 @@ class HarnessConfig:
         return str(self.runtime.get("reasoning_few_shot_path", "")).strip()
 
     @property
+    def tir_samples(self) -> int:
+        # Tool-integrated reasoning: how many independent code+exec+answer passes to
+        # vote over (self-consistency on the SETUP, not just the arithmetic). 1 = single
+        # pass. Only fires on quantitative questions via the router.
+        return max(1, int(self.runtime.get("tir_samples", 1)))
+
+    @property
+    def tir_exec_timeout_seconds(self) -> float:
+        # Hard wall-clock cap on each model-written program (kills runaway loops).
+        return float(self.runtime.get("tir_exec_timeout_seconds", 5.0))
+
+    @property
+    def tir_code_max_tokens(self) -> int:
+        # Generation budget for the code-writing round (programs are short).
+        return int(self.runtime.get("tir_code_max_tokens", 1024))
+
+    @property
     def tiered_tier1_samples(self) -> int:
         # Tier 1 = anchor + rotated-choice samples; unanimous agreement stops early.
         return max(1, int(self.runtime.get("tiered_tier1_samples", 2)))
@@ -353,7 +370,16 @@ def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None
         if not markers.get(key):
             raise ValueError(f"Config {path} missing profiling markers: {key}")
 
-    valid_strategies = {"auto", "direct", "verify", "tournament", "self_consistency", "tiered"}
+    valid_strategies = {
+        "auto",
+        "direct",
+        "verify",
+        "tournament",
+        "self_consistency",
+        "tiered",
+        "tir",
+        "router",
+    }
     for name, workflow in raw.get("workflows", {}).items():
         if workflow.get("strategy") not in valid_strategies:
             raise ValueError(f"Config {path} workflow {name} has invalid strategy")

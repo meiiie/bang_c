@@ -703,3 +703,40 @@ Do NOT ship the quant swap, few-shot, or blanket-tiered based on this evidence.
 - **Next (local, no GPU):** build the question-type ROUTER — (1) TIR/Python-exec for the
   quantitative slice, (2) reading-comp grounding mode, (3) targeted RAG for the legal slice
   (last). Measure each on its matching proxy next GPU session.
+
+---
+
+## 2026-06-11 — BUILD: Tool-integrated reasoning (TIR) + question-type router ✅
+
+Lever #1 from the ground-truth plan: the public test is ~25-30% cross-domain quantitative
+(econ/calc/kinetics/stats, heavy among the 29% 10-choice items). Closed-book CoT makes
+arithmetic/balance slips there; executing Python kills them (2/2 confirmed wins in the
+error-lever analysis; AIMO: CoT->TIR +6.2pp).
+
+**Built (local, model-independent, offline-safe; 155 tests green):**
+- `tool_runtime.py` — offline sandbox: `extract_code` (last ```python``` block) +
+  `run_python` (isolated `python -I -S -c` subprocess, hard wall-clock timeout kills
+  runaway loops, temp cwd, bounded captured output). Robustness sandbox (author is our own
+  LLM, runtime is network-free), not adversarial. Real subprocess tests: stdout capture,
+  error, timeout, isolation.
+- `prompting.py` — `build_tir_code_prompt` (round 1: write a stdlib Python program that
+  COMPUTES and prints the result; do NOT pick a letter yet — separates correct computation
+  from option-matching) + `build_tir_answer_prompt` (round 2: given executed output, map to
+  the option letter; fall back to reasoning if the output errored).
+- `solver.py` — `_solve_tir`: k independent code+exec+answer passes (self-consistency on
+  the SETUP, the real TIR failure mode), majority vote; any pass with no code / no letter
+  contributes an empty vote; if NO pass yields a letter it degrades to plain
+  self-consistency so pred.csv stays complete. `_solve_router`: quantitative
+  (`profile.kind==calculation` or `has_calculation`) -> TIR, else -> diverse
+  self-consistency. The "good combination" for the mixed humanities+math test.
+- `config.py` — `tir_samples` (1), `tir_exec_timeout_seconds` (5.0), `tir_code_max_tokens`
+  (1024); `valid_strategies` += {tir, router}.
+- `configs/default.json` (+resources sync) — keys + `tir` and `router` workflows
+  (phase=development until real-model measured).
+
+**Default path UNCHANGED**: contest default is still `self-consistency`; `router`/`tir` are
+opt-in dev workflows pending GPU measurement on ViGEText-quantitative + the public test.
+
+**Next builds:** (2) reading-comp grounding mode (~22% bucket; prompt/strategy variant +
+SC, no new infra); (3) targeted RAG for the legal/admin slice (last, gated). Then a GPU
+session measures router vs self-consistency per-bucket.
