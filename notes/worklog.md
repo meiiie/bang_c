@@ -863,3 +863,44 @@ on 2000 private Q = Accuracy (dominant, formula a/N*100%*70 in a 80-pt row) + in
 Time (10) + Idea (10). Output /data/*.csv -> /output/pred.csv (qid,answer). The Time score
 means heavy levers (TIR=Python exec, RAG=retrieval+2.5GB RAM) carry a real cost — promoting
 them is NOT free even if they add accuracy. All three levers stay OFF-by-default (correct).
+
+---
+
+## 2026-06-11 — MEASURED via FPT API: all 3 levers LOSE to self-consistency
+
+NEW DEV ENGINE: FPT AI Marketplace hosts `gemma-4-26B-A4B-it` (our exact contest model)
+at ~$0.14/$0.40 per 1M tok, 307 tok/s, parallel-safe. Wired `fpt-gemma-api` profile
+(OpenAI-compatible client, no code change beyond a provider-neutral HACKC_API_KEY).
+Ran the full per-bucket battery LOCALLY in ~20 min for ~$0.40 — no GPU, no pod, no risk.
+
+**Results (n=120/bucket, full-precision API; candidate vs self-consistency):**
+| bucket  | self-consistency | candidate (lever)   | delta   | paired net |
+|---------|------------------|---------------------|---------|------------|
+| quant   | 86.7%            | router→TIR  79.2%   | -7.5pp  | -9 |
+| reading | 91.7%            | reading-mode 90.0%  | -1.7pp  | -2 |
+| civics  | 91.7%            | RAG         86.7%   | -5.0pp  | -6 |
+
+**ALL THREE LEVERS LOSE. Verdict: do NOT promote the router. Ship self-consistency.**
+
+**Why TIR hurts (inspected all 9 quant breaks):** every one was a genuinely computational
+item (log-domain, stoichiometry, binomial, integral, solid geometry, decay, AC circuit) —
+exactly TIR's target — and all 9 ran real `gemma_tir`. TIR wrote Python that MIS-MODELS the
+setup → confident wrong number; plain CoT reasoned them right. For gemma-4-26B-A4B, natural-
+language reasoning BEATS code generation on contest math (the hard part is modeling, not
+arithmetic; the 2-stage code-then-map also loses option context). RAG: legal excerpts are
+topical-not-answer-bearing → distract on civics the model already knows. Reading-grounding:
+prompt rigidity ~= noise-negative.
+
+**Caveats (honesty):** ViGEText/ViMMRC are imperfect proxies (ViGEText flagged BAD earlier;
+ViMMRC items mostly classified `general` not `reading`). API is full-precision vs our Q4 Q
+submission. But the burden of proof was on the levers to show a WIN — they showed losses,
+two of them large — so we don't promote. Consistent with prior negatives (few-shot flat,
+tiered no-gain, quant-swap negative): most "obvious" levers don't help; measuring saves us.
+
+**Levers stay OFF (committed, 194 tests) = honest "Idea"-score material: we built TIR/RAG/
+reading, measured on the real model, found CoT self-consistency wins, shipped the baseline.**
+
+**Process win:** the FPT API is now the fast/cheap dev loop. Next 87→90+ experiments to
+measure here (cheap): self-consistency k=1 vs k=5 temperature voting; gemma-4-26B vs
+gemma-4-31B (both on the API; 31B is Gemma-4-series = contest-allowed). Quantization loss
+(full-precision API ~87-92% on proxies vs our Q4 87.26 leaderboard) needs local-GPU measure.
