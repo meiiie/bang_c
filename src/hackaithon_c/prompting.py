@@ -115,6 +115,30 @@ def build_repair_prompt(problem: Problem, invalid_answer: str) -> PromptBundle:
     return PromptBundle(SYSTEM_PROMPT, user_prompt, "repair", max_tokens=16)
 
 
+def _exemplar_parts(exemplars: tuple[dict, ...]) -> list[str]:
+    """Format few-shot exemplars as prompt sections (shared by the reasoning and
+    reading prompts). Empty exemplars -> no sections."""
+    if not exemplars:
+        return []
+    parts = [
+        "Here are solved examples showing the expected reasoning and answer format:"
+    ]
+    for exemplar in exemplars:
+        example_problem = Problem(
+            qid="exemplar",
+            question=str(exemplar["question"]),
+            choices=tuple(str(choice) for choice in exemplar["choices"]),
+        )
+        block = _format_problem(example_problem)
+        reasoning = str(exemplar.get("reasoning", "")).strip()
+        answer_line = f"ANSWER: {exemplar['answer']}"
+        parts.append(
+            f"{block}\n\n{reasoning}\n{answer_line}" if reasoning else f"{block}\n\n{answer_line}"
+        )
+    parts.append("Now solve the real question:")
+    return parts
+
+
 def build_reasoning_prompt(
     problem: Problem,
     *,
@@ -128,24 +152,7 @@ def build_reasoning_prompt(
     Vietnamese exam MCQ). Each exemplar dict: question, choices (list), answer, and
     an optional short `reasoning` string shown before the answer line.
     """
-    parts: list[str] = []
-    if exemplars:
-        parts.append(
-            "Here are solved examples showing the expected reasoning and answer format:"
-        )
-        for exemplar in exemplars:
-            example_problem = Problem(
-                qid="exemplar",
-                question=str(exemplar["question"]),
-                choices=tuple(str(choice) for choice in exemplar["choices"]),
-            )
-            block = _format_problem(example_problem)
-            reasoning = str(exemplar.get("reasoning", "")).strip()
-            answer_line = f"ANSWER: {exemplar['answer']}"
-            parts.append(
-                f"{block}\n\n{reasoning}\n{answer_line}" if reasoning else f"{block}\n\n{answer_line}"
-            )
-        parts.append("Now solve the real question:")
+    parts: list[str] = _exemplar_parts(exemplars)
     parts.append(
         "Solve this multiple-choice question. Reason briefly, then commit to one letter.\n\n"
         f"{_format_problem(problem)}\n\n"
@@ -154,6 +161,57 @@ def build_reasoning_prompt(
     )
     user_prompt = "\n\n---\n\n".join(parts)
     return PromptBundle(REASONING_SYSTEM_PROMPT, user_prompt, "reasoning", max_tokens=max_tokens)
+
+
+READING_SYSTEM_PROMPT = """You answer multiple-choice questions about a supplied passage.
+The passage and question may be in any language; read them in their own language.
+The correct option is the one the PASSAGE supports — not the one that is merely true.
+Reject these distractor traps:
+- an option that is true in general but does not answer THIS question;
+- an option that attributes a fact to the wrong source, author, person, or section;
+- an option that claims more than the passage actually states (outside inference).
+Watch for negation (words meaning "not", "incorrect", "except", "false") — it flips
+the target: the answer is then the option the passage does NOT support.
+Ground every judgement in the passage text itself, not outside knowledge.
+If no passage is supplied with the question, answer from your own knowledge instead.
+Finish with a final line in exactly this format:
+ANSWER: <letter>
+where <letter> is one of the available option letters."""
+
+
+def build_reading_prompt(
+    problem: Problem,
+    *,
+    max_tokens: int = 512,
+    exemplars: tuple[dict, ...] = (),
+) -> PromptBundle:
+    """Passage-grounded reading prompt — the reading analog of TIR: TIR grounds the
+    answer on executed Python output, this grounds it on a quoted passage span.
+
+    Targets the distractor traps observed in the real test (true-but-off-topic options,
+    wrong-source attribution, inference beyond the passage). Same signature as
+    build_reasoning_prompt so the self-consistency sampling loop can use either builder.
+    """
+    parts: list[str] = _exemplar_parts(exemplars)
+    parts.append(
+        "Answer this multiple-choice question about the supplied passage.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        "Work strictly from the passage:\n"
+        "1. Quote the exact sentence(s) from the passage that answer the question.\n"
+        "2. Check every option against the passage, one by one. Reject an option if it "
+        "is true but does not answer this question, if it cites the wrong source or "
+        "attribution, or if it claims something the passage does not state.\n"
+        "3. Choose the option whose full claim is directly supported by your quoted "
+        "sentence(s).\n"
+        "For a negated question (which option is NOT stated / incorrect / except): "
+        "verify passage support for every option and choose the one WITHOUT support.\n"
+        "If no passage is supplied, skip the quoting and answer from your own "
+        "knowledge.\n\n"
+        f"Available letters: {_letters(problem)}\n"
+        "End your answer with a line: ANSWER: <letter>"
+    )
+    user_prompt = "\n\n---\n\n".join(parts)
+    return PromptBundle(READING_SYSTEM_PROMPT, user_prompt, "reading", max_tokens=max_tokens)
 
 
 TIR_SYSTEM_PROMPT = """You solve quantitative multiple-choice questions by writing and \

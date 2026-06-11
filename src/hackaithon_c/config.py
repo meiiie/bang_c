@@ -378,6 +378,7 @@ def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None
         "self_consistency",
         "tiered",
         "tir",
+        "reading",
         "router",
     }
     for name, workflow in raw.get("workflows", {}).items():

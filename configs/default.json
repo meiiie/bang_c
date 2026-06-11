@@ -158,8 +158,15 @@
       "dry_run": false,
       "phase": "development"
     },
+    "reading": {
+      "description": "Passage-grounded reading mode: quote the passage span, vet each option against the text, reject true-but-off-topic / wrong-attribution / outside-passage distractors. Forces the mode on every item -- for per-bucket measurement on a reading proxy (ViMMRC). Pending real-model measurement.",
+      "strategy": "reading",
+      "verify": false,
+      "dry_run": false,
+      "phase": "development"
+    },
     "router": {
-      "description": "CANDIDATE: question-type router on the real-test composition -- quantitative -> TIR (Python exec), everything else -> diverse self-consistency. The 'good combination' for the mixed humanities+math contest. Pending real-model measurement.",
+      "description": "CANDIDATE: question-type router on the real-test composition -- quantitative -> TIR (Python exec), passage -> reading-grounding mode, everything else -> diverse self-consistency. The 'good combination' for the mixed humanities+math contest. Pending real-model measurement.",
       "strategy": "router",
       "verify": false,
       "dry_run": false,
@@ -192,7 +199,12 @@
         "information",
         "document",
         "article",
-        "contenido"
+        "contenido",
+        "文章",
+        "短文",
+        "阅读",
+        "지문",
+        "다음 글"
       ],
       "negative": [
         "khong dung",

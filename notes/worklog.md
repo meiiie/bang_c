@@ -740,3 +740,54 @@ opt-in dev workflows pending GPU measurement on ViGEText-quantitative + the publ
 **Next builds:** (2) reading-comp grounding mode (~22% bucket; prompt/strategy variant +
 SC, no new infra); (3) targeted RAG for the legal/admin slice (last, gated). Then a GPU
 session measures router vs self-consistency per-bucket.
+
+---
+
+## 2026-06-11 — BUILD: Level 2 reading-comprehension grounding mode ✅
+
+Lever #2 from the ground-truth plan: the ~22% passage bucket fails on distractor traps
+(test_0001 true-but-WRONG-source, test_0003 true-but-off-topic, test_0004
+outside-passage inference), not missing knowledge. Built the passage analog of TIR:
+TIR grounds the answer on executed Python output; this grounds it on a QUOTED passage
+span.
+
+**Built (local, model-independent; 173 tests green, policy PASS):**
+- `prompting.py` — `READING_SYSTEM_PROMPT` + `build_reading_prompt`: quote the exact
+  span -> vet EVERY option against the passage -> reject the three trap types ->
+  `ANSWER: <letter>`. Negation flips the target (choose the option WITHOUT support).
+  Graceful degradation: if no passage is supplied, answer from knowledge (kills the
+  misroute harm when bare context markers like "document"/"article" fire on factual
+  items). Shared `_exemplar_parts` helper with the reasoning prompt (few-shot path
+  still applies, OFF by default).
+- `solver.py` — `_solve_reading`: SC voting where every sample uses the reading prompt;
+  reuses `self_consistency_samples` + `reasoning_max_tokens`, NO new config knobs
+  (`_collect_reasoning_votes` gained a `prompt_builder` param, default unchanged).
+  `_is_reading`: kind=="reading" OR has_long_context (catches passage items whose kind
+  was claimed by negative/many_choice). Router order: quantitative -> TIR, passage ->
+  reading, else -> SC. Standalone `reading` strategy so the GPU session can FORCE the
+  mode on ViMMRC without depending on classifier recall (mirrors `tir`).
+  `_vote_prediction` now records the true prompt variant ("reading") for per-bucket
+  trace analysis.
+- `configs/default.json` (+resources sync) — `reading` dev workflow; router description
+  updated; CJK context markers added (文章/短文/阅读/지문/다음 글 — CJK passages are
+  character-dense and often stay under the 1800-char length trigger).
+
+**Adversarial review (9-agent workflow, 5 confirmed findings, all addressed):**
+1. MAJOR misroute: bare markers ("document"/"article") route no-passage factual items
+   into a prompt forbidding outside knowledge -> fixed via the no-passage degradation
+   line (general fix, follows the in-repo `_evidence_prompt` precedent). Residual cost
+   is routing waste only — measure router vs SC on GPU before promoting.
+2. prompt_variant mislabeled "reasoning" -> now "reading" (measurement metadata).
+3. Negated passage questions inverted the quote-first procedure -> explicit negation
+   branch added ("choose the option WITHOUT support"); "false" added to negation list.
+4. CJK under-trigger -> CJK context markers (above). Over-trigger half covered by (1).
+5. The has_long_context branch of `_is_reading` was untested (mutation survived) ->
+   negative-passage fixture added; mutation re-run now FAILS the suite (verified), then
+   reverted. CJK route also pinned.
+
+**Default path UNCHANGED**: contest default is still `self-consistency`; `reading` and
+`router` are opt-in dev workflows pending GPU measurement (router vs SC per bucket:
+ViGEText-quantitative + ViMMRC-reading), per the anti-overfit rule.
+
+**Next:** GPU measurement session (gate on owner sign-off + RunPod top-up), then
+level 3 targeted RAG for the legal/admin factual slice (last, gated).

@@ -19,6 +19,7 @@ from .permute import (
 )
 from .prompting import (
     build_prompt,
+    build_reading_prompt,
     build_reasoning_prompt,
     build_repair_prompt,
     build_tiebreak_prompt,
@@ -109,6 +110,11 @@ def solve_problem(
         if strategy == "tir":
             return _with_trace(
                 _solve_tir(problem, profile, client, config=config),
+                trace,
+            )
+        if strategy == "reading":
+            return _with_trace(
+                _solve_reading(problem, profile, client, config=config),
                 trace,
             )
         if strategy == "router":
@@ -772,6 +778,7 @@ def _collect_reasoning_votes(
     label: str,
     diversify: bool = False,
     start_index: int = 0,
+    prompt_builder=build_reasoning_prompt,
 ) -> tuple[list[str], list[TraceStep]]:
     """Sample `samples` reasoned answers from one client; return (answers, trace_steps).
 
@@ -780,7 +787,9 @@ def _collect_reasoning_votes(
     rotated choice orders (position-bias debiasing) and (b) sample at
     `reasoning_temperature` with a stable per-(qid, index) seed, so runs remain
     reproducible. A sample that yields no letter gets one deterministic repair pass
-    (same `repair_invalid_output` gate the tournament path uses).
+    (same `repair_invalid_output` gate the tournament path uses). `prompt_builder`
+    swaps the per-sample prompt (e.g. build_reading_prompt) while keeping the same
+    rotation/sampling/repair machinery.
     """
     answers: list[str] = []
     trace_steps: list[TraceStep] = []
@@ -789,7 +798,7 @@ def _collect_reasoning_votes(
         index = start_index + offset
         rotation = rotation_for_sample(index, len(problem.choices)) if diversify else 0
         sample_problem = rotate_problem(problem, rotation)
-        prompt = build_reasoning_prompt(
+        prompt = prompt_builder(
             sample_problem,
             max_tokens=config.reasoning_max_tokens,
             exemplars=exemplars,
@@ -842,9 +851,11 @@ def _vote_prediction(
     *,
     strategy: str,
     fallback_reason: str,
+    variant: str = "reasoning",
 ) -> Prediction:
     """Turn collected votes into a Prediction with agreement-based confidence, or fall
-    back if no sample produced a valid letter."""
+    back if no sample produced a valid letter. `variant` labels which prompt the
+    samples used (measurement metadata only)."""
     winner, votes, total = majority_vote(answers)
     if winner is None:
         raw = " | ".join(f"s{index + 1}={answer or '?'}" for index, answer in enumerate(answers))
@@ -871,7 +882,7 @@ def _vote_prediction(
         strategy=strategy,
         confidence=confidence,
         question_kind=profile.kind,
-        prompt_variant="reasoning",
+        prompt_variant=variant,
         attempts=len(answers),
         trace=tuple(steps),
     )
@@ -986,9 +997,53 @@ def _solve_tiered(
     )
 
 
+def _solve_reading(
+    problem: Problem,
+    profile: ProblemProfile,
+    client: ChatClient,
+    *,
+    config: HarnessConfig,
+) -> Prediction:
+    """Passage-grounded reading mode: self-consistency voting where every sample uses
+    the reading prompt (quote the passage span, check each option against the text,
+    reject true-but-off-topic / wrong-attribution / outside-passage options). Targets
+    the ~22% passage bucket, whose failure mode is distractor traps slipping through
+    the generic reasoning prompt — not missing knowledge. Reuses the SC sample count
+    and token budget; no separate knobs.
+    """
+    answers, trace_steps = _collect_reasoning_votes(
+        problem,
+        client,
+        config.self_consistency_samples,
+        config=config,
+        label="reading_sample",
+        prompt_builder=build_reading_prompt,
+    )
+    return _vote_prediction(
+        problem,
+        profile,
+        client.model,
+        answers,
+        trace_steps,
+        strategy="gemma_reading",
+        fallback_reason="invalid_reading",
+        variant="reading",
+    )
+
+
 def _is_quantitative(profile: ProblemProfile) -> bool:
     """Route to tool-integrated reasoning only for genuine computation questions."""
     return profile.kind == "calculation" or "has_calculation" in profile.features
+
+
+def _is_reading(profile: ProblemProfile) -> bool:
+    """Passage questions: the text is supplied, so the lever is grounding, not recall.
+
+    `kind == "reading"` covers the pure case; the feature check additionally catches
+    passage questions whose kind was claimed by a higher-priority label (negative,
+    many_choice) but which still carry the supplied text.
+    """
+    return profile.kind == "reading" or "has_long_context" in profile.features
 
 
 def _solve_tir(
@@ -1117,12 +1172,17 @@ def _solve_router(
     Quantitative questions (the public test's ~25-30% cross-domain math/physics/chem/
     economics slice, heavy among the 10-choice items) go through tool-integrated
     reasoning — Python execution kills the arithmetic/balance slips that closed-book CoT
-    makes. Everything else (reading comprehension over supplied passages, civics/history/
-    logic) goes through diverse self-consistency, where careful reasoning + voting is the
-    documented lever and retrieval/code add nothing.
+    makes. Passage questions (~22%) go through the reading-grounding mode — the text is
+    supplied, so quoting the passage and vetting each option against it beats generic
+    reasoning. Everything else (civics/history/logic/factual) goes through diverse
+    self-consistency, where careful reasoning + voting is the documented lever.
+    Quantitative wins over reading when both fire: a calculation stated inside a passage
+    still needs the computation done.
     """
     if _is_quantitative(profile):
         return _solve_tir(problem, profile, client, config=config)
+    if _is_reading(profile):
+        return _solve_reading(problem, profile, client, config=config)
     return _solve_self_consistency(problem, profile, client, config=config)
 
 
