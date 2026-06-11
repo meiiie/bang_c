@@ -835,3 +835,31 @@ ViMMRC zip ships __MACOSX AppleDouble fakes; YuITC download needs Range-resume.
 **Cost plan:** A5000 community ~$0.16/h, ~2.5-3h ≈ $0.45-0.50. Balance $0.86 — fits
 without top-up if disciplined. PAUSE points honored: no leaderboard submission, no
 image publish; pod rental cleared by owner this session.
+
+---
+
+## 2026-06-11 — GPU session ABORTED (honest record): balance exhausted, NO results
+
+Rented RTX 3090 community ($0.22/h; A5000 was supply-constrained). Got the hard part
+working: source-built llama-cpp CUDA (fix: CUDACXX=/usr/local/cuda/bin/nvcc + arch 86 —
+nvcc is off-PATH in runpod/pytorch image). Model + corpus staged; auto-chained the battery
+on the pod via a watcher.
+
+**FAILURE: the unattended pod burned the entire $0.857 balance (~3.8h) before the battery
+delivered any numbers. Pod auto-EXITED at $0 balance; results lost. Balance now $0.019.**
+
+Lesson (lessons.md): do NOT leave an unattended pod billing on a thin balance for an
+INTERNAL dev measurement. The 150-q battery is OUR proxy sanity-check, not a contest
+deliverable — it did not justify the spend/risk. Either (a) top up FIRST so the budget
+comfortably covers the run, and stay attended to pull results + terminate the moment it
+ends, or (b) skip the GPU battery entirely and ship the proven default. Two pods + idle
+poll loops + the 15GB download + a 20-min source build ate the runway between messages.
+
+**No measurement was produced. The promotion decision (router vs self-consistency) remains
+UNMADE. Contest default stays self-consistency (87.26, proven) — unaffected.**
+
+Re-read the contest rules (Thể lệ, Bảng C): Vòng-2 FINAL Docker due **26/6/2026**, scored
+on 2000 private Q = Accuracy (dominant, formula a/N*100%*70 in a 80-pt row) + inference
+Time (10) + Idea (10). Output /data/*.csv -> /output/pred.csv (qid,answer). The Time score
+means heavy levers (TIR=Python exec, RAG=retrieval+2.5GB RAM) carry a real cost — promoting
+them is NOT free even if they add accuracy. All three levers stay OFF-by-default (correct).
