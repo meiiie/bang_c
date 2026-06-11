@@ -637,3 +637,48 @@ Each scored per-subject against gold labels.
    `uitnlp/ViGEText_17to23` works ungated and its format is `{id, input, target}` with
    options embedded in `input` as `A. ...` lines (parser written accordingly; subject is
    the 3rd underscore-token of `id`).
+
+---
+
+## 2026-06-11 — GPU session 2 RESULTS: the lever battery (4 variants × 150 real exam Qs) ✅
+
+**Dev set:** ViGEText test, stratified 150 questions across 7 subjects (~21-22 each),
+gold labels held separate from the harness. NFC-normalized. In-process llama-cpp-python
+(the exact contest runtime), k=1 unless noted.
+
+| Variant | Model | Strategy | Accuracy | Speed |
+|---|---|---|---|---|
+| A (control) | old Q4_0 | k=1 CoT | **134/150 = 89.33%** | 5.8 s/q |
+| B | UD-Q4_K_XL | k=1 CoT | 132/150 = 88.00% | 5.6 s/q |
+| C | UD-Q4_K_XL | k=1 + few-shot | 133/150 = 88.67% | 5.7 s/q |
+| D | UD-Q4_K_XL | tiered diverse SC | 135/150 = 90.00% | **16.9 s/q** |
+
+**Verdicts (all differences are within the n=150 noise band, SE ≈ ±2.6pp):**
+1. **Quant swap is NOT a free win — REJECT.** Old Q4_0 (A=89.33) actually scored ABOVE
+   UD-Q4_K_XL (B=88.00) by 2 questions. The research's headline "+15.4pp token agreement"
+   did NOT translate to MCQ accuracy on our setup; our existing GGUF is not broken.
+   Swapping would add risk for a measured-negative delta. Keep the current Q4_0.
+2. **Few-shot: flat here (+1 Q, noise).** Keep OFF by default (as shipped). It is expected
+   to help most on weaker models / harder knowledge items; a strong 26B on STEM exams
+   shows nothing. Revisit only with a contest-representative (humanities-heavier) dev set.
+3. **Tiered: +0.67pp over control but 3× the time (16.9 s/q → ~9.4h for 2000q).** Not
+   worth it as a blanket strategy. Keep as optional disagreement-only escalation only.
+4. **Consistent error floor: chemistry 73-77%, history 76-81%; civics/math/physics
+   95-100%.** Errors cluster in (a) multi-step STEM calculation and (b) Vietnamese
+   factual/comparative history.
+
+**Error analysis (control A's 16 misses, hand + workflow-verified):**
+- ~10/16 = CALCULATION (chemistry stoichiometry ×7, biology genetics ratio, physics AC
+  phasor, math inequality [+ a dataset typo in option D]). **RAG cannot fix these** — the
+  numbers live in no corpus; they need correct computation → Tool-Integrated Reasoning
+  (Python execution) is the lever.
+- ~5/16 history + 2 geography = knowledge/reasoning; mostly subtle "which significance /
+  what do both show" COMPARISON items, not pure fact lookup → RAG only partial.
+
+**Strategic implication (anti-overfit):** on this STEM-heavy exam set, TIR > RAG. BUT
+ViGEText over-weights hard science vs the contest's broader civics/law/history/literature
+mix — that flips the priority. **Next: build a contest-representative dev set (add VMLU
+humanities) and re-measure where errors actually fall before committing to TIR vs RAG.**
+Do NOT ship the quant swap, few-shot, or blanket-tiered based on this evidence.
+
+**Cost so far:** ~2h × $0.16 ≈ $0.32. Pod kept for the next measurement.
