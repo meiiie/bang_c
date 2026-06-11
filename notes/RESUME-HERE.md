@@ -1,4 +1,4 @@
-# ▶ RESUME HERE — next-session entry point (updated 2026-06-11)
+# ▶ RESUME HERE — next-session entry point (updated 2026-06-11, post level-2)
 
 Read this FIRST. It is self-contained: project identity, rules, current state, the exact
 next task (level 2), and how to continue without losing context.
@@ -56,56 +56,45 @@ next task (level 2), and how to continue without losing context.
     reasoning; `_solve_router`: quantitative→TIR else→self_consistency), config
     (tir_samples/tir_exec_timeout_seconds/tir_code_max_tokens; valid_strategies+={tir,router}),
     `tir` + `router` dev workflows. **Default path UNCHANGED** (self-consistency).
+- **LEVEL 2 BUILT & COMMITTED (173 tests green, policy PASS, commit 828f7fc)**:
+  reading-comprehension grounding mode — the passage analog of TIR.
+  - `prompting.py`: `READING_SYSTEM_PROMPT` + `build_reading_prompt` (quote the exact
+    span → vet EVERY option → reject true-but-off-topic / wrong-attribution /
+    outside-passage; negation flips to the option WITHOUT support; if no passage is
+    supplied, answer from knowledge — kills marker-misroute harm).
+  - `solver.py`: `_solve_reading` (SC voting via a `prompt_builder` param on
+    `_collect_reasoning_votes`; reuses SC knobs, NO new config); router = quantitative
+    →TIR, passage (`kind=="reading"` or `has_long_context`)→reading, else→SC;
+    standalone `reading` strategy + dev workflow so GPU measurement can FORCE the mode
+    on ViMMRC. CJK context markers added (dense CJK passages miss the length trigger).
+  - 9-agent adversarial review: 5 confirmed findings, all fixed (incl. mutation-tested
+    `_is_reading` feature branch). **Default path still UNCHANGED.**
 
-## 3. ▶ NEXT TASK — LEVEL 2: reading-comprehension grounding mode
+## 3. ▶ NEXT TASK — GPU measurement session (GATE ON OWNER: sign-off + RunPod top-up)
 
-Targets the ~22% passage bucket. Failure mode is NOT missing knowledge (text is supplied) —
-it is distractor traps seen in the real test:
-- test_0001: an option that is true but cited to the WRONG source (Mishna vs Deuteronomy).
-- test_0003: a true fact about the subject that doesn't ANSWER this question.
-- test_0004: a plausible consequence the passage doesn't actually state.
-The contest-default self-consistency uses a GENERIC reasoning prompt; these traps slip
-through. Build the passage analog of TIR (TIR grounds on Python output; this grounds on a
-passage quote):
+Both levers (TIR + reading) are now built and OFF by default. The next step is MEASURE,
+not build — do not promote `router` on vibes:
 
-1. `prompting.py` → `build_reading_prompt(problem, *, max_tokens, exemplars=())`: instruct
-   the model to (a) QUOTE the exact passage span that answers the question; (b) check EACH
-   option against the passage; (c) reject true-but-off-topic, wrong-attribution, and
-   outside-the-passage inference; (d) end `ANSWER: <letter>`. Reuse `_format_problem` /
-   `_letters`. Use REASONING_SYSTEM_PROMPT or a reading-specialized system prompt.
-2. `solver.py` → in `_solve_router`, route passage questions
-   (`profile.kind == "reading"` or `"has_long_context" in profile.features`) to a new
-   `_solve_reading` that votes over self-consistency samples using build_reading_prompt
-   (mirror `_collect_reasoning_votes`/`_solve_self_consistency`; consider a `reading_*`
-   prompt path so few-shot/diversify still apply). Quantitative still → TIR; else → SC.
-3. `config.py`: add only if needed (e.g. `reading_samples`); reuse existing SC knobs first
-   (simplicity). Keep the default path unchanged; reading mode lives in the `router` dev
-   workflow.
-4. `tests/test_reading.py` (scripted clients): a model that quotes the WRONG source must be
-   gated; a model that picks a true-but-off-topic option must be rejected by the prompt
-   contract; router sends a passage question to reading mode and a calc question to TIR.
-5. Verify: `python -m unittest discover -s tests` (all green) + `python -m hackaithon_c.run
-   --policy` (PASS). Sync `configs/default.json` → `src/hackaithon_c/resources/default.json`
-   (`Copy-Item`). Commit with a verification story. Append to `notes/worklog.md`.
+- Re-rent RunPod (~$0.40 last session; balance ~$0.87 — TOP UP first). Stage old Q4_0
+  (skopeo from `hacamy12345/neko-core:gemma26b-q4`) + ViGEText
+  (`uitnlp/ViGEText_17to23` test, ungated) + ViMMRC (reading proxy).
+- Measure `router` vs `self-consistency` PER BUCKET: quantitative on
+  ViGEText-math/phys/chem; reading on ViMMRC (use the standalone `reading` workflow to
+  force the mode, independent of classifier recall). Also sanity-check the marker
+  misroute rate (factual items containing "document"/"article" → reading) — harm is
+  neutralized by the no-passage prompt degradation but the routing waste is unmeasured.
+- Promote `router` to contest default ONLY if it wins per-bucket with no overall
+  regression. NOTE: community pods have old CPUs (no AVX512) → prebuilt llama-cpp wheels
+  SIGILL → must source-build (see `notes/lessons.md`). Scripts hygiene: write file → scp
+  → `tr -d '\r'` → bash (PowerShell/ssh quoting + sandbox bite otherwise).
 
-Ship OFF by default (in `router`), pending GPU measurement — like TIR. It is a prompt +
-routing change, NO new infra. Generalizes (passage-grounding is universal), no overfit.
+## 4. Then: LEVEL 3 (lowest priority, build only after measurement)
 
-## 4. Then: LEVEL 3 + measurement
-
-- **Level 3 (lowest priority)**: targeted RAG for the ~10-15% VN-legal/admin/Party factual
-  slice ONLY (fire-safety, Cà Mau ID procedure, HCM Thought). Gated, measured first.
+- Targeted RAG for the ~10-15% VN-legal/admin/Party factual slice ONLY (fire-safety,
+  Cà Mau ID procedure, HCM Thought). Gated, measured first.
   Corpus: vi-wiki parquet (filter <500-char stubs) + VN legal corpus (YuITC MIT 214MB /
   th1nhng0 CC-BY); BGE-m3 GGUF (llama-server --embedding) + BM25 hybrid; Qwen3-Reranker.
   RAG is USELESS for reading-comp (text already given) — only the legal/admin factual slice.
-- **GPU measurement session** (gate on owner; ~$0.40 last time): re-rent RunPod, stage
-  UD-Q4_K_XL (ungated HF) + old Q4_0 (skopeo from `hacamy12345/neko-core:gemma26b-q4`) +
-  ViGEText (`uitnlp/ViGEText_17to23` test, ungated) + ViMMRC (reading proxy). Measure
-  `router` vs `self-consistency` PER BUCKET (quantitative on ViGEText-math/phys/chem;
-  reading on ViMMRC). Promote router to the contest default ONLY if it wins per-bucket with
-  no overall regression. NOTE: community pods have old CPUs (no AVX512) → prebuilt
-  llama-cpp wheels SIGILL → must source-build (see `notes/lessons.md`). Scripts hygiene:
-  write file → scp → `tr -d '\r'` → bash (PowerShell/ssh quoting + sandbox bite otherwise).
 
 ## 5. Credentials (read from files, NEVER commit/echo; pause before spend/publish)
 
