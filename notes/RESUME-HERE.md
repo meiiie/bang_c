@@ -56,6 +56,17 @@ next task (level 2), and how to continue without losing context.
     reasoning; `_solve_router`: quantitative→TIR else→self_consistency), config
     (tir_samples/tir_exec_timeout_seconds/tir_code_max_tokens; valid_strategies+={tir,router}),
     `tir` + `router` dev workflows. **Default path UNCHANGED** (self-consistency).
+- **LEVEL 3 BUILT & COMMITTED (194 tests green, policy PASS, commit 880fe83)**:
+  targeted legal-RAG — stdlib BM25 (diacritics kept, df>N/3 cutoff, thread-safe
+  failure-memoizing cache), fallible-excerpt prompt, `_solve_rag` degrades to SC on
+  any miss/failure. Gates: `has_legal_admin_strong` (≥2 markers, kills polysemy
+  false-positives) + math-syntax cue (LaTeX→TIR; real-463 TIR share now 28.1%).
+  Corpus: YuITC MIT → 344,713 chunks via `scripts/build_rag_corpus.py` (local copy at
+  `data/rag/legal_corpus.jsonl`). `rag_corpus_path` default "" = OFF everywhere.
+  18-agent review: 11 findings fixed (index-memory compaction deferred until RAG wins).
+  GPU battery READY in `scripts/gpu/` (devsets built+validated locally in
+  `data/devsets/`: quant/civics=ViGEText, reading=ViMMRC-1.0, n=150 seeded; arms:
+  quant→router, reading→FORCED reading, civics→FORCED rag; paired scoring).
 - **LEVEL 2 BUILT & COMMITTED (173 tests green, policy PASS, commit 828f7fc)**:
   reading-comprehension grounding mode — the passage analog of TIR.
   - `prompting.py`: `READING_SYSTEM_PROMPT` + `build_reading_prompt` (quote the exact

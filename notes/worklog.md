@@ -791,3 +791,47 @@ ViGEText-quantitative + ViMMRC-reading), per the anti-overfit rule.
 
 **Next:** GPU measurement session (gate on owner sign-off + RunPod top-up), then
 level 3 targeted RAG for the legal/admin factual slice (last, gated).
+
+---
+
+## 2026-06-11 — BUILD: Level 3 targeted legal-RAG + GPU battery prep ✅
+
+Owner directive: finish ALL levels before the GPU session, think hard before renting.
+
+**Level 3 built (commit 880fe83; 194 tests green, policy PASS):**
+- `retrieval.py` — stdlib Okapi BM25, JSONL corpus, diacritics KEPT (tỉnh≠tính≠tinh);
+  sorted token iteration (bit-reproducible); df>N/3 cutoff (~3× scan reduction);
+  thread-safe failure-memoizing cache (NOT lru_cache: it duplicates concurrent first
+  builds and re-parses corrupt corpora per question).
+- `build_rag_prompt` — excerpts framed FALLIBLE ("may be irrelevant... otherwise use
+  your own knowledge"); cap 1500 = build chunk size, whitespace cut + visible […].
+- `_solve_rag` — retrieve once → SC vote; no corpus / no hits / load error → degrade
+  to SC with warning trace. Router: quant → TIR, passage → reading, legal+corpus →
+  RAG, else SC. `rag` dev workflow; `rag_corpus_path` default "" = OFF.
+- Gates hardened: `has_legal_admin_strong` (≥2 distinct markers — single hits are
+  polysemy: biology "cơ quan", medical "cấp tính"); math-syntax cue (LaTeX/Unicode
+  math/exponent) routes keyword-less quantitative to TIR.
+- Corpus: YuITC Vietnamese-Legal-Documents (MIT) → 344,713 chunks ("Điều" boundaries,
+  atomic write, resumable download). Measured locally: build 71.3s, ~2.5GB RSS,
+  retrieval 2.2–3.7s/q. Retrieval quality on 3 real legal questions: MIXED (topical,
+  not always answer-bearing) — consistent with "RAG 0 clean wins" skepticism.
+- 18-agent adversarial review: 11 confirmed findings, ALL fixed except index memory
+  compaction (array postings ~10× smaller — do ONLY if RAG wins measurement).
+
+**Local routing on the REAL 463 (free, no GPU):** tir 28.1% / reading 20.7% /
+rag 2.4% (11/11 inspected = true legal-admin) / sc 48.8% — matches the ground-truth
+composition (~25-30% quant, ~22% reading, ~10-15% legal of which a narrow slice).
+
+**GPU battery prepared (`scripts/gpu/`):** setup_pod.sh (source-build llama-cpp, HF
+model pull, devsets+corpus staging) / make_devsets.py (ViGEText quant+civics, ViMMRC
+1.0 reading; seeded n=150/bucket; LOCALLY BUILT + validated) / run_battery.sh /
+score_battery.py (paired diff = decision signal). Arms decided on LOCAL routing
+analysis: quant→router (80/150 fire TIR after math-syntax cue), reading→FORCED
+reading (ViMMRC passages short+marker-less: router fires 2/150 — lever measured
+directly, routing already validated on the real 463), civics→FORCED rag (13/150
+carry ≥2 markers). Found before spending: "civic education" id token has a SPACE;
+ViMMRC zip ships __MACOSX AppleDouble fakes; YuITC download needs Range-resume.
+
+**Cost plan:** A5000 community ~$0.16/h, ~2.5-3h ≈ $0.45-0.50. Balance $0.86 — fits
+without top-up if disciplined. PAUSE points honored: no leaderboard submission, no
+image publish; pod rental cleared by owner this session.
