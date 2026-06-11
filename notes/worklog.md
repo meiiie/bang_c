@@ -592,3 +592,48 @@ Python) + Embedder protocol + hybrid retriever + question-type gate + prompt inj
 toy-corpus tests; corpus/index build scripts for the GPU phase; (2) DeepConf/CISC vote-
 fusion scaffolding behind a logprob-capable client interface; (3) updated GPU runbook
 with the new priority stack (GGUF swap first).
+
+---
+
+## 2026-06-11 — GPU SESSION 2 (A5000 community $0.16/hr): measurement battery — IN PROGRESS
+
+Owner authorized GPU spend. Pod `ozflrk35xr9osd`, RTX A5000 24GB community ($0.16/hr —
+1/3 the A40 price; balance $1.27 → ~8h runway).
+
+**Staged:** UD-Q4_K_XL (14.25GB, Unsloth, ungated HF) + old Q4_0 (14.4GB, skopeo from our
+image after a re-pull) + source-built llama-cpp-python + **ViGEText: 3,722 REAL Vietnamese
+graduation-exam MCQs WITH labels** (7 subjects) → stratified 150-question dev set
+(~21-22/subject). First time we can measure accuracy locally without leaderboard burns.
+Labels live in a separate file and never enter the harness.
+
+**Battery (detached, running):**
+- A: old Q4_0, k=1 CoT (control = the 87.26 runtime)
+- B: UD-Q4_K_XL, k=1 CoT (quant-swap effect)
+- C: UD + 5-shot Vietnamese exemplars (few-shot effect)
+- D: UD + tiered diverse self-consistency (escalation effect)
+Each scored per-subject against gold labels.
+
+### Incidents + fixes this session (all diagnosed root-cause, none guessed)
+1. **Container disk 100% full mid-staging.** Cause chain: my first mkdir created `/models`
+   as a REAL directory on the 20GB container disk → the staging script's symlink guard
+   (`[ ! -e /models ]`) skipped linking → the 14.4GB old-GGUF extraction filled `/` and
+   died partway. Fix: removed the partial, extracted directly to the volume path, and the
+   battery uses absolute `/workspace/models/...` paths (no symlink dependency).
+2. **All variants instantly FAILED with empty logs → "Illegal instruction (core dumped)".**
+   Root cause: community pod CPU is a **Xeon E5-2699 v3 (Haswell 2014) — AVX2 but NO
+   AVX512**; the prebuilt cu124 llama-cpp-python wheel contains AVX512 instructions →
+   SIGILL at model load (import itself is fine, which is why nothing was logged). Fix:
+   **source-build** llama-cpp-python with nvcc 12.8 (present in the pod image at
+   /usr/local/cuda/bin, not on PATH), `CMAKE_CUDA_ARCHITECTURES=86`, native CPU flags,
+   64-core parallel build → BUILD_DONE, model loads cleanly.
+   NOTE: the CONTEST image is unaffected — it builds llama-cpp inside Docker from the
+   target environment; this was purely a cheap-dev-pod hazard.
+3. llama.cpp official releases ship NO Linux-CUDA binaries (Windows-only CUDA) — the
+   llama-server-binary shortcut is not available on Linux pods; source build is the path.
+4. PowerShell→ssh quoting + local sandbox false-positives keep biting → settled workflow:
+   **Write script file → scp → `tr -d '\r'` → bash** (never inline quotes, never rely on
+   sed for CRLF, beware UTF-8 BOM from PowerShell `Set-Content`).
+5. Dataset availability: `nqdhocai/vietnamese-legal-qa` is gone from HF;
+   `uitnlp/ViGEText_17to23` works ungated and its format is `{id, input, target}` with
+   options embedded in `input` as `A. ...` lines (parser written accordingly; subject is
+   the 3rd underscore-token of `id`).

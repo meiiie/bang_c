@@ -2,6 +2,28 @@
 
 Durable lessons learned while building Neko Core. Newest on top.
 
+## 2026-06-11 (GPU session 2 + frontier research)
+
+- **Cheap community pods trade CPU age for price.** A $0.16/hr A5000 pod came with a 2014
+  Haswell CPU (no AVX512) → prebuilt llama-cpp wheels SIGILL with EMPTY logs. Diagnose
+  with a tiny foreground run (`Illegal instruction` + exit 132), confirm via
+  /proc/cpuinfo flags, fix by source-building with nvcc (often present but off PATH).
+- **Never create the target of a future symlink.** A `mkdir /models` before
+  `ln -sfn /workspace/models /models` silently turned the link into a real dir on the
+  small container disk → 14GB extraction filled / and died. Use absolute volume paths in
+  scripts instead of symlink conventions, and size containerDiskInGb ≥30 for CUDA images.
+- **Labeled Vietnamese dev sets exist and are gold**: ViGEText (3,722 graduation-exam
+  MCQs, 7 subjects, `{id,input,target}`, options inline as `A. ...` lines) downloads
+  ungated → local per-subject accuracy without burning leaderboard submissions. Some HF
+  datasets vanish (vietnamese-legal-qa) — always code a fallback.
+- **Research before building paid off twice**: (1) the quant-stack audit found our GGUF
+  may carry a recoverable multi-point loss (naive Q4_0 vs UD-Q4_K_XL); (2) evidence
+  AGAINST popular tricks (self-verification −1…−17pp, elimination prompting −5…−14pp)
+  stopped us from shipping harmful "obvious" features. Negative results are as valuable
+  as positive ones.
+- **Remote-script hygiene on Windows→pod**: Write file → scp → `tr -d '\r'` → bash.
+  Inline ssh quoting, sed-based CRLF fixes, and PowerShell BOMs all caused real failures.
+
 ## 2026-06-10
 
 - **Verify feedback against code + real data before acting.** A teammate's 6-point
