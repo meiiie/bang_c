@@ -49,6 +49,7 @@
     "reasoning_temperature": 0.8,
     "reasoning_top_p": 0.95,
     "reasoning_top_k": 64,
+    "reasoning_few_shot_path": "",
     "tiered_tier1_samples": 2,
     "tiered_total_samples": 5,
     "self_consistency_challenge_threshold": 0.75,

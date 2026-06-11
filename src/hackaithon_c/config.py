@@ -166,6 +166,14 @@ class HarnessConfig:
         return int(self.runtime.get("reasoning_top_k", 64))
 
     @property
+    def reasoning_few_shot_path(self) -> str:
+        # Path to a JSON exemplar file for few-shot prompting (empty = zero-shot).
+        # Evidence (ViGEText): 0->5-shot Vietnamese exemplars with explicit
+        # answer-letter format = +15.4pp average on Vietnamese exam MCQ.
+        # Default OFF until A/B-measured on the real model.
+        return str(self.runtime.get("reasoning_few_shot_path", "")).strip()
+
+    @property
     def tiered_tier1_samples(self) -> int:
         # Tier 1 = anchor + rotated-choice samples; unanimous agreement stops early.
         return max(1, int(self.runtime.get("tiered_tier1_samples", 2)))

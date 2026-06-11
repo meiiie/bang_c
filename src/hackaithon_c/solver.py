@@ -23,6 +23,7 @@ from .prompting import (
     build_repair_prompt,
     build_tiebreak_prompt,
     build_verifier_prompt,
+    load_exemplars,
     tournament_variants,
 )
 from .principles import adjudicate_principle
@@ -770,11 +771,16 @@ def _collect_reasoning_votes(
     """
     answers: list[str] = []
     trace_steps: list[TraceStep] = []
+    exemplars = load_exemplars(config.reasoning_few_shot_path)
     for offset in range(max(1, samples)):
         index = start_index + offset
         rotation = rotation_for_sample(index, len(problem.choices)) if diversify else 0
         sample_problem = rotate_problem(problem, rotation)
-        prompt = build_reasoning_prompt(sample_problem, max_tokens=config.reasoning_max_tokens)
+        prompt = build_reasoning_prompt(
+            sample_problem,
+            max_tokens=config.reasoning_max_tokens,
+            exemplars=exemplars,
+        )
         sampling: dict[str, float | int] = {}
         if diversify and index > 0:
             sampling = {

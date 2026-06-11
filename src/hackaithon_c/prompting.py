@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 from .config import HarnessConfig
 from .schema import Problem, ProblemProfile
@@ -112,14 +115,66 @@ def build_repair_prompt(problem: Problem, invalid_answer: str) -> PromptBundle:
     return PromptBundle(SYSTEM_PROMPT, user_prompt, "repair", max_tokens=16)
 
 
-def build_reasoning_prompt(problem: Problem, *, max_tokens: int = 512) -> PromptBundle:
-    user_prompt = (
+def build_reasoning_prompt(
+    problem: Problem,
+    *,
+    max_tokens: int = 512,
+    exemplars: tuple[dict, ...] = (),
+) -> PromptBundle:
+    """Reasoning prompt, optionally few-shot.
+
+    Exemplars are demonstrations in the question's own language (evidence: native-
+    language exemplars + English meta-instructions is the strongest combination for
+    Vietnamese exam MCQ). Each exemplar dict: question, choices (list), answer, and
+    an optional short `reasoning` string shown before the answer line.
+    """
+    parts: list[str] = []
+    if exemplars:
+        parts.append(
+            "Here are solved examples showing the expected reasoning and answer format:"
+        )
+        for exemplar in exemplars:
+            example_problem = Problem(
+                qid="exemplar",
+                question=str(exemplar["question"]),
+                choices=tuple(str(choice) for choice in exemplar["choices"]),
+            )
+            block = _format_problem(example_problem)
+            reasoning = str(exemplar.get("reasoning", "")).strip()
+            answer_line = f"ANSWER: {exemplar['answer']}"
+            parts.append(
+                f"{block}\n\n{reasoning}\n{answer_line}" if reasoning else f"{block}\n\n{answer_line}"
+            )
+        parts.append("Now solve the real question:")
+    parts.append(
         "Solve this multiple-choice question. Reason briefly, then commit to one letter.\n\n"
         f"{_format_problem(problem)}\n\n"
         f"Available letters: {_letters(problem)}\n"
         "End your answer with a line: ANSWER: <letter>"
     )
+    user_prompt = "\n\n---\n\n".join(parts)
     return PromptBundle(REASONING_SYSTEM_PROMPT, user_prompt, "reasoning", max_tokens=max_tokens)
+
+
+@lru_cache(maxsize=8)
+def load_exemplars(path: str) -> tuple[dict, ...]:
+    """Load few-shot exemplars from a JSON list file; empty path -> no exemplars."""
+    if not path:
+        return ()
+    file_path = Path(path)
+    if not file_path.exists():
+        raise ValueError(f"Few-shot exemplar file not found: {file_path}")
+    data = json.loads(file_path.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise ValueError(f"Exemplar file must be a JSON list: {file_path}")
+    exemplars: list[dict] = []
+    for index, row in enumerate(data):
+        if not isinstance(row, dict) or not all(
+            key in row for key in ("question", "choices", "answer")
+        ):
+            raise ValueError(f"Exemplar {index} must have question/choices/answer: {file_path}")
+        exemplars.append(row)
+    return tuple(exemplars)
 
 
 def tournament_variants(profile: ProblemProfile) -> tuple[str, ...]:

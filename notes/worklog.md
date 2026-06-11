@@ -542,3 +542,53 @@ unchanged (all new paths opt-in; contest default untouched).
 **GPU phase addition:** launch `llama-server -m gemma.gguf --parallel 8 -ngl 99 -fa` in the
 container/pod, run harness with `--provider local_server --workers 8`, measure tok/s and
 verify answers match the in-process path on a sample before adopting.
+
+---
+
+## 2026-06-11 — Frontier research toward 97-98 (4 cited reports) + first implementations ✅
+
+Owner target: 93+ minimum, stretch 97-98, NO GPU yet — continuous local development.
+4-agent web-research (full citations: `notes/research-97-cited-reports.md`). Game-changers:
+
+1. **Our GGUF is likely bleeding points.** Naive Q4_0 conversion of the Gemma-4 QAT
+   checkpoint = 70.2% top-1 agreement vs the BF16 QAT lattice; **Unsloth UD-Q4_K_XL
+   restores 85.6% (+15.4pp token-level, 200MB smaller)**. Swap = cheapest experiment, new
+   GPU-phase priority #1. Related stack audits: NEVER quantize Gemma's KV cache (most
+   KV-quant-sensitive model tested); pin llama.cpp ≥ b8691 and outside b8661–b8687
+   (Windows builds silently drop multi-byte UTF-8 = Vietnamese corruption); verify
+   `vocab type = SPM` in load logs.
+2. **Few-shot is the biggest documented prompt lever:** 0→5-shot Vietnamese exemplars =
+   **+15.43pp avg (+32pp math)** on Vietnamese graduation-exam MCQ (ViGEText). Keep
+   English meta-instructions (+2.9pp open models); NEVER translate questions (−5.8pp).
+3. **Offline RAG: CONDITIONAL GO.** Every winning team in the closest analog (Kaggle LLM
+   Science Exam) used retrieval (+10–15pp); VNHSGE: retrieval +32pp History +15pp Civics
+   ~0 Math; VLegal-Bench +22pp. BUT always-on RAG measurably HURTS (TARG) → gate by
+   question type + vote disagreement; RAG votes join the pool (downside ~0). Corpus
+   (anti-overfit: universal reference sources only, never tuned to public questions):
+   wikipedia-vi parquet (CC BY-SA, filter <500-char stubs → ~500K articles) + VN legal
+   corpus (YuITC MIT 214MB / th1nhng0 CC-BY 4GB); BGE-m3 GGUF Q8 via llama-server
+   --embedding (dense) + BM25 lexical, hybrid α=0.5; Qwen3-Reranker-0.6B GGUF (validate
+   scores — many community conversions broken). ~3.4GB added to image. NO SGK (copyright).
+4. **Voting upgrades:** DeepConf confidence-filtered weighted voting (+5.1pp AIME at equal
+   samples, −43–85% tokens); CISC P(True) weighting (+1.1pp, −46% cost); Borda tie-break.
+   All need logprobs → llama-server `n_probs` (GPU phase). GenSelect judge pass for
+   residual disagreements. Anti-patterns measured: bigger 3rd model (−0.0004), PoE-CoT
+   prompting, naive int4 PTQ (−10pp).
+5. **Labeled local dev sets EXIST for Vietnamese**: VMLU dev (MIT), ViGEText 3,722 exam
+   MCQs, VLEMCQ (Apache) — enables real local accuracy measurement on GPU without
+   burning leaderboard submissions (dev-only, never shipped, no hardcoding).
+
+**Implemented this session (all green, 141 tests):**
+- **NFC normalization** in the loader (decomposed Vietnamese diacritics tokenize/embed
+  differently — silent degradation fixed for every path).
+- **Few-shot mechanism**: `reasoning_few_shot_path` config + exemplar injection in
+  `build_reasoning_prompt` (lru-cached loader, validation) + a 5-exemplar starter file
+  `resources/exemplars-vi.json` (SELF-AUTHORED — license-clean, zero contest data;
+  law/history/math/reading/negation coverage, Vietnamese reasoning + ANSWER format).
+  Default OFF until A/B on the real model.
+
+**Next increments (local, in order):** (1) offline-RAG scaffolding: chunker + BM25 (pure
+Python) + Embedder protocol + hybrid retriever + question-type gate + prompt injection +
+toy-corpus tests; corpus/index build scripts for the GPU phase; (2) DeepConf/CISC vote-
+fusion scaffolding behind a logprob-capable client interface; (3) updated GPU runbook
+with the new priority stack (GGUF swap first).

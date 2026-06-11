@@ -1,0 +1,32 @@
+[
+  {
+    "question": "Theo quy định của Hiến pháp Việt Nam, cơ quan quyền lực nhà nước cao nhất của nước Cộng hòa xã hội chủ nghĩa Việt Nam là cơ quan nào?",
+    "choices": ["Chính phủ", "Quốc hội", "Tòa án nhân dân tối cao", "Chủ tịch nước"],
+    "answer": "B",
+    "reasoning": "Hiến pháp quy định Quốc hội là cơ quan đại biểu cao nhất của Nhân dân, cơ quan quyền lực nhà nước cao nhất. Chính phủ là cơ quan hành chính cao nhất, không phải cơ quan quyền lực cao nhất."
+  },
+  {
+    "question": "Chiến thắng nào năm 1954 đã buộc thực dân Pháp phải ký Hiệp định Giơ-ne-vơ về chấm dứt chiến tranh ở Đông Dương?",
+    "choices": ["Chiến thắng Biên giới", "Chiến thắng Việt Bắc", "Chiến thắng Điện Biên Phủ", "Chiến thắng Ấp Bắc"],
+    "answer": "C",
+    "reasoning": "Chiến dịch Điện Biên Phủ kết thúc ngày 7/5/1954 với thắng lợi quyết định, trực tiếp dẫn đến việc Pháp ký Hiệp định Giơ-ne-vơ tháng 7/1954. Các chiến thắng còn lại diễn ra trước đó (1947, 1950) hoặc thuộc kháng chiến chống Mỹ (1963)."
+  },
+  {
+    "question": "Một cửa hàng giảm giá 20% cho một sản phẩm có giá niêm yết 250.000 đồng, sau đó thu thêm thuế 10% trên giá đã giảm. Khách hàng phải trả bao nhiêu?",
+    "choices": ["200.000 đồng", "220.000 đồng", "225.000 đồng", "230.000 đồng"],
+    "answer": "B",
+    "reasoning": "Giá sau giảm: 250.000 × (1 − 0,20) = 200.000 đồng. Thuế 10%: 200.000 × 1,10 = 220.000 đồng."
+  },
+  {
+    "question": "Đọc đoạn văn: \"Sông Hương chảy qua thành phố Huế, mang vẻ đẹp trầm mặc như triết lý, như cổ thi.\" Theo đoạn văn, sông Hương chảy qua thành phố nào?",
+    "choices": ["Đà Nẵng", "Hội An", "Huế", "Vinh"],
+    "answer": "C",
+    "reasoning": "Đoạn văn nêu trực tiếp: \"Sông Hương chảy qua thành phố Huế\". Câu hỏi chỉ yêu cầu trích đúng thông tin trong đoạn."
+  },
+  {
+    "question": "Phương án nào sau đây KHÔNG phải là một quyền cơ bản của công dân được quy định trong Hiến pháp?",
+    "choices": ["Quyền tự do ngôn luận", "Quyền bầu cử và ứng cử", "Quyền được tùy ý chiếm đoạt tài sản của người khác", "Quyền bất khả xâm phạm về thân thể"],
+    "answer": "C",
+    "reasoning": "Câu hỏi dạng phủ định, cần tìm phương án SAI. Chiếm đoạt tài sản của người khác là hành vi vi phạm pháp luật, không phải quyền; ba phương án còn lại đều là quyền cơ bản trong Hiến pháp."
+  }
+]

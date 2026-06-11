@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,14 @@ def _problem_from_mapping(row: Any, index: int) -> Problem:
     choices = _extract_choices(row)
     if not choices:
         raise ValueError(f"Input row {index} is missing choices/options")
-    return Problem(qid=str(qid), question=str(question), choices=tuple(choices))
+    # NFC-normalize all text: decomposed (NFD) Vietnamese diacritics tokenize and
+    # embed differently from composed forms, silently degrading both the model's
+    # conditioning and any retrieval matching. Canonical composition is lossless.
+    return Problem(
+        qid=str(qid),
+        question=unicodedata.normalize("NFC", str(question)),
+        choices=tuple(unicodedata.normalize("NFC", choice) for choice in choices),
+    )
 
 
 def _first_text(row: dict[str, Any], keys: tuple[str, ...]) -> str | None:
