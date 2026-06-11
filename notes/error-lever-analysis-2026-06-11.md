@@ -48,17 +48,27 @@ literature/economics + STEM). As the mix shifts to humanities:
   wins is **reasoning robustness: CoT + self-consistency (HAVE) + negation/quantifier-
   aware parsing (NEW, cheap, generalizing)**.
 
-## Build order (do NOT reorder without new evidence)
+## Build order (REVISED 2026-06-11 per owner input: contest is heavy on BOTH
+## humanities AND math/STEM — like the THPT exam ViGEText mirrors)
 
-1. **Contest-representative dev set + error-composition triage** — measure % numeric-
-   computable vs % reasoning-discrimination vs % dataset-defect on a humanities-weighted
-   slice. De-risks everything. (In progress: run-HUM.)
-2. **Reasoning robustness** — keep CoT+SC; ADD explicit negation/quantifier handling for
-   "KHÔNG / không phải / luôn / chỉ / đều" stems (≥2 errors here were this; pervasive in VI
-   humanities MCQ; zero overfit risk — universal MCQ skill).
-3. **Gated TIR** — Python execution for the numeric slice ONLY, behind a "is this
-   deterministic-numeric?" classifier; self-consistency on the SETUP, not just arithmetic,
-   to avoid the "solves the wrong system" trap. Real (2 confirmed wins) but narrow.
+The original memo ranked TIR as a narrow #3 on the assumption the contest was
+"humanities-broader." Owner corrects: the private test is heavy on BOTH halves. ViGEText
+battery corroborates — chemistry is the floor (73-77%, errors all stoichiometry =
+TIR-addressable) AND history is a floor (76-81%, errors comparison/negation =
+reasoning-addressable). So we build BOTH levers; they are orthogonal and routed by the
+existing question-type classifier (`_has_quantitative_signal`). Both generalize; neither
+overfits.
+
+1. **Contest-representative dev triage** — STEM signal already in hand (chemistry floor,
+   TIR-addressable); humanities signal measuring now (run-HUM). De-risks the rest.
+2. **(co-equal) Reasoning robustness for the humanities/literature half** — keep CoT+SC;
+   ADD explicit negation/quantifier handling for "KHÔNG / không phải / luôn / chỉ / đều"
+   stems (≥2 errors here were exactly this; pervasive in VI humanities MCQ; zero overfit
+   risk — universal MCQ skill). Also covers literature (reading/analysis = reasoning).
+2. **(co-equal) Gated TIR for the math/chemistry/physics half** — Python execution behind
+   the numeric classifier; self-consistency on the SETUP (not just arithmetic) to avoid
+   the "solves the wrong system" trap. 2 confirmed wins here scale with the math fraction
+   (AIMO: CoT->TIR +6.2pp maj@16). Offline-safe (sandbox exec, no internet).
 4. **Offline-RAG (LOWEST)** — 0 clean wins, capped at partial; build only if the broad-set
    triage proves a real "missing-fact" bucket (specific statutes/dates/accords) retrieval
    can supply verbatim.
