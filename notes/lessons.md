@@ -2,6 +2,24 @@
 
 Durable lessons learned while building Neko Core. Newest on top.
 
+## 2026-06-11 — GPU selection economics (why A5000 community, and the real trade-off)
+
+- **Match the GPU to the workload's bottleneck, not its size.** Gemma-4-26B-A4B is an MoE
+  with ~4B ACTIVE params; token generation is memory-BANDWIDTH-bound, not compute-bound.
+  A5000 (768 GB/s) ≈ A40 (696 GB/s) in bandwidth → similar tokens/sec for this model at
+  **$0.16/hr vs $0.44/hr (2.75× cheaper)**. Measured: 6.3s/q on A5000 vs 4.6s/q on A40
+  (~35% slower overall — the gap is mostly the 2014-era CPU doing prompt processing, not
+  the GPU). For experiment batteries where wall-clock is flexible, community-cheap wins;
+  for deadline-critical final runs, pay for secure/newer (no SIGILL roulette, no capacity
+  churn).
+- **The hidden price of community pods is HARDWARE AGE, not the GPU**: our $0.16 pod came
+  with a Haswell CPU → prebuilt AVX512 wheels SIGILL'd → ~40 min + ~$0.10 lost to a
+  source rebuild. Budget 30-60 min of incident slack into any community-pod plan.
+- **Measurement validity > raw speed.** The battery deliberately runs in-process
+  sequential llama-cpp-python — the EXACT contest-image runtime — instead of the 3-8×
+  faster llama-server+workers path, because A/B numbers must be measured on the runtime
+  that ships. Speed-mode is for after the winner is chosen, never for the measurement.
+
 ## 2026-06-11 (GPU session 2 + frontier research)
 
 - **Cheap community pods trade CPU age for price.** A $0.16/hr A5000 pod came with a 2014
