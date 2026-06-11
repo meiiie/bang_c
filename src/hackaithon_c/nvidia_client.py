@@ -31,9 +31,13 @@ class NvidiaConfig:
         default_retry_base_delay_seconds: float = 1.5,
         default_retry_max_delay_seconds: float = 30.0,
     ) -> "NvidiaConfig":
-        api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
+        # Provider-neutral key first (the OpenAI-compatible client now also serves the
+        # FPT AI Marketplace dev profile); NVIDIA_API_KEY kept as a back-compat alias.
+        api_key = (
+            os.environ.get("HACKC_API_KEY") or os.environ.get("NVIDIA_API_KEY") or ""
+        ).strip()
         if not api_key:
-            raise RuntimeError("NVIDIA_API_KEY is required unless --dry-run is used")
+            raise RuntimeError("HACKC_API_KEY (or NVIDIA_API_KEY) is required unless --dry-run is used")
         return cls(
             api_key=api_key,
             base_url=os.environ.get("NVIDIA_BASE_URL", default_base_url).rstrip("/"),
