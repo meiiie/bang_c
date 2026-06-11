@@ -214,6 +214,61 @@ def build_reading_prompt(
     return PromptBundle(READING_SYSTEM_PROMPT, user_prompt, "reading", max_tokens=max_tokens)
 
 
+RAG_SYSTEM_PROMPT = """You answer multiple-choice questions with the help of retrieved
+reference excerpts. The question may be in any language; read it in its own language.
+The excerpts come from an AUTOMATIC search and may be irrelevant or incomplete:
+- if an excerpt directly answers the question, ground your answer on its wording;
+- if the excerpts do not answer the question, rely on your own knowledge instead;
+- never let an irrelevant excerpt talk you out of a fact you know.
+Watch for negation (words meaning "not", "incorrect", "except", "false") — it flips
+the target.
+Finish with a final line in exactly this format:
+ANSWER: <letter>
+where <letter> is one of the available option letters."""
+
+
+def build_rag_prompt(
+    problem: Problem,
+    snippets: tuple,
+    *,
+    max_tokens: int = 512,
+    exemplars: tuple[dict, ...] = (),
+) -> PromptBundle:
+    """Retrieval-grounded prompt for the legal/admin factual slice.
+
+    Retrieved excerpts are presented as fallible references, never as ground truth:
+    retrieval is automatic and the corpus is narrow, so the model must stay free to
+    answer from its own knowledge when the excerpts miss (the same graceful-degradation
+    contract the reading prompt uses for missing passages). Snippet text is capped so a
+    long statute chunk cannot crowd out the question; the cap matches the corpus-build
+    chunk size (so it rarely fires), cuts on whitespace, and marks the cut visibly —
+    the model must be able to tell a truncated excerpt from a complete short one."""
+    references = "\n\n".join(
+        f"[{index + 1}] {snippet.title}\n{_cap_text(snippet.text, 1500)}".strip()
+        for index, snippet in enumerate(snippets)
+    )
+    parts: list[str] = _exemplar_parts(exemplars)
+    parts.append(
+        "Reference excerpts (automatic search results — may be irrelevant):\n\n"
+        f"{references}\n\n"
+        "Solve this multiple-choice question. Use the excerpts when they answer the "
+        "question; otherwise use your own knowledge.\n\n"
+        f"{_format_problem(problem)}\n\n"
+        f"Available letters: {_letters(problem)}\n"
+        "End your answer with a line: ANSWER: <letter>"
+    )
+    user_prompt = "\n\n---\n\n".join(parts)
+    return PromptBundle(RAG_SYSTEM_PROMPT, user_prompt, "rag", max_tokens=max_tokens)
+
+
+def _cap_text(text: str, limit: int) -> str:
+    """Cap on a whitespace boundary with a visible truncation marker."""
+    if len(text) <= limit:
+        return text
+    cut = text.rfind(" ", 0, limit)
+    return text[: cut if cut > 0 else limit].rstrip() + " […]"
+
+
 TIR_SYSTEM_PROMPT = """You solve quantitative multiple-choice questions by writing and \
 running a short Python program. The question may be in any language.
 Write ONE self-contained Python 3 program (standard library only) that computes the \

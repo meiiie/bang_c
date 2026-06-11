@@ -53,6 +53,8 @@
     "tir_samples": 1,
     "tir_exec_timeout_seconds": 5.0,
     "tir_code_max_tokens": 1024,
+    "rag_corpus_path": "",
+    "rag_top_k": 4,
     "tiered_tier1_samples": 2,
     "tiered_total_samples": 5,
     "self_consistency_challenge_threshold": 0.75,
@@ -165,8 +167,15 @@
       "dry_run": false,
       "phase": "development"
     },
+    "rag": {
+      "description": "Targeted retrieval-grounded mode: BM25 over a packaged offline legal/admin corpus (rag_corpus_path; empty = degrades to self-consistency). Excerpts are fallible references, never ground truth. Forces the mode on every item -- for per-bucket measurement on a civics/legal proxy. Pending real-model measurement.",
+      "strategy": "rag",
+      "verify": false,
+      "dry_run": false,
+      "phase": "development"
+    },
     "router": {
-      "description": "CANDIDATE: question-type router on the real-test composition -- quantitative -> TIR (Python exec), passage -> reading-grounding mode, everything else -> diverse self-consistency. The 'good combination' for the mixed humanities+math contest. Pending real-model measurement.",
+      "description": "CANDIDATE: question-type router on the real-test composition -- quantitative -> TIR (Python exec), passage -> reading-grounding mode, legal/admin factual -> targeted RAG (only when rag_corpus_path is set; default off), everything else -> diverse self-consistency. The 'good combination' for the mixed humanities+math contest. Pending real-model measurement.",
       "strategy": "router",
       "verify": false,
       "dry_run": false,

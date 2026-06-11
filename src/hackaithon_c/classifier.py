@@ -45,6 +45,17 @@ _QUANTITATIVE_PHRASES = (
     "van toc",
     "gia toc",
 )
+# LaTeX commands, math Unicode, or exponent notation: structural, language-agnostic
+# quantitative cues for questions that carry NO calculation keyword (e.g.
+# "Nếu $\int_0^2 f(x)dx = 4$ thì ... bằng"). The ground-truth composition analysis
+# (notes/public-test-composition-2026-06-11.md) showed LaTeX-only quantitative items
+# land in "factual" and miss the TIR route.
+_MATH_SYNTAX = re.compile(
+    r"\\(frac|int|sqrt|sum|prod|lim|log|ln|sin|cos|tan|cdot|times|div|leq|geq|neq|pi|equiv|pmod|approx|infty)\b"
+    r"|[≡∫√∑≤≥≠±×÷∞]"
+    r"|[A-Za-z0-9)\]}]\^[({\[]?[0-9.\-]"
+)
+
 _LEGAL_ADMIN_MARKERS = (
     "can cuoc",
     "cong dan",
@@ -87,7 +98,8 @@ def classify_problem(problem: Problem, config: HarnessConfig) -> ProblemProfile:
     legal_admin_hits = _literal_hits(full_text, _LEGAL_ADMIN_MARKERS)
 
     has_many_choices = len(problem.choices) >= thresholds["many_choice_min"]
-    has_calculation = bool(calculation_hits)
+    math_syntax = _MATH_SYNTAX.search(problem.question) is not None
+    has_calculation = bool(calculation_hits) or math_syntax
     has_negative = bool(negative_hits)
     has_long_context = len(problem.question) > thresholds["long_context_chars"] or bool(context_hits)
     has_legal_admin = bool(legal_admin_hits)
@@ -100,7 +112,10 @@ def classify_problem(problem: Problem, config: HarnessConfig) -> ProblemProfile:
         reasons.append("many_choices")
     if has_calculation:
         features.append("has_calculation")
-        reasons.append(f"calculation_markers={','.join(calculation_hits)}")
+        if calculation_hits:
+            reasons.append(f"calculation_markers={','.join(calculation_hits)}")
+        if math_syntax:
+            reasons.append("math_syntax")
     if has_negative:
         features.append("has_negative")
         reasons.append(f"negative_markers={','.join(negative_hits)}")
@@ -109,6 +124,12 @@ def classify_problem(problem: Problem, config: HarnessConfig) -> ProblemProfile:
         reasons.append("context_markers_or_long_text")
     if has_legal_admin:
         features.append("has_legal_admin")
+    # Two or more DISTINCT legal/admin markers: single-marker hits are dominated by
+    # diacritic-stripped polysemy ("cơ quan" organ/“có quan hệ”, "cấp tính" acute vs
+    # "cấp tỉnh" provincial); genuine legal-procedure questions stack markers
+    # (thủ tục + hồ sơ + giấy tờ...). Gates the targeted-RAG route.
+    if len(legal_admin_hits) >= 2:
+        features.append("has_legal_admin_strong")
 
     diagnostics.extend(f"ignored_calculation_marker={item}" for item in calculation_ignored)
     diagnostics.extend(f"ignored_negative_marker={item}" for item in negative_ignored)

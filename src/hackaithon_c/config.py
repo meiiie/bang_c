@@ -191,6 +191,19 @@ class HarnessConfig:
         return int(self.runtime.get("tir_code_max_tokens", 1024))
 
     @property
+    def rag_corpus_path(self) -> str:
+        # Path to a JSONL retrieval corpus ({id, title, text} rows) for the targeted
+        # legal/admin RAG mode. Empty = RAG OFF (the router never fires it). Built
+        # dev-side by scripts/build_rag_corpus.py; packaged into the image only if
+        # measurement promotes the lever.
+        return str(self.runtime.get("rag_corpus_path", "")).strip()
+
+    @property
+    def rag_top_k(self) -> int:
+        # How many retrieved excerpts to show the model per question.
+        return max(1, int(self.runtime.get("rag_top_k", 4)))
+
+    @property
     def tiered_tier1_samples(self) -> int:
         # Tier 1 = anchor + rotated-choice samples; unanimous agreement stops early.
         return max(1, int(self.runtime.get("tiered_tier1_samples", 2)))
@@ -379,6 +392,7 @@ def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None
         "tiered",
         "tir",
         "reading",
+        "rag",
         "router",
     }
     for name, workflow in raw.get("workflows", {}).items():

@@ -134,6 +134,19 @@ class RouterTests(unittest.TestCase):
         # the code-writing prompt (TIR round 1) must have been issued
         self.assertTrue(any("prints the final numeric result" in p for p in client.prompts))
 
+    def test_router_sends_latex_math_to_tir(self) -> None:
+        # LaTeX-only quantitative items carry no calculation keyword ("tính",
+        # "bao nhiêu"); the structural math-syntax cue must still route them to TIR
+        # (the composition analysis showed these were landing in "factual").
+        latex = Problem(
+            qid="q_latex",
+            question=r"Nếu $\int_0^2{f(x)\,dx}=4$ thì $\int_0^2{[\frac{1}{2}f(x)+2]\,dx}$ bằng",
+            choices=["6", "8", "4", "2"],
+        )
+        client = _TirClient(code="print(0.5*4+2*2)", letter_response="ANSWER: A")
+        pred = solve_problem(latex, client, strategy="router", config=_config(tir_samples=1))
+        self.assertTrue(pred.strategy.startswith("gemma_tir"))
+
     def test_router_sends_prose_to_self_consistency(self) -> None:
         class ReasoningClient:
             model = "stub/gemma-4"

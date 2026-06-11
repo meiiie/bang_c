@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import replace
 
@@ -19,6 +20,7 @@ from .permute import (
 )
 from .prompting import (
     build_prompt,
+    build_rag_prompt,
     build_reading_prompt,
     build_reasoning_prompt,
     build_repair_prompt,
@@ -30,6 +32,7 @@ from .prompting import (
     tournament_variants,
 )
 from .principles import adjudicate_principle
+from .retrieval import cached_retriever
 from .schema import Prediction, Problem, ProblemProfile, TraceStep
 from .tool_runtime import extract_code, run_python
 
@@ -115,6 +118,11 @@ def solve_problem(
         if strategy == "reading":
             return _with_trace(
                 _solve_reading(problem, profile, client, config=config),
+                trace,
+            )
+        if strategy == "rag":
+            return _with_trace(
+                _solve_rag(problem, profile, client, config=config),
                 trace,
             )
         if strategy == "router":
@@ -1031,9 +1039,87 @@ def _solve_reading(
     )
 
 
+def _solve_rag(
+    problem: Problem,
+    profile: ProblemProfile,
+    client: ChatClient,
+    *,
+    config: HarnessConfig,
+) -> Prediction:
+    """Targeted retrieval-grounded mode for the legal/admin factual slice.
+
+    BM25 retrieval over a packaged offline corpus feeds reference excerpts into the
+    voting loop; the prompt treats them as fallible, so a retrieval miss degrades to
+    the model's own knowledge instead of suppressing it. If no corpus is configured,
+    nothing is retrieved, or the corpus fails to load, the item degrades to plain
+    self-consistency (pred.csv stays complete; the trace records why).
+    """
+    snippets: tuple = ()
+    detail = "no corpus configured"
+    if config.rag_corpus_path:
+        try:
+            retriever = cached_retriever(config.rag_corpus_path)
+            query = f"{problem.question} {' '.join(problem.choices)}"
+            snippets = tuple(retriever.retrieve(query, config.rag_top_k))
+            detail = (
+                f"retrieved={','.join(snippet.doc_id for snippet in snippets)}"
+                if snippets
+                else "no snippets matched"
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            detail = f"retrieval_error={error.__class__.__name__}"
+    if not snippets:
+        degrade_step = TraceStep(
+            role="rag",
+            action="retrieve",
+            status="warning",
+            detail=f"{detail}; degrading to self-consistency",
+        )
+        return _with_trace(
+            _solve_self_consistency(problem, profile, client, config=config),
+            (degrade_step,),
+        )
+    retrieve_step = TraceStep(
+        role="rag",
+        action="retrieve",
+        status="completed",
+        detail=detail,
+    )
+    answers, vote_steps = _collect_reasoning_votes(
+        problem,
+        client,
+        config.self_consistency_samples,
+        config=config,
+        label="rag_sample",
+        prompt_builder=lambda sample_problem, **kwargs: build_rag_prompt(
+            sample_problem, snippets, **kwargs
+        ),
+    )
+    return _vote_prediction(
+        problem,
+        profile,
+        client.model,
+        answers,
+        [retrieve_step, *vote_steps],
+        strategy="gemma_rag",
+        fallback_reason="invalid_rag",
+        variant="rag",
+    )
+
+
 def _is_quantitative(profile: ProblemProfile) -> bool:
     """Route to tool-integrated reasoning only for genuine computation questions."""
     return profile.kind == "calculation" or "has_calculation" in profile.features
+
+
+def _is_rag_eligible(profile: ProblemProfile, config: HarnessConfig) -> bool:
+    """Targeted RAG fires ONLY on the legal/admin factual slice, and only when a
+    corpus is configured (default: none, so the router never fires it). The marker
+    set is Vietnamese because the packaged corpus is Vietnamese law — a gate matched
+    to the corpus, not a language heuristic for answering. The strong (>=2 distinct
+    markers) feature is required: single hits are dominated by diacritic-stripped
+    polysemy (biology "cơ quan", medical "cấp tính")."""
+    return bool(config.rag_corpus_path) and "has_legal_admin_strong" in profile.features
 
 
 def _is_reading(profile: ProblemProfile) -> bool:
@@ -1177,12 +1263,16 @@ def _solve_router(
     reasoning. Everything else (civics/history/logic/factual) goes through diverse
     self-consistency, where careful reasoning + voting is the documented lever.
     Quantitative wins over reading when both fire: a calculation stated inside a passage
-    still needs the computation done.
+    still needs the computation done. Reading wins over RAG: when the text is supplied,
+    retrieval adds nothing. RAG (legal/admin factual slice) fires only when a corpus is
+    configured — default off, so the router is unchanged until measurement turns it on.
     """
     if _is_quantitative(profile):
         return _solve_tir(problem, profile, client, config=config)
     if _is_reading(profile):
         return _solve_reading(problem, profile, client, config=config)
+    if _is_rag_eligible(profile, config):
+        return _solve_rag(problem, profile, client, config=config)
     return _solve_self_consistency(problem, profile, client, config=config)
 
 
