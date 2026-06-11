@@ -904,3 +904,37 @@ reading, measured on the real model, found CoT self-consistency wins, shipped th
 measure here (cheap): self-consistency k=1 vs k=5 temperature voting; gemma-4-26B vs
 gemma-4-31B (both on the API; 31B is Gemma-4-series = contest-allowed). Quantization loss
 (full-precision API ~87-92% on proxies vs our Q4 87.26 leaderboard) needs local-GPU measure.
+
+---
+
+## 2026-06-11 — MEASURED: gemma-4-31B = +2.0pp (first REAL accuracy lever); k=5 voting dead
+
+Second FPT-API battery (n=120/bucket, full-precision, vs the 26B self-consistency k=1
+baseline). Two experiments aimed at ACCURACY (Vong-1 is 100% accuracy — Time deferred):
+
+| bucket  | 26B SC k=1 | k=5 diverse voting | gemma-4-31B SC k=1 |
+|---------|-----------|--------------------|--------------------|
+| quant   | 86.7%     | 85.8% (-0.8, net -1) | **89.2% (+2.5pp, net +3)** |
+| reading | 91.7%     | 92.5% (+0.8, net +1) | **94.2% (+2.5pp, net +3)** |
+| civics  | 91.7%     | 90.8% (-0.8, net -1) | **92.5% (+0.8pp, net +1)** |
+| **avg** | **90.0%** | 89.7% (WASH)         | **92.0% (+2.0pp)** |
+
+**k=5 voting is DEAD: noise on all 3 buckets.** The model's errors are SYSTEMATIC, not
+random — 5 diverse samples agree on the same wrong answer (the "fake confidence" pattern).
+Accuracy headroom is NOT in sampling/voting.
+
+**gemma-4-31B is the first REAL improvement: +2.0pp average, +2.5pp on the two
+headroom buckets (quant/reading), consistent net-positive paired diffs across independent
+buckets.** Gemma-4-31B is in the "Gemma-4 Series" → contest-ALLOWED. Headroom is in MODEL
+CAPABILITY, not tricks. Projected: Q4 87.26 leaderboard + ~2pp -> ~89 if it transfers.
+
+**Caveats (honesty):** (1) full-precision API — must confirm +2pp holds on a local 31B Q4
+GGUF; (2) 31B is dense (~31B active) vs 26B-A4B MoE (~4B active) → ~4-6x slower inference,
+a Vong-2 Time hit but irrelevant for Vong-1 accuracy ranking; (3) need to verify a 31B Q4
+GGUF exists, fits VRAM, and runs in the offline Docker.
+
+**Next:** (a) source a gemma-4-31B Q4 GGUF (Gemma-4 series, allowed) and confirm +2pp on
+local GPU at Q4 (attended, topped-up session); (b) if it holds, switch the Vong-1 submission
+model to 31B for the accuracy push; (c) separately, the quantization gap (full-precision 31B
+~92% vs whatever Q4 gives) is the other lever. self-consistency stays the strategy; only the
+MODEL changes.
