@@ -7,6 +7,8 @@ continue without losing context.
 
 ## ▶▶ LATEST STATE (2026-06-12, evening) — read before the older sections below
 
+- **▶ FULL SESSION REPORT: `notes/session-2026-06-12.md`** is the consolidated, professional record of this session (deliverables, all measured results, the MTP active task + resume). Read it first; the bullets below are the quick index.
+
 - **CONTESTANT = 26B-A4B (MoE, Q4_0), shipped. 31B REJECTED.** Measured real GPU speed: 26B
   ~2.9 s/q vs 31B ~90 s/q (~30× slower). 31B dense needs ≥40GB VRAM and takes ~50 h on the
   2000-q private set → forfeits the 10-pt Time score for only ~0.7–2pp (proxy) accuracy. Not
@@ -17,7 +19,7 @@ continue without losing context.
   (accuracy only, Time irrelevant).
 - **reasoning_max_tokens stays 2048** (real 4090 sweep 768/1280/2048): time is nearly flat
   (2048 only +6.7% over 768 — the MoE early-stops before the cap binds), so the cap is free;
-  2048 is monotonically closest to the 91.79 reference. Details `notes/reasoning-token-sweep-2026-06-12.md`.
+  2048 is monotonically closest to the 91.79 reference. Details `notes/session-2026-06-12.md`.
 - **Bulletproof pred.csv contract SHIPPED** (commit 607f244): `repair_predictions_for_contract`
   + write-before-validate → a solver gap / bad letter / contract miss can never zero the run.
   Docker-CMD smoke PASSED on real GPU (contract 40/40). 211 tests green.
@@ -30,7 +32,7 @@ continue without losing context.
   WORSE than the shipped QAT Q4_0 on the 463 (Q4 93.30 / Q8 93.09 / Q6 92.66 vs ref; net -1/-3),
   at 2x time+VRAM. Our Q4_0 is QAT (trained for 4-bit) so loss is minimal; the research's
   '-4..-10pp 4-bit' is POST-training quant, not QAT. Accuracy headroom is NOT in precision.
-  Details `notes/quant-direction-2026-06-12.md`. Both speculative accuracy levers (maj@k, quant)
+  Details `notes/session-2026-06-12.md`. Both speculative accuracy levers (maj@k, quant)
   are now dead; remaining accuracy is knowledge-bound (hard).
 - **▶ Vong-2 TIME lever (lossless, orthogonal to quant): MTP (Multi-Token Prediction).**
   Speculative decoding — drafts tokens, the main model verifies → output identical, **zero
