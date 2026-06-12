@@ -46,5 +46,26 @@ decoding → ZERO accuracy loss.** It is purely a *speed* technique, orthogonal 
 - If the Python binding can't drive MTP, evaluate the `local_server` provider path (the
   harness already has a `local_server` provider) — llama-server supports the flags natively.
 
-## Results
-(to be filled after the same-session GPU test)
+## Session 1 status (2026-06-12) — STOPPED at a GPU-offload issue (resume here)
+
+Got the full pipeline working except the final speed measurement:
+- llama.cpp CLI built fine with CUDA (CUDAToolkit 12.4, `libggml-cuda.so.0.15.1` present).
+- main QAT Q4 (14G) + MTP draft `mtp-gemma-4-26B-A4B-it.gguf` (441M) downloaded fine.
+- **BLOCKER: `llama-cli -ngl 999` ran on CPU, not GPU** (GPU 0% util, CPU 99%, a 400-token
+  gen took >7 min; even a 20-token test timed out at 120s). The CUDA backend `.so` IS built
+  and co-located in `build/bin/` next to `llama-cli`, but the runtime did not offload.
+
+RESUME PLAN (next session, ~20 min):
+1. Run `llama-cli -m main.gguf -ngl 999 -n 20 -p Hi` with **FULL visible output** (do NOT grep)
+   and read the load lines — confirm whether it says "offloaded N/Y layers to GPU / using
+   CUDA0" or falls back to CPU. That output names the cause.
+2. Likely fixes to try, in order: (a) build ALL targets (`cmake --build build -j`, not just
+   `--target llama-cli`) so the backend registry links; (b) set `LD_LIBRARY_PATH=build/bin`
+   or run from build/bin so it finds `libggml-cuda.so`; (c) check the binary actually links
+   CUDA (`ldd llama-cli | grep cuda`); (d) try `--device CUDA0`.
+3. Fix the bench script: do NOT pipe llama.cpp through `grep` (it hid the offload/load info);
+   keep full output, parse tok/s afterwards.
+4. Then run baseline vs `--spec-type draft-mtp --spec-draft-n-max 2/4/6`, KV cache f16,
+   record tok/s + acceptance. Assets staged in `C:/Users/Admin/AppData/Local/Temp/pod_mtp/`
+   (run_mtp.sh, prov_mtp.py, launch_mtp.py). Pod terminated; re-provision per the cost-first rule.
+
