@@ -1407,6 +1407,9 @@ def _repair_invalid_answer(
         prompt.system_prompt,
         prompt.user_prompt,
         max_tokens=prompt.max_tokens,
+        # Constrained decoding: force exactly one valid option letter so the repair
+        # always parses and a free-text drift can never fall through to the heuristic.
+        letters=problem.allowed_letters,
     )
     repaired = normalize_answer(raw_repair, problem)
     if repaired is None:

@@ -24,10 +24,13 @@ class ChatClient(Protocol):
         top_p: float | None = None,
         top_k: int | None = None,
         seed: int | None = None,
+        letters: str | None = None,
     ) -> str:
         """temperature/top_p/seed default to None = the provider's deterministic
         defaults (temperature 0). Diversified sampling passes explicit values; a
-        fixed seed keeps temp>0 sampling reproducible run-to-run."""
+        fixed seed keeps temp>0 sampling reproducible run-to-run. `letters`, when set,
+        constrains the output to exactly one of the named option letters (the local
+        runtime enforces it via a GBNF grammar; API providers may ignore it)."""
         ...
 
 

@@ -92,7 +92,7 @@ class _ScriptClient:
         self.prompts: list[str] = []
         self.system_prompts: list[str] = []
 
-    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None):
+    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None, letters=None):
         self.system_prompts.append(system_prompt)
         self.prompts.append(user_prompt)
         return self._response

@@ -89,7 +89,7 @@ class FakeClient:
         self.answers = answers
         self.calls: list[tuple[str, str, int]] = []
 
-    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, *, max_tokens: int = 12, letters=None) -> str:
         self.calls.append((system_prompt, user_prompt, max_tokens))
         return self.answers.pop(0)
 

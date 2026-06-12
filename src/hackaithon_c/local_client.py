@@ -67,6 +67,7 @@ class LocalLlamaChatClient:
         top_p: float | None = None,
         top_k: int | None = None,
         seed: int | None = None,
+        letters: str | None = None,
     ) -> str:
         llm = self._load()
         kwargs: dict[str, Any] = {
@@ -84,7 +85,21 @@ class LocalLlamaChatClient:
             kwargs["top_k"] = top_k
         if seed is not None:
             kwargs["seed"] = seed
-        result = llm.create_chat_completion(**kwargs)
+        # Constrained decoding: when the caller names the valid option letters, force
+        # the output to be exactly one of them via a GBNF grammar. Used by the repair
+        # pass so a parse-fail can never reach the heuristic fallback (accuracy AND
+        # contract robustness). Defensive: any grammar/llama version mismatch degrades
+        # to unconstrained generation rather than crashing the run.
+        grammar = _letter_grammar(letters)
+        if grammar is not None:
+            kwargs["grammar"] = grammar
+        try:
+            result = llm.create_chat_completion(**kwargs)
+        except Exception:  # noqa: BLE001 - grammar unsupported -> retry unconstrained
+            if "grammar" not in kwargs:
+                raise
+            kwargs.pop("grammar")
+            result = llm.create_chat_completion(**kwargs)
         return _extract_chat_content(result)
 
     def _load(self) -> Any:
@@ -120,6 +135,29 @@ class LocalLlamaChatClient:
             kwargs["n_batch"] = self._config.n_batch
         self._llm = Llama(**kwargs)
         return self._llm
+
+
+def _letter_grammar(letters: str | None) -> Any | None:
+    """Build a GBNF grammar that admits exactly one of the given option letters.
+
+    Returns None when no letters are supplied or the grammar API is unavailable, so the
+    caller silently runs unconstrained. Only A-Z letters are used (the option space),
+    so the grammar string never needs escaping.
+    """
+    if not letters:
+        return None
+    valid = [ch for ch in letters if "A" <= ch <= "Z"]
+    if not valid:
+        return None
+    try:
+        from llama_cpp import LlamaGrammar
+    except Exception:  # noqa: BLE001 - older/edge llama-cpp without grammar support
+        return None
+    alternation = " | ".join(f'"{ch}"' for ch in valid)
+    try:
+        return LlamaGrammar.from_string(f"root ::= {alternation}", verbose=False)
+    except Exception:  # noqa: BLE001 - never let grammar construction break a run
+        return None
 
 
 def _extract_chat_content(result: Any) -> str:

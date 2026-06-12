@@ -84,7 +84,7 @@ class _TirClient:
         self._letter = letter_response
         self.prompts: list[str] = []
 
-    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None):
+    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None, letters=None):
         self.prompts.append(user_prompt)
         if "```python```" in user_prompt or "computes the answer and prints" in user_prompt:
             return f"Set up the computation.\n```python\n{self._code}\n```"

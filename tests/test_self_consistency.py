@@ -40,6 +40,7 @@ class ScriptedClient:
         top_p: float | None = None,
         top_k: int | None = None,
         seed: int | None = None,
+        letters: str | None = None,
     ) -> str:
         self.calls += 1
         self.sampling.append(

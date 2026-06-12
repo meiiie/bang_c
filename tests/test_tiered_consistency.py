@@ -50,7 +50,7 @@ class PositionBiasedClient:
         self.calls = 0
         self.sampling: list[dict] = []
 
-    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None):
+    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None, letters=None):
         self.calls += 1
         self.sampling.append({"temperature": temperature, "top_p": top_p, "top_k": top_k, "seed": seed})
         return "ANSWER: A"
@@ -67,7 +67,7 @@ class ContentAwareClient:
         self.calls = 0
         self.sampling: list[dict] = []
 
-    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None):
+    def complete(self, system_prompt, user_prompt, *, max_tokens=12, temperature=None, top_p=None, top_k=None, seed=None, letters=None):
         self.calls += 1
         self.sampling.append({"temperature": temperature, "top_p": top_p, "top_k": top_k, "seed": seed})
         for line in user_prompt.splitlines():

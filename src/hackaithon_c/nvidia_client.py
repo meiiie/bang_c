@@ -77,6 +77,7 @@ class NvidiaChatClient:
         top_p: float | None = None,
         top_k: int | None = None,  # accepted for protocol parity; OpenAI-compat APIs ignore it
         seed: int | None = None,
+        letters: str | None = None,  # accepted for protocol parity; GBNF is local-only
     ) -> str:
         import requests
 
