@@ -5,35 +5,42 @@ continue without losing context.
 
 ---
 
-## ▶▶ LATEST STATE (2026-06-12) — read before the older sections below
+## ▶▶ LATEST STATE (2026-06-12, evening) — read before the older sections below
 
-- **Leaderboard now: 31B-Q4 = 88.12** (vs 26B-Q4 baseline 87.26 = +0.86pp real). **88.12 is
-  NOT enough to advance** — the goal is to push accuracy HIGHER.
-- **GPU Q4 measurement done** (RunPod, attended): 26B-Q4 88.2% / 31B-Q4 90.9% / Qwen3.5-9B
-  84.9% on the 450-q labeled proxy. BUT the proxy **OVERESTIMATED** — proxy said 31B +2.7pp,
-  the real leaderboard gain is only **+0.86pp**. LESSON: labeled proxies (ViGEText/ViMMRC)
-  give DIRECTION not MAGNITUDE; the leaderboard is the only ground truth.
-- **31B operational tail-risk:** 31B Q4 (~17.7GB) needs **≥40GB VRAM** — OOMs/stalls on 24GB
-  (crashed a GPU this session). If the BTC judge GPU is 24GB a 31B Docker → 0 on the private
-  test. **26B-A4B (MoE 14.4GB) runs anywhere = the robust fallback.** OPEN: get BTC judge
-  VRAM → decide 26B vs 31B for the Vong-2 Docker. +0.86pp likely NOT worth the 0-risk unless
-  BTC ≥40GB is confirmed.
-- **RULED OUT (measured no/negative — do NOT re-try):** TIR (level 1), reading-grounding
-  (level 2), targeted RAG (level 3), k=5 diverse voting, few-shot, tiered, UD-Q4_K_XL
-  quant-swap, Qwen3.5-9B. The ONLY positive lever found is the bigger 31B model (+0.86, marginal).
-- **NEXT GOAL: find a NEW accuracy lever** (current levers are exhausted). Candidate untried
-  directions: better 26B quantization to recover the Q4 math loss (26B-Q4 quant 82.7% vs
-  full-precision 86.7% = −4pp — a real gap, but UD-Q4_K_XL measured slightly negative on a
-  small sample, so try OTHER quants); position-bias debiasing on the live path (the 463 pred
-  was A/B-heavy, 63%); prompt/CoT refinements; possibly a Gemma-4 size between 26B and 31B if
-  one exists. Measure each on the LEADERBOARD (proxies mislead), respecting the 5-trial limit.
-- **Dev tooling:** FPT API `fpt-gemma-api` profile (key was `Downloads/ai_gemma.txt`, free $1
-  spent; $70 voucher is Japan-region = gemma-3 only). RunPod key `Downloads/runpod987.txt`
-  (~$14 left). For a stable 31B GPU run use a ≥40GB card (A6000/A40), n_ctx=8192, source-build
-  llama-cpp (CUDACXX=/usr/local/cuda/bin/nvcc, arch 86). Reproducible 31B-Q4 463 pred.csv is
-  at `data/q4results/31bq4_public463_pred.csv` (gitignored).
-- Full detail: `notes/worklog.md` (2026-06-11→12 entries) + memory note
-  `neko-core-current-state-2026-06-11`.
+- **CONTESTANT = 26B-A4B (MoE, Q4_0), shipped. 31B REJECTED.** Measured real GPU speed: 26B
+  ~2.9 s/q vs 31B ~90 s/q (~30× slower). 31B dense needs ≥40GB VRAM and takes ~50 h on the
+  2000-q private set → forfeits the 10-pt Time score for only ~0.7–2pp (proxy) accuracy. Not
+  worth it. 26B-A4B runs anywhere (~15GB) and finishes 2000 q in ~1.5–1.6 h.
+- **Leaderboard band: 88.55** (26B-Q4 + safety lever; `data/q4results/gemma26_safety_probe.csv`,
+  already submitted). Progression: 77.11 letter-only → 87.26 self-consistency CoT → 88.55 +safety.
+  **Bar to advance ≈ 88.98** (owner) → need a small REAL lift (~+0.5pp), Vong-1 is pred-upload
+  (accuracy only, Time irrelevant).
+- **reasoning_max_tokens stays 2048** (real 4090 sweep 768/1280/2048): time is nearly flat
+  (2048 only +6.7% over 768 — the MoE early-stops before the cap binds), so the cap is free;
+  2048 is monotonically closest to the 91.79 reference. Details `notes/reasoning-token-sweep-2026-06-12.md`.
+- **Bulletproof pred.csv contract SHIPPED** (commit 607f244): `repair_predictions_for_contract`
+  + write-before-validate → a solver gap / bad letter / contract miss can never zero the run.
+  Docker-CMD smoke PASSED on real GPU (contract 40/40). 211 tests green.
+- **RULED OUT (measured no/negative — do NOT re-try, do NOT re-spend):** TIR, reading-grounding,
+  targeted RAG, **k=5 / maj@k diverse voting (re-confirmed DEAD: FPT n=120/bucket = WASH 89.7 vs
+  90.0; Gemma's errors are SYSTEMATIC — diverse samples agree on the SAME wrong answer, so voting
+  just confirms it)**, few-shot, tiered, UD-Q4_K_XL quant-swap, Qwen3.5-9B standalone (84.9% proxy,
+  worse than Gemma), dense 31B (Time). 
+- **▶ ACTIVE LEVER (untried, best-evidence): higher-precision quantization of 26B.** 26B-Q4 loses
+  ~4pp on math vs full-precision (Q4 82.7% vs 86.7% proxy); independent research: naive 4-bit costs
+  ~10pp AIME while 8-bit/FP8 is ~free. Ship the SAME Gemma-4-26B-A4B but at **Q6_K (~22GB, fits 24GB)
+  / Q8_0 (~28GB, needs ≥40GB)** to recover the quant loss. Contest-allowed (same model family).
+  Real mechanism, targets the headroom bucket. Caveat: −4pp is a math-proxy number; leaderboard
+  transfer magnitude unproven (proxies give direction, not magnitude). Plan: GPU-measure Q6_K +
+  Q8_0 on the 463 vs the 88.55 Q4 baseline; ship the winner for the Vong-1 team-nick upload.
+- **Secondary / deferred:** Qwen3.5-9B as a cross-model ADJUDICATOR on low-agreement items (NOT
+  standalone — standalone is worse). Unproven given systematic errors; only if quant isn't enough.
+- **Dev tooling:** RunPod key `Downloads/runpod987.txt`. Reusable GPU orchestration in
+  `C:\Users\Admin\AppData\Local\Temp\pod26\` (prov26 cheap-first, launch26, run_26b sweep).
+  Lesson: the setsid launch ssh call times out at 120s but the run DID start — VERIFY, never
+  relaunch (double-load OOM). Always podTerminate after pulling results (needs User-Agent header).
+- Full detail: `notes/worklog.md` + memory notes `neko-core-ship-state-2026-06-12` (latest) and
+  `neko-core-current-state-2026-06-11` (prior).
 
 ---
 
