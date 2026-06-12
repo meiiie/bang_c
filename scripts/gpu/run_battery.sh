@@ -27,7 +27,8 @@ run_arm() {
   local bucket="$1" workflow="$2" config_arg="$3"
   local tag="${bucket}-${workflow}"
   echo "=== ${tag} ==="
-  /usr/bin/time -v env PYTHONUNBUFFERED=1 PYTHONPATH=src \
+  local started=${SECONDS}
+  PYTHONUNBUFFERED=1 PYTHONPATH=src \
     python -m hackaithon_c.run \
       --workflow "${workflow}" ${config_arg} \
       --input "${DEVSETS}/${bucket}.json" \
@@ -35,7 +36,8 @@ run_arm() {
       --trace-dir "${OUT}/${tag}/traces" \
       --run-dir "${OUT}/${tag}/run" \
       --auto-resume --checkpoint-every 5 \
-      2> "${OUT}/${tag}.time" || { echo "ARM FAILED: ${tag}"; exit 1; }
+      || { echo "ARM FAILED: ${tag}"; exit 1; }
+  echo "${tag} wall_seconds=$((SECONDS - started))" | tee -a "${OUT}/timings.txt"
 }
 
 # Arms (decided on LOCAL routing analysis, 2026-06-11):

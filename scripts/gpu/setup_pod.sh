@@ -12,7 +12,12 @@ cd /workspace/neko-core
 
 python -m pip install --upgrade pip
 python -m pip install requests "huggingface-hub>=0.32,<1" gdown pyarrow
-CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 \
+# nvcc ships at /usr/local/cuda/bin but is OFF PATH in the runpod/pytorch image, and
+# CMake's enable_language(CUDA) needs CUDACXX ("CUDA compiler identification is
+# unknown" otherwise). Arch 86 = RTX 30xx; harmless elsewhere via PTX JIT.
+export PATH="/usr/local/cuda/bin:${PATH}"
+export CUDACXX=/usr/local/cuda/bin/nvcc
+CMAKE_ARGS="-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=86" FORCE_CMAKE=1 \
   python -m pip install "llama-cpp-python>=0.3.9,<0.4" --no-binary llama-cpp-python -v
 
 # Volume paths first, symlinks second — and never pre-create the symlink target
