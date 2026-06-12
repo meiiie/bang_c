@@ -1,7 +1,39 @@
-# ▶ RESUME HERE — next-session entry point (updated 2026-06-11, post level-2)
+# ▶ RESUME HERE — next-session entry point (updated 2026-06-12, post GPU Q4 measurement)
 
-Read this FIRST. It is self-contained: project identity, rules, current state, the exact
-next task (level 2), and how to continue without losing context.
+Read this FIRST. It is self-contained: project identity, rules, current state, and how to
+continue without losing context.
+
+---
+
+## ▶▶ LATEST STATE (2026-06-12) — read before the older sections below
+
+- **Leaderboard now: 31B-Q4 = 88.12** (vs 26B-Q4 baseline 87.26 = +0.86pp real). **88.12 is
+  NOT enough to advance** — the goal is to push accuracy HIGHER.
+- **GPU Q4 measurement done** (RunPod, attended): 26B-Q4 88.2% / 31B-Q4 90.9% / Qwen3.5-9B
+  84.9% on the 450-q labeled proxy. BUT the proxy **OVERESTIMATED** — proxy said 31B +2.7pp,
+  the real leaderboard gain is only **+0.86pp**. LESSON: labeled proxies (ViGEText/ViMMRC)
+  give DIRECTION not MAGNITUDE; the leaderboard is the only ground truth.
+- **31B operational tail-risk:** 31B Q4 (~17.7GB) needs **≥40GB VRAM** — OOMs/stalls on 24GB
+  (crashed a GPU this session). If the BTC judge GPU is 24GB a 31B Docker → 0 on the private
+  test. **26B-A4B (MoE 14.4GB) runs anywhere = the robust fallback.** OPEN: get BTC judge
+  VRAM → decide 26B vs 31B for the Vong-2 Docker. +0.86pp likely NOT worth the 0-risk unless
+  BTC ≥40GB is confirmed.
+- **RULED OUT (measured no/negative — do NOT re-try):** TIR (level 1), reading-grounding
+  (level 2), targeted RAG (level 3), k=5 diverse voting, few-shot, tiered, UD-Q4_K_XL
+  quant-swap, Qwen3.5-9B. The ONLY positive lever found is the bigger 31B model (+0.86, marginal).
+- **NEXT GOAL: find a NEW accuracy lever** (current levers are exhausted). Candidate untried
+  directions: better 26B quantization to recover the Q4 math loss (26B-Q4 quant 82.7% vs
+  full-precision 86.7% = −4pp — a real gap, but UD-Q4_K_XL measured slightly negative on a
+  small sample, so try OTHER quants); position-bias debiasing on the live path (the 463 pred
+  was A/B-heavy, 63%); prompt/CoT refinements; possibly a Gemma-4 size between 26B and 31B if
+  one exists. Measure each on the LEADERBOARD (proxies mislead), respecting the 5-trial limit.
+- **Dev tooling:** FPT API `fpt-gemma-api` profile (key was `Downloads/ai_gemma.txt`, free $1
+  spent; $70 voucher is Japan-region = gemma-3 only). RunPod key `Downloads/runpod987.txt`
+  (~$14 left). For a stable 31B GPU run use a ≥40GB card (A6000/A40), n_ctx=8192, source-build
+  llama-cpp (CUDACXX=/usr/local/cuda/bin/nvcc, arch 86). Reproducible 31B-Q4 463 pred.csv is
+  at `data/q4results/31bq4_public463_pred.csv` (gitignored).
+- Full detail: `notes/worklog.md` (2026-06-11→12 entries) + memory note
+  `neko-core-current-state-2026-06-11`.
 
 ---
 
