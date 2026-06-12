@@ -114,11 +114,14 @@ in my quant run script. Recording the truth so the misdiagnosis is not repeated.
   loaded -> check the PATH/env FIRST, do not assume a bad pod. A standalone
   `python -c "from llama_cpp import Llama; Llama(path,...)"` loading fine while the harness
   "stalls" is the tell that it is a harness/config path issue, not hardware.
-- **SECURE-vs-COMMUNITY (still reasonable, but NOT the cause here):** SECURE is preferable for
-  long/important runs (dedicated GPU, ~$0.8/h A6000/A40 vs ~$0.3-0.4/h community) and community
-  CAN be reclaimed mid-run; but this session's stalls were my env bug on BOTH pods, not
-  community oversubscription - do not over-attribute failures to the pod. Stable this session:
-  RTX 4090 SECURE (full sweep), A40 SECURE (quant, after the fix).
+- **SECURE-vs-COMMUNITY — COST-FIRST rule (corrected):** Do NOT blanket-avoid community.
+  This session's "stalls" were MY env-var bug on BOTH a community AND a SECURE pod, not
+  community instability — so community is not the villain. **Rule: if community is meaningfully
+  cheaper, rent COMMUNITY; only when the price is about the same, prefer SECURE** (dedicated
+  GPU, can't be reclaimed mid-run — a small reliability edge worth taking only for free). The
+  real reliability win is the run discipline below (reuse script + 2-min health-verify +
+  kill-verify-zero), not the cloud tier. Community's genuine cost is older CPUs (prebuilt
+  wheels may SIGILL → source-build) — budget for that, not for "it will stall."
 
 ## 2026-06-12 (GPU RUN PLAYBOOK - mandatory; this session wasted ~2h on avoidable mistakes)
 
