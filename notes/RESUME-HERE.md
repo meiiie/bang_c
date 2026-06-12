@@ -33,6 +33,13 @@ continue without losing context.
   Real mechanism, targets the headroom bucket. Caveat: −4pp is a math-proxy number; leaderboard
   transfer magnitude unproven (proxies give direction, not magnitude). Plan: GPU-measure Q6_K +
   Q8_0 on the 463 vs the 88.55 Q4 baseline; ship the winner for the Vong-1 team-nick upload.
+- **▶ Vong-2 TIME lever (lossless, orthogonal to quant): MTP (Multi-Token Prediction).**
+  Speculative decoding — drafts tokens, the main model verifies → output identical, **zero
+  accuracy loss**, purely 1.4–2.2× faster (Gemma-4 QAT+MTP 1.5–2.2×). 26B-A4B has MTP GGUFs
+  (unsloth `MTP/` subfolder). Merged into llama.cpp 2026-06-07 (PR #23398), flags
+  `--spec-type draft-mtp --spec-draft-n-max 2`. OPEN: verify `llama-cpp-python` exposes it
+  (else use `local_server` provider w/ llama-server, which does). Ship BOTH quant+MTP. Details
+  `notes/mtp-direction-2026-06-12.md`. Same-GPU-session test queued after the quant run.
 - **Secondary / deferred:** Qwen3.5-9B as a cross-model ADJUDICATOR on low-agreement items (NOT
   standalone — standalone is worse). Unproven given systematic errors; only if quant isn't enough.
 - **Dev tooling:** RunPod key `Downloads/runpod987.txt`. Reusable GPU orchestration in
