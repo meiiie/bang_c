@@ -26,13 +26,12 @@ continue without losing context.
   90.0; Gemma's errors are SYSTEMATIC — diverse samples agree on the SAME wrong answer, so voting
   just confirms it)**, few-shot, tiered, UD-Q4_K_XL quant-swap, Qwen3.5-9B standalone (84.9% proxy,
   worse than Gemma), dense 31B (Time). 
-- **▶ ACTIVE LEVER (untried, best-evidence): higher-precision quantization of 26B.** 26B-Q4 loses
-  ~4pp on math vs full-precision (Q4 82.7% vs 86.7% proxy); independent research: naive 4-bit costs
-  ~10pp AIME while 8-bit/FP8 is ~free. Ship the SAME Gemma-4-26B-A4B but at **Q6_K (~22GB, fits 24GB)
-  / Q8_0 (~28GB, needs ≥40GB)** to recover the quant loss. Contest-allowed (same model family).
-  Real mechanism, targets the headroom bucket. Caveat: −4pp is a math-proxy number; leaderboard
-  transfer magnitude unproven (proxies give direction, not magnitude). Plan: GPU-measure Q6_K +
-  Q8_0 on the 463 vs the 88.55 Q4 baseline; ship the winner for the Vong-1 team-nick upload.
+- **quant lever MEASURED DEAD (2026-06-12): keep Q4_0.** Q6_K/Q8_0 of 26B tied-to-slightly
+  WORSE than the shipped QAT Q4_0 on the 463 (Q4 93.30 / Q8 93.09 / Q6 92.66 vs ref; net -1/-3),
+  at 2x time+VRAM. Our Q4_0 is QAT (trained for 4-bit) so loss is minimal; the research's
+  '-4..-10pp 4-bit' is POST-training quant, not QAT. Accuracy headroom is NOT in precision.
+  Details `notes/quant-direction-2026-06-12.md`. Both speculative accuracy levers (maj@k, quant)
+  are now dead; remaining accuracy is knowledge-bound (hard).
 - **▶ Vong-2 TIME lever (lossless, orthogonal to quant): MTP (Multi-Token Prediction).**
   Speculative decoding — drafts tokens, the main model verifies → output identical, **zero
   accuracy loss**, purely 1.4–2.2× faster (Gemma-4 QAT+MTP 1.5–2.2×). 26B-A4B has MTP GGUFs

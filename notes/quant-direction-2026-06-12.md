@@ -36,5 +36,24 @@ quant by the accuracy-vs-VRAM/Time trade.
 - Q8 26B (~28GB) does NOT fit a 24GB judge GPU; if the BTC GPU is 24GB the Vong-2 Docker
   must use Q6_K/Q5_K_M, even if Q8 wins Vong-1. Keep the two decisions separate.
 
-## Results
-(to be filled after the GPU run)
+## Results (measured 2026-06-12, A40 SECURE, full 463, same shipped config)
+
+| Quant | agreement vs 91.79 ref | vs Q4 (net on differing answers) | time 463 | VRAM |
+|---|---|---|---|---|
+| Q4_0 (shipped, QAT) | **93.30%** | - | ~22 min | 15 GB |
+| Q6_K (unsloth UD) | 92.66% | net **-3** (worse) | 40 min | 22 GB |
+| Q8_0 (unsloth) | 93.09% | net **-1** (worse) | 42 min | 28 GB |
+
+**VERDICT: the higher-precision quant lever is DEAD. Keep Q4_0.** Both Q6 and Q8 are
+tied-to-slightly-WORSE than Q4 on the proxy, at 2x the time and VRAM. The ~4pp math-proxy
+quant loss does NOT transfer to the real test.
+
+**Why (now clear):** our Q4_0 is **QAT (Quantization-Aware Trained)** - the model was trained
+to be good at 4-bit, so its loss is minimal. The "-4 to -10pp" figures in the research are
+**post-training** quantization; QAT-Q4 is a different animal. unsloth's Q6/Q8 are
+post-training quants of the base (and carry a slightly different chat template), so they do
+not beat the QAT Q4. Quant precision is not where the accuracy headroom is.
+
+**Caveat:** agreement-vs-proxy, not leaderboard; but a -1/-3 net plus lower ref-agreement is
+a clean null. No reason to spend a leaderboard trial on Q6/Q8.
+
