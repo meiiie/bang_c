@@ -85,13 +85,15 @@ class WithSafetyClauseUnit(unittest.TestCase):
 
 
 class SafetyClauseRouting(unittest.TestCase):
-    def test_off_by_default_no_clause_in_any_vote(self) -> None:
+    def test_no_clause_when_explicitly_disabled(self) -> None:
+        # The lever is promoted ON in the shipped config (default.json); the OFF path
+        # must still be a clean no-op when a caller disables it explicitly.
         client = CapturingClient(["ANSWER: D"])
         solve_problem(
             _harmful_problem(),
             client,
             strategy="self_consistency",
-            config=_config(self_consistency_samples=1),
+            config=_config(self_consistency_samples=1, enable_safety_refusal=False),
         )
         self.assertTrue(client.system_prompts, "the reasoning path must call the model")
         for sysp in client.system_prompts:
@@ -110,8 +112,10 @@ class SafetyClauseRouting(unittest.TestCase):
             "the clause must reach the reasoning system prompt when enabled",
         )
 
-    def test_enable_flag_default_false(self) -> None:
-        self.assertFalse(load_config().enable_safety_refusal)
+    def test_promoted_on_in_shipped_config(self) -> None:
+        # Leaderboard-proven (87.26 -> 88.55, +1.29pp), so the shipped contest config
+        # turns it ON; the code-level property still defaults OFF for safety.
+        self.assertTrue(load_config().enable_safety_refusal)
 
 
 if __name__ == "__main__":

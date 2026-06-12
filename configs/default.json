@@ -55,6 +55,7 @@
     "tir_code_max_tokens": 1024,
     "rag_corpus_path": "",
     "rag_top_k": 4,
+    "enable_safety_refusal": true,
     "tiered_tier1_samples": 2,
     "tiered_total_samples": 5,
     "self_consistency_challenge_threshold": 0.75,
@@ -146,7 +147,7 @@
       "phase": "development"
     },
     "self-consistency": {
-      "description": "CONTEST DEFAULT: chain-of-thought reasoning (k=1) with answer extraction. Language-neutral. Leaderboard 2026-06-10: 87.26 vs 77.11 letter-only baseline.",
+      "description": "CONTEST DEFAULT: chain-of-thought reasoning (k=1) with answer extraction. Language-neutral, with the leaderboard-proven safety-refusal lever (enable_safety_refusal). Leaderboard: 88.55 (safety) / 87.26 (CoT k=1) / 77.11 (letter-only).",
       "strategy": "self_consistency",
       "verify": false,
       "dry_run": false,
