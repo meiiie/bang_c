@@ -92,20 +92,30 @@ Durable lessons learned while building Neko Core. Newest on top.
   VRAM) is a real tradeoff to weigh — the Docker must pin n_ctx to whatever fits the judges'
   hardware. Always measure VRAM headroom before committing a bigger model to the image.
 
-## 2026-06-12 (RunPod SECURE vs COMMUNITY — use SECURE for any multi-hour run)
+## 2026-06-12 (the "stalled GPU" was MY env-var bug, not community instability)
 
-- **COMMUNITY pods are NOT reliable for long runs.** A community A6000 stalled mid-run at
-  320/463: the GPU went COLD (nvidia-smi 0% util, 25°C, 1 MiB used — the model fell out of
-  VRAM) while the python process limped on CPU/hung. No OOM, no Xid in dmesg — the host
-  simply reclaimed/oversubscribed the GPU. ~80 min + the whole session wasted. This is the
-  SAME class of failure as the earlier 24GB GPU crash; community = someone else's machine
-  rented back (Airbnb-for-GPU), so availability of the GPU is not guaranteed mid-run.
-- **RULE: rent SECURE for anything ≥~30 min or that must finish (quant runs, full-463
-  sweeps, the real submission run).** SECURE = RunPod's own T3/T4 datacenter, dedicated GPU,
-  ~$0.8/h for A6000/A40 vs ~$0.3-0.4/h community. The ~$0.4/h premium is trivial next to a
-  lost session. COMMUNITY is only for short, restartable probes you can afford to lose.
-  Confirmed stable this session: RTX 4090 SECURE (full sweep), A6000 SECURE (31B), A40 SECURE.
-- **Diagnosing a stalled GPU run (vs just slow):** check `nvidia-smi` util+temp. A working
-  llama.cpp run keeps the GPU ~85-95% util and 60-80°C. **0% util + low temp + a flat
-  checkpoint line count over a 90s window = STALLED/DEAD, not slow** — kill and re-provision
-  on SECURE; do not wait it out.
+CORRECTION - I first blamed a community pod for "stalling"; the real root cause was a bug
+in my quant run script. Recording the truth so the misdiagnosis is not repeated.
+
+- **ROOT CAUSE: the local client reads the model PATH from `HACKC_LOCAL_MODEL_PATH` (env),
+  NOT from a config `runtime.local_model_path` key.** `run_quant.sh` set the path only in the
+  per-quant config file and forgot to `export HACKC_LOCAL_MODEL_PATH`, so the client fell back
+  to the Dockerfile default `/models/gemma-4-26B_q4_0-it.gguf` (absent on a raw pod) ->
+  `RuntimeError: Local model file not found` -> caught per-question -> heuristic fallback +
+  `_solve_with_retry` exponential-backoff `time.sleep`. Symptom: python in `nanosleep`, RSS
+  ~24MB (Llama never constructed), GPU cold (0% util, ~25C, ~0 MiB), checkpoint count crawling.
+  `run_26b.sh` (the sweep) DID export the env -> worked; the diff was a one-line omission.
+  The working sweep is the template: always export
+  HACKC_PROVIDER/HACKC_LOCAL_MODEL_PATH/HACKC_LLAMACPP_N_CTX/N_GPU_LAYERS before the run.
+- **DIAGNOSTIC that actually localises this:** when a run looks stalled, read the first
+  checkpoint entry's `strategy`/`fallback_reason`/`raw_answer`. A `*_after_error` strategy with
+  `raw_answer=solver_error=...` names the exact exception; a healthy run shows
+  `strategy=gemma_self_consistency, fallback_reason=None`. Cold GPU + low RSS = the model never
+  loaded -> check the PATH/env FIRST, do not assume a bad pod. A standalone
+  `python -c "from llama_cpp import Llama; Llama(path,...)"` loading fine while the harness
+  "stalls" is the tell that it is a harness/config path issue, not hardware.
+- **SECURE-vs-COMMUNITY (still reasonable, but NOT the cause here):** SECURE is preferable for
+  long/important runs (dedicated GPU, ~$0.8/h A6000/A40 vs ~$0.3-0.4/h community) and community
+  CAN be reclaimed mid-run; but this session's stalls were my env bug on BOTH pods, not
+  community oversubscription - do not over-attribute failures to the pod. Stable this session:
+  RTX 4090 SECURE (full sweep), A40 SECURE (quant, after the fix).
