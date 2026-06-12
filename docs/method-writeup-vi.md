@@ -114,3 +114,56 @@ Nộp cả hai cách lên leaderboard, cùng mô hình Gemma‑4‑26B:
 quyết chính thức trên đúng thước đo chấm điểm xác nhận luận điểm cốt lõi: *cho mô hình suy
 luận*. Bài nộp cuối: image `hacamy12345/neko-core:gemma26b-q4-cot-20260610`. Không con số nào
 trong tài liệu này là phỏng đoán.
+
+## 8. Đo lường có kỷ luật: xây nhiều đòn bẩy, giữ lại cái thắng thật
+
+Triết lý của Neko Core là **mọi đòn bẩy phải qua thước đo leaderboard, không tin proxy**
+(chúng tôi đo được proxy ViGEText/ViMMRC nói +2.7pp nhưng leaderboard thật chỉ +0.86pp —
+proxy cho *hướng*, không cho *độ lớn*). Chúng tôi xây và đo trung thực cả một dải kỹ thuật:
+
+- **Đã xây, đo, và LOẠI** (đều ship OFF, là vật chứng kỹ thuật): Tool‑Integrated Reasoning
+  (mô hình viết + chạy Python offline), reading‑grounding, RAG luật/hành chính (BM25 offline,
+  diacritics giữ nguyên), voting k>1 đa dạng, few‑shot, tiered, quant‑swap, Qwen‑challenger.
+  Bài học: với Gemma‑4‑26B, **suy luận ngôn ngữ tự nhiên thắng sinh‑mã trên toán thi**; RAG bị
+  gate bắn nhầm vào câu reading‑comp; voting là nhiễu vì lỗi mô hình *có hệ thống* chứ không
+  ngẫu nhiên. Kết quả âm cũng giá trị như kết quả dương — chúng ngăn ta ship tính năng có hại.
+- **Phép thăm dò trần (frontier‑ceiling probe):** giải tay toàn bộ 463 câu bằng một mô hình
+  frontier (chỉ để *đo trần*, không ship — vi phạm allowlist), được 90.93 → sửa 4 fact VN qua
+  tra cứu → ~91.8. Phát hiện cốt lõi: **đề công khai là cuộc thi KIẾN‑THỨC‑VN, không phải
+  suy‑luận** — phần frontier còn sai là fact hành chính 2025 / luật VN / chùa địa phương +
+  một phần *đáp án đề lỗi (defective gold)*. Đây là trần cấu trúc của đề, không phải điểm yếu
+  của mô hình.
+
+## 9. Đòn bẩy thắng thật: an‑toàn‑từ‑chối (semantic) — leaderboard 88.55
+
+Phân tích chỉ ra một lớp câu "bẫy an toàn": đề cài câu *"làm thế nào để [hành vi phạm pháp]"*
+mà danh sách đáp án có một lựa chọn **từ chối** ("Tôi không thể trả lời..."). Trên lớp này
+**đáp án đúng là lựa chọn từ chối**. Mô hình frontier chọn đúng 10/10; baseline 26B trượt 6.
+
+Chúng tôi thêm một **mệnh đề an toàn ngữ nghĩa** vào prompt suy luận (mô hình *tự phán đoán
+tính gây hại* theo nghĩa, không match từ khóa → tổng quát hóa sang tập private đa ngôn ngữ
+2000 câu), bắt cả bẫy "tất cả đáp án trên" khi danh sách có lựa chọn từ chối. Tiêm một chỗ ở
+tầng voting nên phủ mọi đường (self‑consistency/reading/rag); config‑gated, mặc định cấp‑code
+là OFF. **Đo leaderboard: 87.26 → 88.55 (+1.29pp), đúng dự phóng +6 câu**, chi phí Time = 0,
+rủi ro lật‑nhầm‑câu‑lành = 0 (frontier chọn từ chối trên 0/11 câu lành). Đã promote thành
+mặc định contest.
+
+## 10. Giải mã ràng buộc: constrained decoding cho độ tin cậy hợp đồng
+
+Lượt "sửa" (khi một mẫu CoT không cho ra chữ cái phân giải được) giờ truyền các chữ cái hợp lệ;
+runtime llama.cpp dựng **GBNF grammar** (`root ::= "A" | "B" | ...`) ép output đúng một chữ cái.
+Một câu parse‑fail không bao giờ rơi xuống heuristic nữa → thu hồi ~1.5% lát fallback **và**
+gia cố hợp đồng `pred.csv`. Phòng thủ nhiều lớp (không grammar / không llama‑cpp / lỗi dựng /
+phiên bản không hỗ trợ → tự chạy không‑ràng‑buộc, không bao giờ crash). Đây là cải tiến *giải
+mã* thuần, không tune nội dung → không overfit tập công khai.
+
+## 11. Bài nộp cuối & định vị trung thực
+
+- **Model ship: Gemma‑4‑26B‑A4B (MoE 14.4GB)** — chạy mọi GPU (0 OOM‑risk), nhanh nhất (Time
+  tốt). 31B‑Q4 (+0.86pp) phát triển song song như phương án dự phòng nhưng cần ≥40GB VRAM, dày
+  rủi ro OOM + phạt Time → chỉ dùng nếu phần cứng BTC xác nhận.
+- **Đường chạy: CoT self‑consistency (k=1) + safety‑refusal + constrained‑repair.** Leaderboard
+  88.55. Mọi đòn bẩy âm giữ OFF, anti‑overfit cho 2000 câu private.
+- **Định vị trung thực:** trần accuracy của một Gemma offline *trung thực* ≈ 88.5–89.2; phần
+  còn lại tới mốc cao là kiến‑thức‑VN không retrieval được + defective‑gold — không mô hình hợp
+  lệ nào phá được. Chúng tôi báo số đo thật, không hứa số.

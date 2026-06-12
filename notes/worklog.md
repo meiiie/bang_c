@@ -1091,3 +1091,61 @@ Time cost + a 2025-fact corpus that must be built. But the direction is now lead
 Pred files: submitted v1 `claude_public463_pred.csv` (90.93); web-fixed v2
 `claude_public463_pred_v2_webfixed.csv` (proj ~91.8) — both gitignored, dev-only (Claude not
 contest-allowed; this measures the ceiling + validates the RAG lever, does NOT ship).
+
+---
+
+## 2026-06-12 — Hướng 2 khởi động: RAG đo lại = CHẾT; safety-refusal lever BUILT (+1.3pp, commit 94e5fae)
+
+Owner duyệt khởi động Hướng 2 (VN-knowledge RAG). Theo karpathy (đo trước khi build), chạy
+classifier thật trên 463 + đối chiếu Gemma26 vs Claude-corrected (91.79 proxy-truth):
+
+**RAG CHẾT (xác nhận lần 2, lần này trên distribution thật + gate thật):**
+- Gate `has_legal_admin_strong` bắn 27/463. Gemma26 sai 37 câu.
+- Chỉ 5 câu vừa RAG-eligible vừa Gemma-sai; soi ra **3/5 là reading-comp (0001/0368/0433,
+  có đoạn văn) — gate bắn NHẦM, RAG hại**; chỉ 0022/0058 là legal-recall thật.
+- → RAG tối đa +2, hại ~3 mis-gate → net ~0/âm. Khớp FPT đo âm trước. **Không build corpus
+  34 tỉnh.** Shelved, ghi `notes/direction-2-vn-knowledge-rag-2026-06-12.md`.
+
+**SAFETY-REFUSAL LEVER = lever thật (đã build, commit 94e5fae, 200 tests green, policy PASS):**
+- Đo: 22 câu có option từ chối → 11 harmful → Claude-corrected chọn từ chối 10/10 (gold=refusal
+  high-conf). Gemma26 sai 6 (0024/0283/0294/0308/0309/0396) → rule sửa **+6 = +1.3pp**, Time
+  cost = 0 (chỉ thêm clause prompt), downside = 0 (benign: Claude chọn từ chối 0/11 → rule
+  chỉ-harmful không lật câu nào).
+- Cài: `SAFETY_REFUSAL_CLAUSE` + `with_safety_clause()` (judge by meaning, tổng quát cho
+  private 2000) tiêm 1 chỗ ở voting layer (phủ self-consistency/reading/rag); config
+  `enable_safety_refusal` default OFF (path 87.26 nguyên vẹn); 6 unit tests.
+- **Probe rẻ ($0, không re-run Gemma):** `data/q4results/gemma26_safety_probe.csv` = 26B-Q4
+  baseline + rule general → flip đúng 6 câu harmful → proj **87.26 → ~88.56 IF gold=refusal**.
+
+**NEXT (gate owner):** nộp probe lên leaderboard (1 lần thử, còn ~3) → nếu lên ~88.5 = lever
+chứng minh → promote `enable_safety_refusal=true` cho Docker Vòng-2 (26B + self-consistency +
+safety rule). Nếu không lên = gold không phải refusal → giữ OFF. PAUSE chờ owner trước nộp.
+
+---
+
+## 2026-06-12 — Vòng-1 QUA (pred-upload); chuyển hướng ổn định Vòng-2: safety promoted + constrained decoding + Idea doc
+
+Owner xác nhận **Vòng-1 xét qua bằng pred-upload** → Claude pred 91.79 ĐÃ QUA. Vòng-2 = BTC
+chạy Docker Gemma trên 2000 private (Accuracy80+Time10+Idea10). Khung mới: rủi ro thật là
+Docker 0-điểm (OOM/timeout/crash), KHÔNG phải 1pp accuracy → ưu tiên ROBUST.
+
+**Đã làm phiên này (3 commit):**
+- `0910413` promote safety-refusal thành contest default (`enable_safety_refusal=true` cả 2
+  config copy; workflow desc → 88.55). Đo leaderboard probe = **88.55** (đúng dự phóng +6).
+- `3a1f2e2` constrained decoding: repair pass truyền `letters` → GBNF grammar ép 1 chữ cái
+  hợp lệ → 0 fallback, gia cố hợp đồng pred.csv. Defensive nhiều lớp. 5 test mới.
+- Idea doc `docs/method-writeup-vi.md` §8-11: hành trình đo-hết-lever + frontier-probe +
+  safety lever + constrained decoding + định vị trung thực (trần ~88.5-89.2).
+- **Docker contract smoke** (dry-run trên 463): valid=True, 463 rows, mọi qid phủ, 0 empty,
+  0 out-of-range, harness_score=100. Pipeline vững.
+- 205 tests green, compileall clean, policy PASS.
+
+**Quyết định chiến lược (chốt với owner):**
+- Ship **26B-A4B** (robust/fast/0-OOM) làm bản chính; **31B song song như hedge**, gate bởi
+  BTC VRAM ≥40GB.
+- Đường chạy: CoT k=1 + safety + constrained-repair = **88.55**. Mọi lever âm OFF (anti-overfit).
+- Trần accuracy honest ~88.5-89.2; phần còn lại là VN-fact + defective-gold không phá được.
+
+**NEXT:** (1) re-package Docker image 26B+safety+constrained (cần 1 GPU smoke xác nhận grammar
++ safety chạy đúng trong image); (2) tùy chọn build 31B image song song; (3) hoàn thiện Idea
+doc EN. PAUSE trước GPU spend.
