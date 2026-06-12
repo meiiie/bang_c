@@ -119,3 +119,49 @@ in my quant run script. Recording the truth so the misdiagnosis is not repeated.
   CAN be reclaimed mid-run; but this session's stalls were my env bug on BOTH pods, not
   community oversubscription - do not over-attribute failures to the pod. Stable this session:
   RTX 4090 SECURE (full sweep), A40 SECURE (quant, after the fix).
+
+## 2026-06-12 (GPU RUN PLAYBOOK - mandatory; this session wasted ~2h on avoidable mistakes)
+
+Honest post-mortem: a quant measurement that should have taken ~40 min took >2h and produced
+nothing usable until the 4th relaunch, due to a CASCADE of my own mistakes. Follow this
+checklist for EVERY GPU run; each rule maps to a concrete failure below.
+
+### The cascade that happened (so it is not repeated)
+1. **Wrote a NEW run script instead of reusing the proven one.** `run_quant.sh` dropped the
+   one line `export HACKC_LOCAL_MODEL_PATH=...` that the working `run_26b.sh` had. The client
+   reads the model PATH from ENV, not config -> every question fell to heuristic fallback +
+   retry-sleep, model never loaded, GPU cold. Burned ~80 min before I looked at WHY.
+2. **Misdiagnosed it as community-pod instability** and re-rented a SECURE pod - the new pod
+   had the SAME bug (it was my script, not the hardware).
+3. **Created a double-run**: relaunching without fully killing the prior detached run.sh left
+   TWO run.sh racing on one GPU (one on Q8, one on Q6), contending for VRAM and corrupting
+   outputs.
+4. Only after reading the checkpoint's `fallback_reason` did the real cause surface.
+
+### MANDATORY checklist (do in order, every time)
+1. **REUSE the last known-good script.** Copy `run_26b.sh` (the sweep that worked) and change
+   only what is needed. If you must edit, `diff` against the working one and confirm the env
+   exports survive: `export HACKC_PROVIDER=local_llamacpp HACKC_LOCAL_MODEL_PATH=$MP
+   HACKC_LLAMACPP_N_CTX=8192 HACKC_LLAMACPP_N_GPU_LAYERS=-1` BEFORE every `python -m
+   hackaithon_c.run`. The model path lives in ENV, never trust config `local_model_path`.
+2. **Kill-verify-ZERO before any (re)launch.** `pkill -9 -f hackaithon_c.run; pkill -9 -f
+   /workspace/run.sh` repeated until BOTH `pgrep` count = 0 AND `nvidia-smi` shows ~0 MiB.
+   Only then launch. Never relaunch on top of a possibly-alive detached run (double-run).
+3. **Launch exactly once** via `setsid env PYTHONUNBUFFERED=1 bash run.sh </dev/null >log 2>&1
+   & disown`. The ssh call will TIME OUT at 120s - that is EXPECTED, the run started. Do NOT
+   relaunch because of the timeout; verify instead (step 4).
+4. **HEALTH-VERIFY within 2 MINUTES of launch - the single most valuable habit.** Confirm ALL:
+   - exactly **1** `hackaithon_c.run` python instance (`pgrep -af ... | wc -l` == 1),
+   - GPU **hot**: `nvidia-smi` >80% util + model-size VRAM (Q4~15 / Q6~22 / Q8~28 GB),
+   - first checkpoint entry is **real**: `strategy=gemma_self_consistency, fallback_reason=None`
+     (NOT `*_after_error` / `raw_answer=solver_error=...`).
+   If GPU is cold OR the strategy is a fallback -> STOP NOW, fix, relaunch. Catching this at
+   2 min instead of 80 min is the whole game.
+5. **A "stall" is diagnosed by the checkpoint, not the pod.** Cold GPU + low RSS (~24MB =
+   Llama never constructed) + `fallback_reason` set = model-not-loaded (path/env), not a bad
+   GPU. A standalone `Llama(path,...)` that loads fine proves the hardware is OK.
+6. **Always terminate the pod after pulling results** (podTerminate, User-Agent header).
+
+### Time-economics reminder
+Every avoidable relaunch on a 28GB-model run costs ~5-10 min (reload) + my attention. The 2-min
+health-verify (step 4) is the cheapest insurance there is - it would have saved this whole session.
