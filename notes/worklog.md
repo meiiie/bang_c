@@ -972,3 +972,28 @@ judge GPU is 24GB, a 31B Docker could OOM/stall → 0 on the private test. **26B
 26B submission choice trades +2.7pp accuracy against real VRAM/latency risk on unknown
 judge hardware. Generating a reproducible 31B-Q4 pred.csv on the 463 public test now for a
 leaderboard probe (the real-distribution number) before committing the Docker.
+
+---
+
+## 2026-06-12 — LEADERBOARD reality: 31B-Q4 = 88.12 (real gain only +0.86pp, not +2.7)
+
+Submitted the reproducible 31B-Q4 pred.csv (463 public) to the Vong-1 leaderboard:
+**88.12 vs 26B-Q4 baseline 87.26 = +0.86pp** (~4 questions of 463).
+
+**The labeled proxy OVERESTIMATED badly: proxy said +2.7pp (→~90), the real leaderboard is
++0.86pp.** ViGEText/ViMMRC do not track the real-test distribution (ViGEText was already
+flagged a bad proxy). LESSON: labeled proxies give DIRECTION but not MAGNITUDE on the real
+test — the leaderboard is the only ground truth; measure there before committing.
+
+**Decision is now genuinely close, and tilts toward 26B for the binding Vong-2 Docker:**
+- 31B: +0.86pp BUT needs ≥40GB VRAM (OOMs/stalls on 24GB — crashed a GPU this session),
+  dense/slower. If the BTC judge GPU is 24GB, a 31B Docker OOMs → **0 on the 2000 private
+  test** = catastrophe. The +0.86 is not worth a 0-risk.
+- 26B-A4B: 87.26, MoE (14.4GB), runs anywhere at n_ctx=8192, faster — robust.
+- DECIDING INPUT NEEDED: the BTC judge hardware VRAM. ≥40GB → 31B viable. 24GB/unknown →
+  26B is the safe call.
+
+Levels 1-3 (TIR/reading/RAG), voting, few-shot, tiered, quant-swap, Qwen-9B: all measured
+no/negative. 31B (+0.86 real) is the only positive lever found, and it is marginal with a
+real operational tail-risk. Honest position: we have NOT found a large accuracy lever; the
+robust submission is 26B unless BTC hardware is confirmed ≥40GB.
