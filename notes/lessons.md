@@ -91,3 +91,21 @@ Durable lessons learned while building Neko Core. Newest on top.
   only buys ~+2pp, the VRAM/latency cost (and the risk it OOMs on the BTC GPU at an unknown
   VRAM) is a real tradeoff to weigh — the Docker must pin n_ctx to whatever fits the judges'
   hardware. Always measure VRAM headroom before committing a bigger model to the image.
+
+## 2026-06-12 (RunPod SECURE vs COMMUNITY — use SECURE for any multi-hour run)
+
+- **COMMUNITY pods are NOT reliable for long runs.** A community A6000 stalled mid-run at
+  320/463: the GPU went COLD (nvidia-smi 0% util, 25°C, 1 MiB used — the model fell out of
+  VRAM) while the python process limped on CPU/hung. No OOM, no Xid in dmesg — the host
+  simply reclaimed/oversubscribed the GPU. ~80 min + the whole session wasted. This is the
+  SAME class of failure as the earlier 24GB GPU crash; community = someone else's machine
+  rented back (Airbnb-for-GPU), so availability of the GPU is not guaranteed mid-run.
+- **RULE: rent SECURE for anything ≥~30 min or that must finish (quant runs, full-463
+  sweeps, the real submission run).** SECURE = RunPod's own T3/T4 datacenter, dedicated GPU,
+  ~$0.8/h for A6000/A40 vs ~$0.3-0.4/h community. The ~$0.4/h premium is trivial next to a
+  lost session. COMMUNITY is only for short, restartable probes you can afford to lose.
+  Confirmed stable this session: RTX 4090 SECURE (full sweep), A6000 SECURE (31B), A40 SECURE.
+- **Diagnosing a stalled GPU run (vs just slow):** check `nvidia-smi` util+temp. A working
+  llama.cpp run keeps the GPU ~85-95% util and 60-80°C. **0% util + low temp + a flat
+  checkpoint line count over a 90s window = STALLED/DEAD, not slow** — kill and re-provision
+  on SECURE; do not wait it out.
