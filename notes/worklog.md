@@ -938,3 +938,37 @@ local GPU at Q4 (attended, topped-up session); (b) if it holds, switch the Vong-
 model to 31B for the accuracy push; (c) separately, the quantization gap (full-precision 31B
 ~92% vs whatever Q4 gives) is the other lever. self-consistency stays the strategy; only the
 MODEL changes.
+
+---
+
+## 2026-06-12 — MEASURED at Q4 on real GPU: gemma-4-31B = +2.7pp (CONFIRMED, first real gain)
+
+GPU session (RunPod). Pod 1 (RTX 3090 24GB): 26B-Q4 ran clean (450/450); **31B OOM at
+n_ctx=8192, then stalled at n_ctx=4096 — VRAM pressure (21GB/24GB) crashed the GPU
+(NVML dead, llama.cpp hung/fell to CPU)**. Recovered partial 31B (90 quant q) = +8.9pp on
+math. Terminated the compromised 24GB pod, moved to **A6000 48GB** where 31B runs stably at
+n_ctx=8192 (~25GB, 23GB headroom).
+
+**Q4 proxy verdict (450 labeled q, self-consistency, the SHIP runtime):**
+| bucket  | 26B-Q4 | 31B-Q4 | Qwen3.5-9B-Q8 |
+|---------|-------:|-------:|--------------:|
+| quant   | 82.7%  | **88.0%** | 80.7% |
+| reading | 92.0%  | **93.3%** | 89.3% |
+| civics  | 90.0%  | **91.3%** | 84.7% |
+| OVERALL | 88.2%  | **90.9%** | 84.9% |
+| vs 26B  | —      | **+2.7pp** | **−3.3pp** |
+
+**31B-Q4 = +2.7pp — the first confirmed real gain over the 87 baseline.** Biggest on quant
+(+5.3) — quantization hurts the smaller 26B's math most; the bigger 31B is more
+quant-robust, so its edge is AMPLIFIED at Q4 (+2.7 vs +2.0 full-precision API). 26B-Q4
+proxy 88.2% ≈ leaderboard 87.26 (different sets, consistent) → 31B projects to **~90** on
+the real test. **Qwen3.5-9B = −3.3pp, worse even on math → ruled out** (size wins; the
+"Qwen-for-math router" idea is dead).
+
+**HARD OPERATIONAL CAVEAT (decision-critical):** 31B Q4 (~17.7GB) needs **≥40GB VRAM** to run
+stably. On 24GB it OOMs at n_ctx=8192 and STALLS/crashes the GPU at n_ctx=4096. If the BTC
+judge GPU is 24GB, a 31B Docker could OOM/stall → 0 on the private test. **26B-A4B (MoE,
+14.4GB, runs anywhere at 8192, faster) is the robust fallback (88.2%/87.26).** The 31B vs
+26B submission choice trades +2.7pp accuracy against real VRAM/latency risk on unknown
+judge hardware. Generating a reproducible 31B-Q4 pred.csv on the 463 public test now for a
+leaderboard probe (the real-distribution number) before committing the Docker.

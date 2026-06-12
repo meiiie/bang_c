@@ -77,3 +77,17 @@ Durable lessons learned while building Neko Core. Newest on top.
 - **For anything non-trivial, still prefer: write .sh file → scp → `tr -d '\r'` → bash.**
   The single-quote trick is for quick one-liners; multi-line/heredoc scripts must go through
   a file (CRLF + quoting bite otherwise). Both confirmed this session.
+
+## 2026-06-12 (GPU session — gemma-4-31B Q4 VRAM / n_ctx)
+
+- **gemma-4-31B Q4_0 (~17.7GB) OOMs at n_ctx=8192 on a 24GB GPU** ("Failed to create
+  llama_context" → harness fell back to heuristic, GPU idle 0%). Model weights ~17.7GB +
+  8192-ctx KV + compute buffer exceeded 24GB. **Fix: n_ctx=4096** (HACKC_LLAMACPP_N_CTX) →
+  ~21GB, fits, real answers. Proxy questions are short so no truncation; but the REAL 463
+  has max ~3.4k-token inputs + 2048 reasoning ≈ 5.5k needed → for the 463/Docker run use
+  n_ctx≈6144 (verify it still fits 24GB) or trim reasoning_max_tokens.
+- **Operational point favoring 26B for the submission:** gemma-4-26B-A4B is an MoE (~14.4GB
+  Q4) and runs fine at n_ctx=8192 on 24GB; the dense 31B is tight on VRAM AND slower. If 31B
+  only buys ~+2pp, the VRAM/latency cost (and the risk it OOMs on the BTC GPU at an unknown
+  VRAM) is a real tradeoff to weigh — the Docker must pin n_ctx to whatever fits the judges'
+  hardware. Always measure VRAM headroom before committing a bigger model to the image.
