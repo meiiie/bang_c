@@ -102,6 +102,48 @@ def validate_predictions(
     )
 
 
+def repair_predictions_for_contract(
+    problems: list[Problem],
+    predictions: list[Prediction],
+) -> list[Prediction]:
+    """Return predictions covering exactly the input qids, in input order, each
+    carrying a letter valid for its own problem.
+
+    Existing good predictions are kept verbatim, so accuracy is never lowered. A
+    missing qid, an out-of-range letter, or a duplicate is replaced by a
+    deterministic heuristic fallback. This guarantees a contract-valid pred.csv can
+    always be written: a single solver gap can never zero the whole submission.
+    """
+    from .heuristic import fallback_answer
+
+    by_qid: dict[str, Prediction] = {}
+    for prediction in predictions:
+        by_qid.setdefault(prediction.qid, prediction)  # first occurrence wins; drops dupes
+
+    repaired: list[Prediction] = []
+    for problem in problems:
+        existing = by_qid.get(problem.qid)
+        if existing is not None and existing.answer in problem.allowed_letters:
+            repaired.append(existing)
+            continue
+        answer, confidence, strategy = fallback_answer(problem)
+        repaired.append(
+            Prediction(
+                qid=problem.qid,
+                answer=answer,
+                model=existing.model if existing else "heuristic",
+                raw_answer=existing.raw_answer if existing else answer,
+                strategy=f"{strategy}_contract_repair",
+                confidence=confidence,
+                question_kind=existing.question_kind if existing else "general",
+                prompt_variant=existing.prompt_variant if existing else "heuristic",
+                fallback_reason=(existing.fallback_reason if existing else None)
+                or "contract_repair",
+            )
+        )
+    return repaired
+
+
 def score_harness(
     summary: RunSummary,
     config: HarnessConfig,
