@@ -30,6 +30,7 @@ from .prompting import (
     build_verifier_prompt,
     load_exemplars,
     tournament_variants,
+    with_safety_clause,
 )
 from .principles import adjudicate_principle
 from .retrieval import cached_retriever
@@ -806,10 +807,13 @@ def _collect_reasoning_votes(
         index = start_index + offset
         rotation = rotation_for_sample(index, len(problem.choices)) if diversify else 0
         sample_problem = rotate_problem(problem, rotation)
-        prompt = prompt_builder(
-            sample_problem,
-            max_tokens=config.reasoning_max_tokens,
-            exemplars=exemplars,
+        prompt = with_safety_clause(
+            prompt_builder(
+                sample_problem,
+                max_tokens=config.reasoning_max_tokens,
+                exemplars=exemplars,
+            ),
+            config.enable_safety_refusal,
         )
         sampling: dict[str, float | int] = {}
         if diversify and index > 0:

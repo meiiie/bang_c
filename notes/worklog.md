@@ -997,3 +997,97 @@ Levels 1-3 (TIR/reading/RAG), voting, few-shot, tiered, quant-swap, Qwen-9B: all
 no/negative. 31B (+0.86 real) is the only positive lever found, and it is marginal with a
 real operational tail-risk. Honest position: we have NOT found a large accuracy lever; the
 robust submission is 26B unless BTC hardware is confirmed ≥40GB.
+
+---
+
+## 2026-06-12 — Pseudo-label analysis of the two scored preds: debias lever DEAD, safety-trap lever FOUND (~+1.3pp est.)
+
+Zero-cost analysis (no GPU, no submission): diffed the two leaderboard-scored preds
+(26B=87.26 vs 31B=88.12), hand-adjudicated the 40 disagreements with a frontier model as
+dev-only pseudo-labeler, and probed the 10-choice A-heavy pattern.
+Full detail: `notes/pseudo-label-analysis-2026-06-12.md`.
+
+1. **Position-bias debias is DEAD**: sampled 15 ten-choice items where both models said A —
+   A was genuinely correct 15/15. The test's own key is front-loaded (generated questions);
+   debiasing would push away from a correct-A key. Do not spend a submission.
+2. **Disagreements (40)**: 31B right ~19 / 26B right ~14 / unknown ~7 (net ≈ +5, matches
+   leaderboard +4). 31B wins math; **26B wins VN-local factual** — bigger ≠ uniformly better.
+3. **NEW LEVER — safety-trap class**: 22/463 questions carry a refusal-style option; 10 are
+   harmful-solicitation traps where refusal ≈ gold. 26B picks refusal only 4/10 (31B 5/10);
+   both agree-wrong on 4. A general prompt rule (harmful→refuse; benign→never refuse; never
+   "all of the above" over a refusal option) ≈ **+1.3pp for 26B**, zero runtime cost,
+   generator-general (should transfer to private). Plan: config-gated prompt + FPT behavioral
+   check (~$0.3) → owner sign-off → ONE leaderboard probe (expect ~88.5 on 26B).
+
+PAUSED before any code/spend/submission per protocol.
+
+---
+
+## 2026-06-12 — Built CLAUDE (frontier) 463 pred for a ceiling-reference leaderboard probe (owner-approved, PAUSED before submit)
+
+Owner asked: have the strongest available model (Claude/me) answer the full 463 public test
+to establish a frontier CEILING as a reference yardstick for the Gemma submissions. NOT a
+contest submission (final is the Gemma Docker) — a measurement of headroom. Did NOT submit a
+Claude-generated pred as a contest entry (would violate the Gemma-4/Qwen3.5 model allowlist
+and waste a trial on an unshippable number); instead this is a dev-only reference probe the
+owner explicitly green-lit during the trial phase.
+
+- Solved all 463 by hand (reasoning per item; full computation on every math/quant question).
+  Answers in `notes/_claude_answers.txt`; pred at `data/q4results/claude_public463_pred.csv`
+  (gitignored). Format validated: 463/463 rows, 0 out-of-range letters, header `qid,answer`,
+  per-row letters incl. 10-choice E–J — matches the shippable contract exactly.
+- vs Gemma preds: Claude agrees 26B 92.0%, 31B 91.4%; all-three agree 406/463. Claude is the
+  lone outlier on 20 q (0001,0022,0058,0087,0109,0133,0224,0254,0258,0271,0274,0294,0308,
+  0309,0346,0354,0370,0396,0433,0452) — these include the SAFETY-TRAP set (0294/0308/0309/
+  0396: Claude picked the refusal option where BOTH Gemmas picked an actionable→likely-wrong
+  answer) plus hard VN-legal/local items (0022 Cà Mau ID, 0058 đường ngang, 0224 Gia Lai xã
+  count, 0254 An Nhơn Tây, 0354 cuộc thi người mẫu timeline, 0433 eSIM fee).
+- **WHY this is useful:** the leaderboard score of this pred sets the practical ceiling for the
+  test distribution and, because Claude diverges from Gemma exactly on the safety-trap + VN-legal
+  slices, the result directly tests the safety-trap lever hypothesis (`notes/pseudo-label-
+  analysis-2026-06-12.md`) on real ground truth.
+
+**PAUSED before submission** (a leaderboard submit spends 1 of the 5 remaining trials). Awaiting
+owner sign-off to submit `claude_public463_pred.csv`. Honest caveat: a high Claude ceiling does
+NOT transfer to the Gemma Docker — it bounds headroom and validates levers, it is not shippable.
+
+---
+
+## 2026-06-12 — LEADERBOARD: Claude(frontier) hand-solve = 90.93 (cutoff 91.73); web-corrected ~91.8 PROVES test is a VN-knowledge game
+
+Owner submitted the Claude-by-hand 463 pred (ceiling probe): **90.93 leaderboard; advance
+cutoff = 91.73.** So even a frontier model giving its best falls ~0.8pp (~4 q) short. KEY
+finding when I web-verified my ~25 low/medium-confidence answers (free, no spend, AGENTS.md-
+allowed dev research):
+
+- Most "uncertain" answers were ALREADY RIGHT (web-confirmed): 0022 Cà Mau CCCD, 0038 LBVMT=7
+  nguyên tắc, 0058 đường ngang=10 ngày, 0066 QĐ146 "chìa khóa", 0079 bậc7=05 tiến sĩ, 0084 Ba
+  La Mật 1886, 0106 HN=126 xã, 0108 HCM mục tiêu, 0199 di chúc ký từng trang, 0224 Gia Lai=135,
+  0331 NĐ79 thi hành.
+- **4 CONFIRMED ERRORS, all pure VN-specific facts** → fixed in `claude_public463_pred_v2_
+  webfixed.csv`: 0254 An Nhơn Tây = Nhơn Lộc+**Nhơn Tân** (B not C); 0070 mầm non hồ sơ = 02
+  báo cáo tự đánh giá+01 công văn (B not C); 0354 NĐ144 cấp văn bản chấp thuận cuộc thi =
+  **15 ngày làm việc** (B not A); 0030 chùa An Phú sáng lập **HT Thích Thanh Đức** (B not A).
+- 0384 (cuộc thi toàn quốc giấy phép của ai) left B — genuinely ambiguous NĐ79(Bộ VHTTDL) vs
+  NĐ144(UBND tỉnh); "giấy phép" wording leans old NĐ79 → kept B, no change.
+
+**Corrected ceiling ≈ 90.93 + 4×0.216 ≈ 91.8 ≈ AT the cutoff.** This is the decisive finding:
+
+1. The public test is a **Vietnamese-KNOWLEDGE game, not a reasoning game.** Frontier reasoning
+   maxes ~91; the remaining points are VN-specific facts (2025 admin-reorg commune counts,
+   VN-legal article numbers/timelines, local pagoda trivia) + a few defective golds.
+2. It IS answerable to the cutoff **with VN-fact access** — not a defective-gold wall.
+3. **Gemma offline fundamentally lacks exactly these facts.** The ONLY validated accuracy lever
+   to cross 91.73 = **targeted VN-knowledge RAG** (corpus = 2025 admin-reorg resolutions NQ1656/
+   1664 + VN legal NĐ/QĐ + local-fact set). This RE-TARGETS the level-3 RAG that measured
+   negative — it failed on generic-civics proxy (ViGEText), but the REAL gap is precisely the
+   VN-admin/legal slice RAG is built for. Worth rebuilding/measuring, with the Time-score cost
+   weighed (26B base, retrieval only on a gated VN-legal/admin classifier).
+
+HONEST CAVEAT: corrected-frontier is only AT the cutoff; many teams sit well above 91.73, and
+Gemma (88.12) reaching there needs the full VN-RAG lift to land — not guaranteed, and RAG adds
+Time cost + a 2025-fact corpus that must be built. But the direction is now leaderboard-validated.
+
+Pred files: submitted v1 `claude_public463_pred.csv` (90.93); web-fixed v2
+`claude_public463_pred_v2_webfixed.csv` (proj ~91.8) — both gitignored, dev-only (Claude not
+contest-allowed; this measures the ceiling + validates the RAG lever, does NOT ship).

@@ -204,6 +204,16 @@ class HarnessConfig:
         return max(1, int(self.runtime.get("rag_top_k", 4)))
 
     @property
+    def enable_safety_refusal(self) -> bool:
+        # Append the safety-refusal clause to the reasoning system prompt: harmful-
+        # solicitation items ("how to violate/falsify/sabotage/evade...") whose option
+        # list contains a refusal answer have that refusal as the gold. Off by default
+        # (the contest path stays untouched until the lever is leaderboard-proven).
+        # Generalizes by SEMANTICS, not keywords: the model judges harm, so it carries
+        # to the multilingual private test. Default OFF keeps the validated 87.26 path.
+        return bool(self.runtime.get("enable_safety_refusal", False))
+
+    @property
     def tiered_tier1_samples(self) -> int:
         # Tier 1 = anchor + rotated-choice samples; unanimous agreement stops early.
         return max(1, int(self.runtime.get("tiered_tier1_samples", 2)))
