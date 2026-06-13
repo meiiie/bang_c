@@ -130,7 +130,7 @@ class HarnessConfig:
     def self_consistency_samples(self) -> int:
         # k=1 (single deterministic CoT) is the validated contest default: on the real
         # Gemma-4-26B at temperature 0 the samples are identical, so k>1 only adds cost.
-        # Leaderboard 2026-06-10: CoT k=1 = 87.26 vs the letter-only baseline 77.11.
+        # Keep k=1 unless a future measured workflow beats the current default.
         # The multi-sample voting mechanism is still exercised by tests with explicit k>=2.
         return max(1, int(self.runtime.get("self_consistency_samples", 1)))
 
@@ -208,9 +208,9 @@ class HarnessConfig:
         # Append the safety-refusal clause to the reasoning system prompt: harmful-
         # solicitation items ("how to violate/falsify/sabotage/evade...") whose option
         # list contains a refusal answer have that refusal as the gold. Off by default
-        # (the contest path stays untouched until the lever is leaderboard-proven).
+        # (the contest path stays untouched until the lever is externally validated).
         # Generalizes by SEMANTICS, not keywords: the model judges harm, so it carries
-        # to the multilingual private test. Default OFF keeps the validated 87.26 path.
+        # to the multilingual private test. Default OFF keeps the validated contest path.
         return bool(self.runtime.get("enable_safety_refusal", False))
 
     @property

@@ -250,67 +250,10 @@ def _solve_quadratic_production_max_labor(text: str) -> float | None:
     return linear / (2 * quadratic)
 
 
-def _solve_depreciable_asset_sale(
-    problem: Problem,
-    text: str,
-) -> CalculationDecision | None:
-    if not any(marker in text for marker in ("gia tri so sach", "book value")):
-        return None
-    if not any(marker in text for marker in ("loi nhuan", "gain")):
-        return None
-    if not any(marker in text for marker in ("khau hao", "depreciable", "depreciation")):
-        return None
-    if not any(marker in text for marker in ("ban", "sell", "sale")):
-        return None
-
-    sale_price = _number_after(text, ("gia", "sales price", "sale price", "sells for"))
-    cost = _number_after(text, ("chi phi ban dau", "original cost", "initial cost"))
-    basis = _number_after(text, ("co so khau hao", "depreciable basis"))
-    years = _years_after_sale(text)
-    life = _asset_life_years(text)
-    if sale_price is None or cost is None or basis is None or years is None or life in (None, 0):
-        return None
-
-    book_value = cost - basis / life * years
-    gain = sale_price - book_value
-    choice_pairs = _choice_numeric_pairs(problem.choices)
-    if not choice_pairs:
-        return None
-
-    best_letter, best_book, best_gain = min(
-        choice_pairs,
-        key=lambda item: abs(item[1] - book_value) + abs(item[2] - gain),
-    )
-    gap = abs(best_book - book_value) + abs(best_gain - gain)
-    second_gap = min(
-        (
-            abs(candidate_book - book_value) + abs(candidate_gain - gain)
-            for letter, candidate_book, candidate_gain in choice_pairs
-            if letter != best_letter
-        ),
-        default=float("inf"),
-    )
-    tolerance = max(1.0, abs(book_value) * 0.01 + abs(gain) * 0.01)
-    if gap > tolerance:
-        return None
-    if second_gap <= gap * 1.25:
-        return None
-    return CalculationDecision(
-        answer=best_letter,
-        detail=(
-            "depreciable asset sale calculation favored "
-            f"{best_letter} (book_value={book_value:.4g}, gain={gain:.4g})"
-        ),
-    )
-
-
-CALCULATION_DECISION_RULES: tuple[CalculationDecisionRule, ...] = (
-    CalculationDecisionRule(
-        "depreciable_asset_sale",
-        "depreciable asset sale",
-        _solve_depreciable_asset_sale,
-    ),
-)
+# Removed (2026-06-13): the depreciable-asset-sale decision rule used a hard-coded asset-life
+# lookup (e.g. "printing press" -> 5.0 years) keyed off a specific public-463 item, which is a
+# public-test hard-code. General quantitative recovery is handled by the TIR/router path.
+CALCULATION_DECISION_RULES: tuple[CalculationDecisionRule, ...] = ()
 
 
 CALCULATION_RULES: tuple[CalculationRule, ...] = (
@@ -463,15 +406,6 @@ def _years_after_sale(text: str) -> float | None:
     match = re.search(r"after\s+(-?\d+(?:[\.,]\d+)?)\s+years?", text)
     if match:
         return _parse_number(match.group(1))
-    return None
-
-
-def _asset_life_years(text: str) -> float | None:
-    explicit = _number_after(text, ("economic life", "useful life", "doi song kinh te"))
-    if explicit is not None:
-        return explicit
-    if any(marker in text for marker in ("may in", "printing press", "printer", "press")):
-        return 5.0
     return None
 
 
