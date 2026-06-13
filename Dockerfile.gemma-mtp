@@ -1,0 +1,153 @@
+# syntax=docker/dockerfile:1.7
+#
+# Neko Core - MTP variant of the Gemma-4-26B-A4B local image.
+#
+# This image is the proven local_llamacpp solver PLUS a CUDA llama-server built with
+# draft-mtp speculative decoding. At run time docker/neko-entrypoint.sh starts llama-server
+# (the `local_server` provider) for a measured ~1.37x token throughput, and TRANSPARENTLY
+# falls back to the in-process local_llamacpp path if llama-server cannot start or stay
+# healthy on the judge's GPU. The speed lever therefore can never put the Accuracy result
+# at risk: a worst-case MTP failure still produces a correct /output/pred.csv.
+#
+# Build (main model is gated -> pass an HF token):
+#   docker build -f Dockerfile.gemma-mtp -t neko-core-mtp \
+#     --secret id=HF_TOKEN,src=hf_token.txt .
+# Override the GPU arch list if the judge hardware is known (faster build):
+#   --build-arg CUDA_ARCHITECTURES=89-real
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+ARG MAIN_REPO=google/gemma-4-26B-A4B-it-qat-q4_0-gguf
+ARG MAIN_FILE=gemma-4-26B_q4_0-it.gguf
+ARG DRAFT_REPO=unsloth/gemma-4-26B-A4B-it-GGUF
+ARG DRAFT_FILE=mtp-gemma-4-26B-A4B-it.gguf
+# Pinned to the exact llama.cpp commit the 1.37x was measured on (draft-mtp support).
+ARG LLAMA_CPP_REF=597b6672e800c10e474bbdc53106b9b7b502fc4c
+# Realistic contest GPUs: Ampere (A100/A40/A5000/3090/A6000), Ada (4090/L40), Hopper via PTX.
+# If the judge GPU falls outside this set, llama-server simply won't load and the entrypoint
+# fallback (in-process llama-cpp-python) still produces pred.csv.
+ARG CUDA_ARCHITECTURES=80-real;86-real;89-real;90-virtual
+ARG LLAMA_CPP_EXTRA_INDEX_URL=https://abetlen.github.io/llama-cpp-python/whl/cu124
+# Build parallelism. Capped low on purpose: unbounded -j spawns hundreds of nvcc jobs and
+# OOM-kills (Error 137) on RAM-limited builders. Raise on a big-RAM machine if desired.
+ARG BUILD_JOBS=4
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
+    DEBIAN_FRONTEND=noninteractive \
+    HACKC_DATA_DIR=/data \
+    HACKC_OUTPUT_DIR=/output \
+    HACKC_PROVIDER=local_llamacpp \
+    HACKC_LOCAL_MODEL_ID=google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 \
+    HACKC_LOCAL_MODEL_PATH=/models/gemma-4-26B_q4_0-it.gguf \
+    HACKC_LLAMACPP_N_CTX=8192 \
+    HACKC_LLAMACPP_N_GPU_LAYERS=-1 \
+    NEKO_LOCAL_SERVER_MODE=1 \
+    NEKO_LLAMA_SERVER_BIN=/usr/local/bin/llama-server \
+    NEKO_MAIN_MODEL_PATH=/models/gemma-4-26B_q4_0-it.gguf \
+    NEKO_MTP_DRAFT_MODEL_PATH=/models/mtp-gemma-4-26B-A4B-it.gguf \
+    NEKO_MTP_DRAFT_N_MAX=2 \
+    PATH=/usr/local/cuda/bin:${PATH}
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        curl \
+        git \
+        libgomp1 \
+        python3 \
+        python3-pip \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build llama-server (CUDA, draft-mtp). Single devel stage keeps the CUDA runtime libs the
+# binary links against, so there is no missing-.so risk at run time.
+RUN git clone https://github.com/ggml-org/llama.cpp /tmp/llama.cpp \
+    && cd /tmp/llama.cpp \
+    && git fetch --depth 1 origin "${LLAMA_CPP_REF}" \
+    && git checkout --detach FETCH_HEAD \
+    && cmake -B build \
+        -DGGML_CUDA=ON \
+        -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+        -DLLAMA_CURL=OFF \
+        -DCMAKE_BUILD_TYPE=Release \
+    && (sed -i 's/\[\] = {};/[] = {0};/g' build/tools/ui/ui.cpp 2>/dev/null || true) \
+    && cmake --build build --config Release -j "${BUILD_JOBS}" --target llama-server \
+    && cp build/bin/llama-server /usr/local/bin/llama-server \
+    && find build -name '*.so*' -exec cp -a {} /usr/local/lib/ \; \
+    && echo /usr/local/lib > /etc/ld.so.conf.d/llama.conf \
+    && ldconfig \
+    && /usr/local/bin/llama-server --help 2>/dev/null | grep -q -- 'draft-mtp' \
+    && rm -rf /tmp/llama.cpp
+
+# In-process fallback solver (llama-cpp-python, CUDA wheel) + app deps.
+COPY requirements.txt requirements-local.txt ./
+RUN if [ -n "${LLAMA_CPP_EXTRA_INDEX_URL}" ]; then \
+        pip install --no-cache-dir --extra-index-url "${LLAMA_CPP_EXTRA_INDEX_URL}" -r requirements-local.txt; \
+    else \
+        pip install --no-cache-dir -r requirements-local.txt; \
+    fi
+
+# Bake both GGUFs. Main is gated (needs HF_TOKEN); draft (unsloth) is ungated.
+RUN --mount=type=secret,id=HF_TOKEN,required=false \
+    MAIN_REPO="${MAIN_REPO}" MAIN_FILE="${MAIN_FILE}" \
+    DRAFT_REPO="${DRAFT_REPO}" DRAFT_FILE="${DRAFT_FILE}" python - <<'PY'
+import os
+from pathlib import Path
+
+from huggingface_hub import hf_hub_download
+
+token_path = Path("/run/secrets/HF_TOKEN")
+token = token_path.read_text(encoding="utf-8").strip() if token_path.exists() else None
+target_dir = Path("/models")
+target_dir.mkdir(parents=True, exist_ok=True)
+
+main = hf_hub_download(
+    repo_id=os.environ["MAIN_REPO"],
+    filename=os.environ["MAIN_FILE"],
+    local_dir=target_dir,
+    token=token or None,
+)
+if not (target_dir / os.environ["MAIN_FILE"]).exists():
+    raise SystemExit(f"main model missing after download: {main}")
+
+# The MTP draft GGUF is published either at the repo root or under MTP/.
+draft_name = os.environ["DRAFT_FILE"]
+draft = None
+last_error = None
+for candidate in (draft_name, f"MTP/{draft_name}"):
+    try:
+        draft = hf_hub_download(
+            repo_id=os.environ["DRAFT_REPO"],
+            filename=candidate,
+            local_dir=target_dir,
+            token=token or None,
+        )
+        break
+    except Exception as error:  # noqa: BLE001
+        last_error = error
+if draft is None:
+    raise SystemExit(f"could not download draft model {draft_name}: {last_error}")
+
+# Normalise the draft to the flat path the entrypoint expects.
+flat = target_dir / draft_name
+if not flat.exists():
+    Path(draft).replace(flat)
+print(f"main={main}\ndraft={flat}")
+PY
+
+COPY src ./src
+COPY configs ./configs
+COPY docker/neko-entrypoint.sh /usr/local/bin/neko-entrypoint
+COPY README.md ./
+
+RUN mkdir -p /data /output \
+    && chmod +x /usr/local/bin/neko-entrypoint
+
+# No CMD: the entrypoint's no-argument branch runs self-consistency via local_server
+# (MTP), with the in-process local_llamacpp fallback wired in.
+ENTRYPOINT ["neko-entrypoint"]
