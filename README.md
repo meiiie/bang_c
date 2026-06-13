@@ -12,7 +12,33 @@ is intentionally separate from Wiii Core: the runtime container stays small,
 reproducible, and limited to the contest contract, while development workflows
 keep traces, review tasks, and model checks outside the submitted artifact.
 
-## Install Neko Core
+## Reproduce the contest result (HackAIthon Bảng C judges read this)
+
+The submission is a **self-contained, offline Docker image**. It reads
+`/data/*_test.csv`, runs Gemma-4-26B-A4B (QAT Q4_0 GGUF, MoE) locally, and writes
+`/output/pred.csv` (`qid,answer`). No API key, no network. Two commands:
+
+```bash
+# 1. Pull the pinned, self-contained image (the model is baked in)
+docker pull hacamy12345/neko-core:gemma26b-q4
+
+# 2. Run on a folder containing public_test.csv or private_test.csv
+docker run --rm --gpus all \
+  -v /path/to/data:/data \
+  -v /path/to/output:/output \
+  hacamy12345/neko-core:gemma26b-q4
+# -> writes /path/to/output/pred.csv  (qid,answer; one option letter per row)
+```
+
+The entrypoint runs `--workflow self-consistency --data-dir /data --output-dir
+/output --auto-resume`; the pred.csv is contract-repaired (covers exactly the
+input qids with valid letters) and written **before** any validation, so a single
+bad question can never zero the run. To rebuild the image from source instead of
+pulling, see [Docker](#docker). Method/idea write-up:
+[`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) (VI) and
+[`docs/method-writeup.md`](docs/method-writeup.md) (EN).
+
+## Install Neko Core (development tooling)
 
 Windows PowerShell:
 
