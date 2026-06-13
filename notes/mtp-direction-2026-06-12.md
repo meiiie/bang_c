@@ -69,3 +69,42 @@ RESUME PLAN (next session, ~20 min):
    record tok/s + acceptance. Assets staged in `C:/Users/Admin/AppData/Local/Temp/pod_mtp/`
    (run_mtp.sh, prov_mtp.py, launch_mtp.py). Pod terminated; re-provision per the cost-first rule.
 
+
+## Session 2 update (2026-06-13) — GPU offload SOLVED; blocked on llama.cpp master tooling
+
+Progress beyond Session 1 (then cancelled by owner; pod terminated):
+- **GPU offload now CONFIRMED WORKING.** `llama-cli --list-devices` sees `CUDA0: RTX 4090`;
+  `ldd libggml-cuda.so` resolves all CUDA libs; the model loads to GPU (~20 GB used). The
+  Session-1 "ran on CPU" was a misread — the real issue is the CLI never EXITS (below). Build
+  fix that worked: `cmake --build build --target llama-cli` ONLY (building all targets or
+  llama-server pulls in `tools/ui/ui.cpp`, which has a master-branch regression:
+  `static const unsigned char asset_60_data[] = {};` — a zero-size array C++ error).
+- **BLOCKER: llama.cpp master (build b1-d8a24cc) made `llama-cli` an interactive chat REPL that
+  will not do a clean one-shot generation.** With stdin=/dev/null it loops printing `> ` to EOF
+  forever (a 1.2 GB log in 240 s) and never exits. BOTH `-no-cnv` and `-st` (--single-turn)
+  FAILED to suppress the REPL on this build. So llama-cli cannot be used to benchmark here.
+- **The right path (production-aligned) is `llama-server` (HTTP), not llama-cli** — it is also
+  the harness `local_server` provider path for the Docker. llama-server failed to build for the
+  same `tools/ui/ui.cpp` zero-size-array reason; FIX APPLIED:
+  `sed -i 's/\[\] = {};/[] = {0};/g' build/tools/ui/ui.cpp` then rebuild `--target llama-server`.
+  The rebuild + the HTTP measurement (run_server_mtp.sh, staged in pod_mtp/) were cancelled
+  before completing.
+
+### RESUME (next session, ~25 min) — use llama-server, skip llama-cli
+1. Re-provision (cost-first). Reuse pod_mtp/ assets: run_mtp.sh (builds llama-cli+CUDA, downloads
+   main Q4 + draft) and run_server_mtp.sh (the HTTP measurement). 
+2. Patch tools/ui/ui.cpp zero-size arrays (`[] = {};` -> `[] = {0};`) BEFORE building llama-server;
+   OR check out a STABLE llama.cpp release TAG (post 2026-06-07 MTP merge) to avoid the master
+   regression entirely (cleaner — no patch, and llama-cli may be non-interactive there too).
+3. Run `run_server_mtp.sh`: starts llama-server with `-m main --model-draft mtp-draft
+   --spec-type draft-mtp --spec-draft-n-max {2,4,6} -ngl 999 --device CUDA0 -fa on` (KV f16),
+   curls /completion, reads `timings.predicted_per_second` + draft accept counts. Compare to the
+   baseline (no --model-draft). Expect 1.4-2.2x.
+4. If MTP confirms a real speedup, wire the Docker to the `local_server` provider driving
+   llama-server with the MTP flags (the harness already has a local_server provider).
+
+### Strategic note
+MTP is a Vong-2 TIME-score lever (lossless speed), nice-to-have, NOT blocking. Per the error
+analysis (`error-analysis-31-disagreements-2026-06-12.md`), the bigger Vong-2 wins are already
+shipped (bulletproof Docker, Idea doc) and the accuracy question is settled (88.55 near ceiling).
+Resume MTP only when picking up Vong-2 polish.
