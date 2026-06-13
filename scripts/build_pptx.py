@@ -126,11 +126,14 @@ cards = [
 ]
 for i, (t, d, c) in enumerate(cards):
     cx = 0.7 + i * 4.07
-    box(s, cx, 2.2, 3.85, 3.6, fill=WHITE, line=c, line_w=1.5)
-    box(s, cx, 2.2, 3.85, 0.16, fill=c)
-    text(s, cx + 0.28, 2.55, 3.35, 0.7, [[(t, 17, c if c != INK else ORANGE_DK, True, False)]])
-    text(s, cx + 0.28, 3.35, 3.35, 2.3, [[(d, 13, INK, False, False)]])
-text(s, 0.7, 6.1, 12, 0.6, [[("Định vị trung thực: 88.55 là gần trần thật của một Gemma offline; phần còn lại là kiến‑thức‑VN không retrieval được. Chúng tôi báo số đo thật, không hứa số.", 12.5, GRAY, False, True)]])
+    ch = 3.15
+    tc = c if c != INK else ORANGE_DK
+    box(s, cx, 2.25, 3.85, ch, fill=WHITE, line=c, line_w=1.5)
+    box(s, cx, 2.25, 3.85, 0.16, fill=c)
+    text(s, cx + 0.32, 2.45, 3.25, ch - 0.35,
+         [[(t, 17, tc, True, False)], [("", 9, INK, False, False)], [(d, 13, INK, False, False)]],
+         anchor=MSO_ANCHOR.MIDDLE, space=4.0)
+text(s, 0.7, 6.05, 12, 0.7, [[("Định vị trung thực: 88.55 là gần trần thật của một Gemma offline; phần còn lại là kiến‑thức‑VN không retrieval được. Chúng tôi báo số đo thật, không hứa số.", 12.5, GRAY, False, True)]])
 page_no(s, 2)
 
 # ============================ 3 · BÀI TOÁN ============================
@@ -227,11 +230,13 @@ levers = [
 ]
 for i, (t, d) in enumerate(levers):
     cx = 0.7 + (i % 3) * 4.07
-    cy = 2.25 + (i // 3) * 2.15
-    box(s, cx, cy, 3.85, 1.85, fill=WHITE, line=LIGHT, line_w=1.0)
+    cy = 2.35 + (i // 3) * 2.05
+    ch = 1.8
+    box(s, cx, cy, 3.85, ch, fill=WHITE, line=LIGHT, line_w=1.0)
     box(s, cx, cy, 3.85, 0.1, fill=ORANGE)
-    text(s, cx + 0.25, cy + 0.25, 3.4, 0.5, [[(t, 14, ORANGE_DK, True, False)]])
-    text(s, cx + 0.25, cy + 0.8, 3.4, 1.0, [[(d, 11.5, INK, False, False)]])
+    text(s, cx + 0.28, cy + 0.1, 3.32, ch - 0.2,
+         [[(t, 14, ORANGE_DK, True, False)], [("", 6, INK, False, False)], [(d, 11.5, INK, False, False)]],
+         anchor=MSO_ANCHOR.MIDDLE, space=4.0)
 page_no(s, 7)
 
 # ============================ 8 · BULLETPROOF ============================
@@ -243,9 +248,11 @@ two = [
 ]
 for i, (t, d) in enumerate(two):
     cx = 0.7 + i * 6.15
-    box(s, cx, 2.25, 5.85, 2.0, fill=CREAM, line=GREEN, line_w=1.5)
-    text(s, cx + 0.3, 2.48, 5.3, 0.6, [[("✓ " + t, 15, GREEN, True, False)]])
-    text(s, cx + 0.3, 3.2, 5.3, 1.0, [[(d, 12.5, INK, False, False)]])
+    ch = 1.7
+    box(s, cx, 2.3, 5.85, ch, fill=CREAM, line=GREEN, line_w=1.5)
+    text(s, cx + 0.32, 2.3 + 0.1, 5.25, ch - 0.2,
+         [[("✓ " + t, 15, GREEN, True, False)], [("", 6, INK, False, False)], [(d, 12.5, INK, False, False)]],
+         anchor=MSO_ANCHOR.MIDDLE, space=4.0)
 text(s, 0.7, 4.55, 12, 0.4, [[("Tự động tiếp tục khi gặp sự cố — ba lớp:", 14, INK, True, False)]])
 text(s, 0.9, 5.0, 12, 1.4, [
     [("①  Retry từng câu", 13, ORANGE_DK, True, False), ("  — lỗi tạm thời (timeout/connection) thử lại với backoff lũy thừa.", 12.5, INK, False, False)],
