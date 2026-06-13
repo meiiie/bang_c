@@ -5,6 +5,48 @@ continue without losing context.
 
 ---
 
+## ▶▶ NEXT SESSION — START HERE (2026-06-14). Accuracy CLOSED; focus = ship the MTP Docker.
+
+### State (honest)
+- **Contestant = clean Gemma-4-26B-A4B Q4 `self_consistency` ≈ 88.55** (overfit removed, locked,
+  commit `ed93df3`). This is the ONLY generalizable, submittable result.
+- **Codex's "93.3" is NOT shippable.** It is `output-probes/codex-webmax-*` = GPT-5.5 + web,
+  per-question PUBLIC-463 answer flips (e.g. `test_0384: B→A`). GPT-5.5+web is OUTSIDE the
+  allowlist and the offline Gemma container CANNOT reproduce those answers → baking them is a
+  hard-coded public-test hack (AGENTS.md FORBIDS) that will NOT transfer to the 2000 private set.
+  **DO NOT ship the r-note flips.** Accuracy research is CONCLUDED; 88.55 is the honest ceiling.
+- **MTP integrated** (Time lever, ≈1.37×, safe fallback to in-process local_llamacpp):
+  `Dockerfile.gemma-mtp` + `docker/neko-entrypoint.sh`. GitHub `main` synced (`1a70a0f`). 226 tests green.
+
+### MISSION (do these in order)
+1. **Rent GPU: RTX 3090 (24 GB) community on RunPod** (~$0.20/hr — the MTP benchmark already ran
+   on one). `containerDiskInGb >= 40` (image + ~14 GB model). TOP UP balance (~$0.87) first.
+   Key in `Downloads/rpa_*.txt`. **PAUSE for owner before any spend.**
+2. **GPU-smoke `Dockerfile.gemma-mtp`**: build it (cap `cmake -j 4` on low-RAM pods — lesson),
+   run end-to-end on a sample `/data/*_test.csv` → confirm valid `/output/pred.csv` via the MTP
+   path, AND verify the fallback (stop llama-server → in-process local_llamacpp still writes
+   pred.csv). Measure end-to-end time. (Caveat: the fallback's llama-cpp-python wheel may SIGILL
+   on an old-CPU community pod; the MTP llama-server path is what we're smoking.)
+3. **Decide final image**: Gemma-local (proven 88.55, simple) vs Gemma-MTP (88.55 + ~1.37× Time).
+   Ship MTP only if the smoke is clean.
+4. **Build + push FINAL image to Docker Hub** — a NEW tag (e.g. `:vong2` or `:1.0`), do NOT
+   overwrite `gemma26b-q4`. User `hacamy12345`, PAT in `Downloads/1. Run.txt`. **PAUSE for owner
+   before publish.**
+5. **Update README repro → final tag; bump `pyproject` version + create a git tag** on the exact
+   commit that built the image.
+6. Submit-ready: image reads `/data/*_test.csv` → writes `/output/pred.csv` (`qid,answer`);
+   bulletproof contract guarantees validity. **PAUSE for owner before leaderboard/final submit.**
+
+### Rules (non-negotiable)
+- **Skills: `karpathy-guidelines`** (think-before-coding, simplicity, surgical changes, every
+  change has a verification story) + **`AGENTS.md`** (offline, config-first, NO public-test
+  hard-codes — do NOT ship the 93.3 flips).
+- **ABSOLUTELY NO SUBAGENTS** — no Workflow / Agent / Task. They burn the session limit (owner's
+  hard rule). Work solo, in the main thread.
+- Honesty: real measured numbers only; mark unmeasured as unmeasured.
+
+---
+
 ## ▶▶ LATEST STATE (2026-06-13) — read before everything else
 
 - **▶ CODEX RESEARCH HANDOFF: `docs/CODEX-ACCURACY-RESEARCH-MISSION.md`** — the active operating
