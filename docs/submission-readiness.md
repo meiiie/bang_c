@@ -1,7 +1,23 @@
 # Bang C Submission Readiness
 
 Status: active
-Last updated: 2026-06-10
+Last updated: 2026-06-13
+
+## Vòng-1 deliverables checklist (per the official rules — "Yêu cầu đầu ra")
+
+The contest rules require ALL of the following for Bảng C, submitted **within 72h of the
+Vòng-1 leaderboard close** (registration window 02/6–23/6/2026; the final tuned Docker for
+Vòng-2 scoring is due 26/6/2026). Missing the deadline = automatic disqualification.
+
+| # | Deliverable (rule wording) | Where / status |
+|---|---|---|
+| 1 | **Docker Container** on Docker Hub — reads `/data/*_test.csv`, writes `/output/pred.csv` (`qid,answer`) | `hacamy12345/neko-core:gemma26b-q4` (pinned digest below); self-contained, offline |
+| 2 | **GitHub** repo with code + how to reproduce the result in the container | this repo; reproduce steps in `README.md` (top "Reproduce" section) + below |
+| 3 | **Tài liệu thuyết minh phương pháp** (free format; best shows creativity + effectiveness of the optimization strategy) | `docs/method-writeup-vi.md` (VI, the scored Idea doc) + `docs/method-writeup.md` (EN) |
+
+Vòng-2 scoring (private 2000q): Accuracy 80đ · Time 10đ · Ý tưởng 10đ. The shipped run is
+Gemma-4-26B-A4B QAT-Q4_0, self-consistency CoT (k=1, 2048 tokens) + safety-refusal +
+constrained-repair + bulletproof contract-repair. Leaderboard band 88.55. 211 unit tests green.
 
 ## Required Runtime Contract
 
