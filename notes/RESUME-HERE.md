@@ -52,6 +52,8 @@ continue without losing context.
 
 ---
 
+- **ALL THREE accuracy levers now measured DEAD (2026-06-13):** bespoke deterministic rules (overfit, removed from code), maj@k voting (wash), and general **router/TIR measured DEAD** on the real 463 (−9.29pp vs self-consistency; TIR false-flipped 47 correct answers to recover 4 — `notes/router-tir-measured-2026-06-13.md`). Keep `self_consistency` ≈88.55; the gap to ~88.98 is knowledge-bound, not technique-addressable. The bespoke adjudicator hard-codes (preschool, Ho-Chi-Minh, printing-press=5.0, etc.) were REMOVED from calculation.py/principles.py; shipped path never used them.
+
 ## 0. Identity & where you are
 
 - **The real project is Neko Core** at `E:\Sach\Sua\bang_c` (github.com/meiiie/bang_c).
