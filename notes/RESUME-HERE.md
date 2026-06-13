@@ -5,6 +5,25 @@ continue without losing context.
 
 ---
 
+## ▶▶ LATEST STATE (2026-06-13) — read before everything else
+
+- **▶ CODEX RESEARCH HANDOFF: `docs/CODEX-ACCURACY-RESEARCH-MISSION.md`** — the active operating
+  brief for autonomous accuracy research (anti-overfit framework, the precise "what counts as
+  overfit" test, the pruned dead-lever search space, a ranked research agenda, and the
+  measure→round-1-confirm loop). Start there for any accuracy work.
+- **Accuracy: ALL obvious levers measured DEAD; clean `self_consistency` ≈ 88.55 is LOCKED**
+  (commit `ed93df3` removed the overfit hard-codes + orphaned `adjudicated_self_consistency`).
+  Remaining candidates are UNTRIED+unmeasured: logprob/cloze MCQ scoring, translate-to-English
+  pivot (multilingual), DoLa decoding, Gemma+Qwen tie-break, confidence routing, gated RAG/reading
+  (LEVEL 2/3 built). None proven — see the mission doc §4. Proxy deltas are NOT proof.
+- **MTP integrated as the round-2 TIME lever** (commit `4c72142`): `Dockerfile.gemma-mtp` +
+  `docker/neko-entrypoint.sh` run llama-server `--spec-type draft-mtp` (≈1.37× measured) with a
+  safe fallback to in-process `local_llamacpp`. MTP is accuracy-neutral. GPU smoke of the image
+  still pending before round-2. `notes/mtp-measured-2026-06-13.md`.
+- 221 tests green.
+
+---
+
 ## ▶▶ LATEST STATE (2026-06-12, evening) — read before the older sections below
 
 - **▶ FULL SESSION REPORT: `notes/session-2026-06-12.md`** is the consolidated, professional record of this session (deliverables, all measured results, the MTP active task + resume). Read it first; the bullets below are the quick index.
