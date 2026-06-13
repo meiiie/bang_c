@@ -54,6 +54,9 @@ def check_submission_file(
             ),
         )
 
+    raw = path.read_bytes()
+    issues.extend(_strict_raw_csv_issues(raw, config))
+
     rows: list[dict[str, str]] = []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -102,6 +105,41 @@ def check_submission_file(
         prediction_rows=len(rows),
         issues=tuple(issues),
     )
+
+
+def _strict_raw_csv_issues(
+    raw: bytes,
+    config: HarnessConfig,
+) -> list[SubmissionIssue]:
+    issues: list[SubmissionIssue] = []
+    expected_header = ",".join(config.output_columns).encode("ascii")
+    raw_lines = raw.splitlines()
+    first_line = raw_lines[0] if raw_lines else b""
+    if raw.startswith(b"\xef\xbb\xbf"):
+        issues.append(
+            SubmissionIssue(
+                "utf8_bom",
+                "Submission CSV must be UTF-8 without BOM",
+            )
+        )
+    if first_line != expected_header:
+        issues.append(
+            SubmissionIssue(
+                "invalid_raw_header",
+                (
+                    f"Raw header must be {expected_header.decode('ascii')}, got "
+                    f"{first_line.decode('utf-8', errors='replace')}"
+                ),
+            )
+        )
+    if b'"' in raw:
+        issues.append(
+            SubmissionIssue(
+                "quoted_csv",
+                "Submission CSV must use bare qid,answer rows; do not export with quoted fields",
+            )
+        )
+    return issues
 
 
 def render_submission_check(check: SubmissionCheck) -> str:

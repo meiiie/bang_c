@@ -113,8 +113,8 @@ class SafetyClauseRouting(unittest.TestCase):
         )
 
     def test_promoted_on_in_shipped_config(self) -> None:
-        # Leaderboard-proven (87.26 -> 88.55, +1.29pp), so the shipped contest config
-        # turns it ON; the code-level property still defaults OFF for safety.
+        # The shipped contest config turns this measured lever ON; the code-level
+        # property still defaults OFF for safety.
         self.assertTrue(load_config().enable_safety_refusal)
 
 

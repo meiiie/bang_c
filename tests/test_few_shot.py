@@ -1,5 +1,5 @@
 """Few-shot exemplars (+15.4pp evidence on Vietnamese exam MCQ) and NFC input
-normalization. Config-gated, zero-shot default — the 87.26 path is unchanged.
+normalization. Config-gated, zero-shot default; the validated contest path is unchanged.
 """
 
 from __future__ import annotations

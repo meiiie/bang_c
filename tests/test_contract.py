@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
 from hackaithon_c.agents import list_agents, render_agent_detail, render_agents, resolve_agent
 from hackaithon_c.branding import ascii_logo, version_line
@@ -57,6 +58,7 @@ from hackaithon_c.run import (
     _normalize_cli_argv,
     _problem_retry_delay_seconds,
     apply_yolo_defaults,
+    main as run_main,
     parse_args,
     render_runtime_profiles,
     validate_runtime_model,
@@ -248,6 +250,29 @@ class ContestContractTest(unittest.TestCase):
         self.assertIn("Issues: none", rendered)
         self.assertFalse(wrong_check.valid)
         self.assertEqual(wrong_check.issues[0].code, "wrong_file_name")
+
+    def test_submission_check_rejects_quoted_or_bom_csv(self) -> None:
+        problems = [
+            Problem(
+                qid="test_0001",
+                question="Pick A.",
+                choices=("A choice", "B choice", "C choice", "D choice"),
+            )
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            quoted = Path(temp_dir) / "pred.csv"
+            quoted.write_text('"qid","answer"\n"test_0001","A"\n', encoding="utf-8")
+            quoted_check = check_submission_file(quoted, problems, self.config)
+
+            bom = Path(temp_dir) / "pred.csv"
+            bom.write_bytes(b"\xef\xbb\xbfqid,answer\ntest_0001,A\n")
+            bom_check = check_submission_file(bom, problems, self.config)
+
+        self.assertFalse(quoted_check.valid)
+        self.assertIn("quoted_csv", {issue.code for issue in quoted_check.issues})
+        self.assertIn("invalid_raw_header", {issue.code for issue in quoted_check.issues})
+        self.assertFalse(bom_check.valid)
+        self.assertIn("utf8_bom", {issue.code for issue in bom_check.issues})
 
     def test_classifier_selects_many_choice_tournament_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -989,6 +1014,132 @@ class ContestContractTest(unittest.TestCase):
     def test_workflow_registry_rejects_unknown_name(self) -> None:
         with self.assertRaises(ValueError):
             resolve_workflow(self.config, "missing-workflow")
+
+    def test_non_dry_development_workflow_requires_explicit_allow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "public_test.json"
+            input_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "guard_1",
+                            "question": "Pick A.",
+                            "choices": ["A", "B", "C", "D"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {"HACKC_ALLOW_DEVELOPMENT_WORKFLOW": ""}):
+                code = run_main(
+                    (
+                        "--workflow",
+                        "router",
+                        "--input",
+                        str(input_path),
+                        "--output-dir",
+                        str(Path(temp_dir) / "out"),
+                        "--limit",
+                        "0",
+                    )
+                )
+
+        self.assertEqual(code, 2)
+
+    def test_development_workflow_flag_allows_explicit_experiment(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "public_test.json"
+            output_dir = Path(temp_dir) / "out"
+            input_path.write_text("[]", encoding="utf-8")
+            code = run_main(
+                (
+                    "--workflow",
+                    "router",
+                    "--allow-development-workflow",
+                    "--input",
+                    str(input_path),
+                    "--output-dir",
+                    str(output_dir),
+                    "--limit",
+                    "0",
+                )
+            )
+            self.assertEqual(code, 0)
+            self.assertTrue((output_dir / "pred.csv").exists())
+
+    def test_development_workflow_env_allows_explicit_experiment(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "public_test.json"
+            output_dir = Path(temp_dir) / "out"
+            input_path.write_text("[]", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"HACKC_ALLOW_DEVELOPMENT_WORKFLOW": "1"}):
+                code = run_main(
+                    (
+                        "--workflow",
+                        "tiered-consistency",
+                        "--input",
+                        str(input_path),
+                        "--output-dir",
+                        str(output_dir),
+                        "--limit",
+                        "0",
+                    )
+                )
+                self.assertEqual(code, 0)
+                self.assertTrue((output_dir / "pred.csv").exists())
+
+    def test_dry_development_workflow_remains_available_for_contract_smoke(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "public_test.json"
+            output_dir = Path(temp_dir) / "out"
+            input_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "qid": "guard_dry",
+                            "question": "Pick A.",
+                            "choices": ["A", "B", "C", "D"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {"HACKC_ALLOW_DEVELOPMENT_WORKFLOW": ""}):
+                code = run_main(
+                    (
+                        "--workflow",
+                        "router",
+                        "--dry-run",
+                        "--input",
+                        str(input_path),
+                        "--output-dir",
+                        str(output_dir),
+                        "--limit",
+                        "1",
+                    )
+                )
+                self.assertEqual(code, 0)
+                self.assertTrue((output_dir / "pred.csv").exists())
+
+    def test_direct_development_strategy_requires_explicit_allow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "public_test.json"
+            input_path.write_text("[]", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"HACKC_ALLOW_DEVELOPMENT_WORKFLOW": ""}):
+                code = run_main(
+                    (
+                        "--strategy",
+                        "tiered",
+                        "--input",
+                        str(input_path),
+                        "--output-dir",
+                        str(Path(temp_dir) / "out"),
+                        "--limit",
+                        "0",
+                    )
+                )
+
+        self.assertEqual(code, 2)
 
     def test_normalize_answer_prefers_last_visible_valid_letter(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

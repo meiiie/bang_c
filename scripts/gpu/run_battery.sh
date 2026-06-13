@@ -31,6 +31,7 @@ run_arm() {
   PYTHONUNBUFFERED=1 PYTHONPATH=src \
     python -m hackaithon_c.run \
       --workflow "${workflow}" ${config_arg} \
+      --allow-development-workflow \
       --input "${DEVSETS}/${bucket}.json" \
       --output-dir "${OUT}/${tag}" \
       --trace-dir "${OUT}/${tag}/traces" \

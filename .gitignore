@@ -1,6 +1,8 @@
 output*/
+out-*/
 traces*/
 run*/
+mtp_server_logs/
 task-runs/
 task-runs-*/
 eval-runs/
@@ -18,3 +20,12 @@ models/
 __pycache__/
 *.pyc
 .pytest_cache/
+CLAUDE.local.md
+
+# Development-only contest scratch artifacts may contain public-test prompts,
+# answer keys, or proxy-reference outputs. Keep narrative notes tracked.
+notes/_*.json
+notes/_*.txt
+notes/*public463*preflight*.json
+notes/*measured-gate*.json
+notes/*experiment-assessment*.json

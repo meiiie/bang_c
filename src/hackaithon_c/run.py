@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -93,6 +94,14 @@ def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--list-workflows", action="store_true", help="Print configured workflows")
     parser.add_argument("--workflow", default=None, help="Run a configured workflow by name")
+    parser.add_argument(
+        "--allow-development-workflow",
+        action="store_true",
+        help=(
+            "Explicitly allow non-dry-run development workflows/strategies. "
+            "Never use this in the final Docker runtime path."
+        ),
+    )
     parser.add_argument("--review-trace", default=None, help="Review an existing dev trace directory")
     parser.add_argument("--review-tasks", default=None, help="Create reviewer task queue from a trace directory")
     parser.add_argument("--check-submission", default=None, help="Validate a pred.csv artifact against the input contract")
@@ -349,6 +358,14 @@ def main(argv: tuple[str, ...] | None = None) -> int:
     dry_run = args.dry_run or bool(workflow and workflow.dry_run)
     verify = args.verify or bool(workflow and workflow.verify)
     strategy = args.strategy or (workflow.strategy if workflow else config.default_strategy)
+    if not dry_run and _requires_development_workflow_allow(config, workflow, strategy):
+        if not _development_workflow_allowed(args):
+            print(
+                "Error: non-dry-run development workflow/strategy requires "
+                "--allow-development-workflow or HACKC_ALLOW_DEVELOPMENT_WORKFLOW=1",
+                file=sys.stderr,
+            )
+            return 2
 
     input_path = Path(args.input) if args.input else find_input_file(Path(args.data_dir), config)
     run_session = None
@@ -712,6 +729,33 @@ def render_runtime_profiles(config) -> str:
         model = profile.get("default_model", config.default_model)
         lines.append(f"- {name}{marker}: provider={provider}, model={model}")
     return "\n".join(lines)
+
+
+def _development_workflow_allowed(args: argparse.Namespace) -> bool:
+    if bool(getattr(args, "allow_development_workflow", False)):
+        return True
+    return os.environ.get("HACKC_ALLOW_DEVELOPMENT_WORKFLOW", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _requires_development_workflow_allow(config, workflow, strategy: str) -> bool:
+    if workflow is not None and workflow.phase == "development":
+        return True
+    runtime_strategies = {
+        item.strategy
+        for item in list_workflows(config)
+        if item.phase == "runtime"
+    }
+    development_strategies = {
+        item.strategy
+        for item in list_workflows(config)
+        if item.phase == "development"
+    }
+    return strategy in (development_strategies - runtime_strategies)
 
 
 def _is_retryable_prediction(prediction) -> bool:

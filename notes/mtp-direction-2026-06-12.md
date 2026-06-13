@@ -38,15 +38,16 @@ decoding → ZERO accuracy loss.** It is purely a *speed* technique, orthogonal 
 
 ## Plan
 
-- Orthogonal to quant: ship BOTH (e.g. Q6_K + MTP = more accurate *and* faster).
-- Same-GPU-session test (after the quant run, before terminating the pod): download the
-  26B-A4B MTP draft, run a timed generation WITH vs WITHOUT `--spec-type draft-mtp`, record
-  tok/s + that outputs match. First via llama.cpp CLI/llama-bench (proves the GGUF+flags),
-  then verify whether `llama-cpp-python` can drive it for the offline Docker.
+- Orthogonal to quant: keep the measured Q4_0 runtime direction and add MTP only if it wins
+  as a speed lever. Earlier Q6_K/Q8 quant-up ideas are superseded by the measured negative
+  quant results in `notes/session-2026-06-12.md`.
+- Same-GPU-session test: download the 26B-A4B MTP draft, run `llama-server` timed generation
+  WITH vs WITHOUT `--spec-type draft-mtp`, record tok/s, draft acceptance, and that outputs
+  match. Use `scripts/gpu/run_mtp_server.sh` rather than the `llama-cli` one-shot path.
 - If the Python binding can't drive MTP, evaluate the `local_server` provider path (the
   harness already has a `local_server` provider) — llama-server supports the flags natively.
 
-## Session 1 status (2026-06-12) — STOPPED at a GPU-offload issue (resume here)
+## Session 1 status (2026-06-12) — historical; superseded by Session 2
 
 Got the full pipeline working except the final speed measurement:
 - llama.cpp CLI built fine with CUDA (CUDAToolkit 12.4, `libggml-cuda.so.0.15.1` present).
@@ -55,7 +56,7 @@ Got the full pipeline working except the final speed measurement:
   gen took >7 min; even a 20-token test timed out at 120s). The CUDA backend `.so` IS built
   and co-located in `build/bin/` next to `llama-cli`, but the runtime did not offload.
 
-RESUME PLAN (next session, ~20 min):
+Superseded resume plan (do not follow; kept as history of the investigation):
 1. Run `llama-cli -m main.gguf -ngl 999 -n 20 -p Hi` with **FULL visible output** (do NOT grep)
    and read the load lines — confirm whether it says "offloaded N/Y layers to GPU / using
    CUDA0" or falls back to CPU. That output names the cause.
@@ -66,8 +67,8 @@ RESUME PLAN (next session, ~20 min):
 3. Fix the bench script: do NOT pipe llama.cpp through `grep` (it hid the offload/load info);
    keep full output, parse tok/s afterwards.
 4. Then run baseline vs `--spec-type draft-mtp --spec-draft-n-max 2/4/6`, KV cache f16,
-   record tok/s + acceptance. Assets staged in `C:/Users/Admin/AppData/Local/Temp/pod_mtp/`
-   (run_mtp.sh, prov_mtp.py, launch_mtp.py). Pod terminated; re-provision per the cost-first rule.
+   record tok/s + acceptance. This old temp-script path is superseded by
+   `scripts/gpu/run_mtp_server.sh`; pod was terminated, so re-provision per the cost-first rule.
 
 
 ## Session 2 update (2026-06-13) — GPU offload SOLVED; blocked on llama.cpp master tooling
@@ -87,24 +88,60 @@ Progress beyond Session 1 (then cancelled by owner; pod terminated):
   the harness `local_server` provider path for the Docker. llama-server failed to build for the
   same `tools/ui/ui.cpp` zero-size-array reason; FIX APPLIED:
   `sed -i 's/\[\] = {};/[] = {0};/g' build/tools/ui/ui.cpp` then rebuild `--target llama-server`.
-  The rebuild + the HTTP measurement (run_server_mtp.sh, staged in pod_mtp/) were cancelled
-  before completing.
+  The rebuild + the HTTP measurement were cancelled before completing. The canonical
+  follow-up script is now `scripts/gpu/run_mtp_server.sh`.
 
 ### RESUME (next session, ~25 min) — use llama-server, skip llama-cli
-1. Re-provision (cost-first). Reuse pod_mtp/ assets: run_mtp.sh (builds llama-cli+CUDA, downloads
-   main Q4 + draft) and run_server_mtp.sh (the HTTP measurement). 
-2. Patch tools/ui/ui.cpp zero-size arrays (`[] = {};` -> `[] = {0};`) BEFORE building llama-server;
-   OR check out a STABLE llama.cpp release TAG (post 2026-06-07 MTP merge) to avoid the master
-   regression entirely (cleaner — no patch, and llama-cli may be non-interactive there too).
-3. Run `run_server_mtp.sh`: starts llama-server with `-m main --model-draft mtp-draft
-   --spec-type draft-mtp --spec-draft-n-max {2,4,6} -ngl 999 --device CUDA0 -fa on` (KV f16),
-   curls /completion, reads `timings.predicted_per_second` + draft accept counts. Compare to the
-   baseline (no --model-draft). Expect 1.4-2.2x.
+1. Re-provision (cost-first) after owner sign-off and copy `scripts/gpu/run_mtp_server.sh`.
+2. Run `bash run_mtp_server.sh`: it patches the generated `tools/ui/ui.cpp` zero-size-array
+   issue when present, builds `llama-server`, downloads main Q4 + draft GGUFs, and validates
+   the current speculative flags via `llama-server --help`.
+3. Compare baseline vs MTP `--spec-draft-n-max {1,2,4,6}` with KV f16, using
+   `timings.predicted_per_second`, `summary.txt`, and draft accept counts from JSON/logs.
+   Expect 1.4-2.2x only if acceptance and hardware overhead cooperate.
 4. If MTP confirms a real speedup, wire the Docker to the `local_server` provider driving
    llama-server with the MTP flags (the harness already has a local_server provider).
+
+## Session 3 offline prep (2026-06-13)
+
+No GPU/RunPod spend. The llama-server benchmark script was hardened before the
+next paid run:
+
+- cleanup trap + child-PID-only shutdown; no broad `pkill` by port pattern;
+- fail-closed llama.cpp fetch/checkout for `LLAMA_CPP_REF`;
+- `launch-config.json` for reproducibility;
+- content hashes and `content_matches_baseline` in the MTP summary;
+- non-default `gemma26b-q4-local-server` runtime profile added;
+- mocked unit test confirms the harness `local_server` provider posts to
+  `/v1/chat/completions`.
 
 ### Strategic note
 MTP is a Vong-2 TIME-score lever (lossless speed), nice-to-have, NOT blocking. Per the error
 analysis (`error-analysis-31-disagreements-2026-06-12.md`), the bigger Vong-2 wins are already
 shipped (bulletproof Docker, Idea doc) and the accuracy question is settled (88.55 near ceiling).
 Resume MTP only when picking up Vong-2 polish.
+
+## Session 4 offline prep (2026-06-13)
+
+No GPU/RunPod spend. Hardened `scripts/gpu/run_mtp_server.sh` again after a
+Claude Code review:
+
+- added an `OWNER_SIGNOFF=1` hard gate before any GPU/model/build work;
+- upstream docs were re-checked; current llama.cpp master documents
+  `--spec-type draft-mtp`, `--spec-draft-n-max`, `--spec-draft-ngl`,
+  `--spec-draft-device`, `--spec-draft-type-k`, `--spec-draft-type-v`, and
+  `--model-draft`;
+- added `MEASURE_REQUESTS=3` default and summary aggregation by median tok/s;
+- `summary.txt` now aggregates repeated per-label runs and reports
+  `speedup_vs_baseline_median`;
+- non-baseline content hashes must match the baseline by default
+  (`REQUIRE_CONTENT_MATCH=1`), otherwise the run fails before writing `SRV_DONE`;
+- spec-init and draft-acceptance parsing are recorded but warning-only by
+  default because llama.cpp log wording may drift; use `REQUIRE_SPEC_INIT=1` or
+  `REQUIRE_DRAFT_ACCEPTANCE=1` for strict debug runs;
+- launch-config now asserts arg/key alignment and records the prompt used for
+  the benchmark.
+
+Verified offline with `bash -n scripts/gpu/run_mtp_server.sh`; Claude Code
+re-review reported no blocking/high/medium findings in measurement aggregation,
+gates, or config arg alignment.

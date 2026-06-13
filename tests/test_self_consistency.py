@@ -107,7 +107,7 @@ class SelfConsistencySolveTests(unittest.TestCase):
         self.k = self.config.self_consistency_samples
 
     def test_production_default_is_single_cot(self) -> None:
-        # The shipped contest default is k=1 (validated on the real model; 87.26 leaderboard).
+        # The shipped contest default is k=1, validated on the real model.
         self.assertEqual(load_config().self_consistency_samples, 1)
 
     def test_unanimous_gives_full_confidence(self) -> None:

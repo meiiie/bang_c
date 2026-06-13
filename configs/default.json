@@ -97,6 +97,11 @@
         "local_n_threads": 0,
         "local_chat_format": ""
       },
+      "gemma26b-q4-local-server": {
+        "provider": "local_server",
+        "default_model": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0",
+        "local_server_url": "http://127.0.0.1:8080/v1"
+      },
       "nvidia-gemma31b-api": {
         "provider": "nvidia",
         "default_model": "google/gemma-4-31b-it",
@@ -147,7 +152,7 @@
       "phase": "development"
     },
     "self-consistency": {
-      "description": "CONTEST DEFAULT: chain-of-thought reasoning (k=1) with answer extraction. Language-neutral, with the leaderboard-proven safety-refusal lever (enable_safety_refusal). Leaderboard: 88.55 (safety) / 87.26 (CoT k=1) / 77.11 (letter-only).",
+      "description": "CONTEST DEFAULT: chain-of-thought reasoning (k=1) with answer extraction. Language-neutral, with the validated safety-refusal lever (enable_safety_refusal).",
       "strategy": "self_consistency",
       "verify": false,
       "dry_run": false,

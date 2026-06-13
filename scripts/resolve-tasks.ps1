@@ -76,6 +76,7 @@ if ($qids.Count -eq 0) {
 $solveRunDir = Join-Path $runDir "resolution-run"
 $arguments = @(
     "--workflow", $Workflow,
+    "--allow-development-workflow",
     "--input", $InputPath,
     "--run-dir", $solveRunDir
 )

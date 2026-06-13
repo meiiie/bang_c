@@ -191,9 +191,9 @@ foreach ($workflow in $Workflows) {
         $traceDir = Join-Path $caseDir "traces"
         $runReportPath = Join-Path $caseDir "run-report.md"
 
-        $commandText = ".\neko.ps1 --workflow $workflow --input `"$InputPath`" --run-dir `"$caseDir`" --limit $Limit"
+        $commandText = ".\neko.ps1 --workflow $workflow --allow-development-workflow --input `"$InputPath`" --run-dir `"$caseDir`" --limit $Limit"
         Write-Output "Running: $commandText"
-        & ".\neko.ps1" --workflow $workflow --input $InputPath --run-dir $caseDir --limit $Limit
+        & ".\neko.ps1" --workflow $workflow --allow-development-workflow --input $InputPath --run-dir $caseDir --limit $Limit
         if ($LASTEXITCODE -ne 0) {
             throw "Workflow failed: $workflow run $iteration"
         }
