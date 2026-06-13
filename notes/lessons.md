@@ -168,3 +168,18 @@ checklist for EVERY GPU run; each rule maps to a concrete failure below.
 ### Time-economics reminder
 Every avoidable relaunch on a 28GB-model run costs ~5-10 min (reload) + my attention. The 2-min
 health-verify (step 4) is the cheapest insurance there is - it would have saved this whole session.
+
+## 2026-06-13 (MTP benchmark — community-pod build + measurement gotchas)
+
+- **CUDA `cmake --build -j` (unlimited) OOM-kills on RAM-limited community pods.** A 3090
+  community pod (62 GB RAM) ran ~245 parallel nvcc/cc1plus jobs and got Error 137 (OOM). FIX:
+  cap parallelism, e.g. `cmake --build build -j 4 --target llama-server` (each CUDA TU ~2-4 GB).
+  `scripts/gpu/run_mtp_server.sh` uses unlimited `-j`; cap it on low-RAM pods.
+- **draft-mtp lossless check needs temp=0.** Benchmarking at temp>0 (reasoning prompt) makes
+  generation stochastic, so MTP output never byte-matches the baseline and the
+  `content_matches_baseline` gate always "fails" spuriously. To prove losslessness, run a
+  greedy (temp=0) pass. The speedup measurement itself is still valid at temp>0.
+- **MoE MTP speedup is modest:** 26B-A4B gave ~1.37x best (n-max=2), acceptance 0.70, falling to
+  1.07x at n=6 (acceptance 0.40). The 1.4-2.2x literature numbers are dense-model/B200 best-cases.
+- **D-state compile procs survive `kill -9` until their syscall returns** — after killing a CUDA
+  build, wait ~10-15 s and re-check before relaunching, or the new build contends for RAM.
