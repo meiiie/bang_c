@@ -1,0 +1,71 @@
+# MTP research — resume plan (2026-06-15)
+
+Web research into how llama.cpp + the community handle (a) the **chat-template / accuracy blocker**
+and (b) **MTP speculative decoding** for Gemma-4. Pairs with the verdict in
+`mtp-packaging-session-2026-06-14.md`: *MTP is lossless; the accuracy loss was the `local_server`
+chat path, not MTP.* This doc confirms that with upstream sources and gives the fix.
+
+## 1. The REAL blocker — llama-server `/v1/chat/completions` applies its own template
+
+Confirmed by the upstream discussion (#9741): **you cannot supply your own chat template to
+llama-server's `/chat/completions` endpoint** — it applies the GGUF-embedded / built-in template,
+which does **not** match our in-process path (`create_chat_completion`, `chat_format="gemma"` +
+`merge_system_into_user`). Mismatch → malformed Gemma prompt → model EOS's early → no `ANSWER:` →
+high fallback. This is exactly our 75%→52% fallback symptom.
+
+**Fix (community-recommended):** stop using `/v1/chat/completions` for `local_server`. Instead POST
+to the raw **`/completion`** endpoint with a **prompt string we build ourselves** that byte-matches
+what the in-process Gemma `chat_format` produces (system merged into the user turn, correct
+`<start_of_turn>user … <end_of_turn>\n<start_of_turn>model\n` framing). That is the proven 88.55
+formatting. → `local_server` then == in-process → fallback back down to ~1.5%.
+
+Implementation sketch (when we resume):
+- Add a `use_raw_completion` mode to the OpenAI-compatible client (`nvidia_client.py`) OR a dedicated
+  `local_server` client that builds the Gemma prompt + hits `/completion` (fields: `prompt`,
+  `n_predict`, `temperature`, `stop`).
+- Reuse the EXACT prompt builder the in-process path uses (mirror llama-cpp-python's gemma
+  `chat_format`) so there is zero drift.
+- Acceptance test: fallback rate on the dev set must match the in-process path (~1.5%), not 52%.
+
+## 2. MTP / speculative decoding for Gemma-4 (the speed feature) — lossless
+
+llama.cpp has native MTP now. Two shapes seen in the wild:
+- **Generic speculative**: `--model-draft <draft.gguf> --spec-type draft-mtp --spec-draft-n-max 2-4`.
+- **MTP head**: `--spec-type mtp` + a matched assistant ("MTP head") for the target.
+
+**Matched draft for OUR exact model:** `AtomicChat/gemma-4-26B-A4B-it-assistant-GGUF` (~0.4B; Q4_K_M
+~310MB) is the assistant/drafter for `google/gemma-4-26B-A4B-it` — "zero quality loss" (the target
+verifies every drafted token). Example:
+```
+llama-server -m gemma-4-26B-A4B-it-Q4_K_M.gguf \
+  --mtp-head gemma-4-26B-A4B-it-assistant.Q4_K_M.gguf \
+  --spec-type mtp --draft-block-size 3 --draft-max 8 --draft-min 0
+```
+
+**⚠️ Big caveat — fork required:** the AtomicChat assistant GGUF uses a custom `gemma4_assistant`
+architecture and needs the **`atomic-llama-cpp-turboquant` fork**, NOT upstream llama.cpp (upstream
+fails with "unknown architecture"). So shipping it means building the image against that fork →
+complicates the portable build + supply-chain. Decide vs a generic draft model on upstream llama.cpp.
+
+**Numbers (Google, Gemma-4):** 2.5–3.1× decode, up to ~5× on math/reasoning; acceptance ≥80% on
+structured (code/math/reasoning) output. Our earlier measure was ~1.37× — consistent with a
+conservative draft setting; tuning `--draft-max`/`--draft-block-size` should lift it.
+
+## 3. Resume order (do NOT skip step 1)
+
+1. **Accuracy parity first** — switch `local_server` to `/completion` + exact Gemma prompt; prove
+   fallback ≈ in-process (~1.5%) and answers match. This is the actual fix; MTP is irrelevant until
+   parity holds.
+2. **Then add MTP for Time** — choose the path:
+   - (a) atomic fork + `gemma-4-26B-A4B-it-assistant` MTP head (best speed, lossless, but fork in the
+     image), or
+   - (b) a generic small Gemma draft on upstream llama.cpp (simpler/portable, lower acceptance).
+   Measure decode speed + verify lossless (answers identical to step-1 baseline) on the dev set.
+3. Gate on owner before any GPU spend / image rebuild. Time is only 10pt vs Accuracy 80pt — keep the
+   shipped portable image as the safe artifact; MTP is a Time upgrade, not a prerequisite.
+
+## Sources
+- llama.cpp server + chat templates: discussion #9741; server README (ggml-org/llama.cpp).
+- llama-cpp-python chat_format precedence + Gemma handler: PR #1989 (abetlen/llama-cpp-python).
+- MTP in llama.cpp (flags, lossless, benchmarks): knightli.com Gemma-4 assistant-MTP guides;
+  datacamp MTP tutorial; AtomicChat/gemma-4-26B-A4B-it-assistant-GGUF (Hugging Face).
