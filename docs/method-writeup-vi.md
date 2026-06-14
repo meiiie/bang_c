@@ -1,5 +1,9 @@
 # Neko Core — Thuyết minh phương pháp (HackAIthon 2026, Bảng C)
 
+**Đội thi: Neko Core — Đại học Hàng hải Việt Nam (VMU).** Thành viên: Nguyễn Mạnh Hùng
+(CNT63ĐH, trưởng nhóm), Bùi Việt Hoàng (CLC63ĐH), Phạm Thị Minh Hồng (CNT63ĐH),
+Phạm Thị Thu Thảo (KTN63ĐH), Nghiêm Thị Mỹ Linh (KPM63ĐH).
+
 Trạng thái: Leaderboard đã xác nhận **88.55** (CoT self‑consistency + đòn bẩy an‑toàn).
 Image nộp v0.6.0 (`gemma26b-q4-clean-20260614`, dựng sạch lại từ commit nộp) cho **88.34** trên
 public‑463 — cùng đường, lệch ±1 câu do nhiễu số học giữa các bản build llama.cpp; trần thật ~88.5.

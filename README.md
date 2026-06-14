@@ -3,7 +3,7 @@
 [![CI](https://github.com/meiiie/bang_c/actions/workflows/ci.yml/badge.svg)](https://github.com/meiiie/bang_c/actions/workflows/ci.yml)
 [![Release](https://github.com/meiiie/bang_c/actions/workflows/release.yml/badge.svg)](https://github.com/meiiie/bang_c/actions/workflows/release.yml)
 
-![Neko Core banner](docs/assets/neko-core-banner-left-logo.png)
+![Neko Core banner](docs/assets/neko-core-banner.jpg)
 
 Trạng thái: bài dự thi **HackAIthon 2026 — Bảng C (Innovator)**
 
@@ -11,6 +11,18 @@ Trạng thái: bài dự thi **HackAIthon 2026 — Bảng C (Innovator)**
 offline, tự chứa**: đọc đề trắc nghiệm tại `/data`, chạy mô hình **Gemma-4-26B-A4B
 (QAT Q4_0 GGUF)** ngay trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần
 API key, không cần mạng — đúng "Yêu cầu đầu ra" của Bảng C.
+
+## Đội thi — Neko Core
+
+Trường **Đại học Hàng hải Việt Nam (VMU)**.
+
+| Họ và tên | Lớp | Vai trò |
+|---|---|---|
+| Nguyễn Mạnh Hùng | CNT63ĐH | **Trưởng nhóm** (Team lead) |
+| Bùi Việt Hoàng | CLC63ĐH | Thành viên |
+| Phạm Thị Minh Hồng | CNT63ĐH | Thành viên |
+| Phạm Thị Thu Thảo | KTN63ĐH | Thành viên |
+| Nghiêm Thị Mỹ Linh | KPM63ĐH | Thành viên |
 
 ## Cách tái lập kết quả trong container (Ban Tổ chức đọc phần này)
 
