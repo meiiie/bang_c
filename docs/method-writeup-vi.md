@@ -1,7 +1,9 @@
 # Neko Core — Thuyết minh phương pháp (HackAIthon 2026, Bảng C)
 
-Trạng thái: Leaderboard đã xác nhận **88.55** (CoT self‑consistency + đòn bẩy an‑toàn)
-Cập nhật: 2026‑06‑13
+Trạng thái: Leaderboard đã xác nhận **88.55** (CoT self‑consistency + đòn bẩy an‑toàn).
+Image nộp v0.6.0 (`gemma26b-q4-clean-20260614`, dựng sạch lại từ commit nộp) cho **88.34** trên
+public‑463 — cùng đường, lệch ±1 câu do nhiễu số học giữa các bản build llama.cpp; trần thật ~88.5.
+Cập nhật: 2026‑06‑14
 
 > Mọi con số trong tài liệu là **đo thật**: trên leaderboard chính thức, hoặc trên mô hình thi
 > đấu (Gemma‑4‑26B‑A4B QAT‑Q4_0 GGUF, llama.cpp, GPU NVIDIA thuê thật). Không phỏng đoán.

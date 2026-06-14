@@ -5,6 +5,23 @@ continue without losing context.
 
 ---
 
+## ✅ FINALIZED (2026-06-14 evening) — submission shipped; read this first
+
+- **Vòng-2 image SHIPPED + GitHub finalized.** Docker Hub
+  `hacamy12345/neko-core:gemma26b-q4-clean-20260614` (clean v0.6.0 rebuild, self-consistency,
+  public-463 **88.34**). GitHub `main` at the v0.6.0 commit; README "Reproduce" → that tag.
+  All 3 BTC deliverables in place (image + repo/repro + method-writeup).
+- **MTP SHELVED.** It IS lossless, but the harness `local_server` (llama-server `/chat/completions`)
+  path can't reach in-process accuracy parity cheaply: the merge-system fix cut fallback 75%→52%
+  with only 73% answer-agreement — not enough. Submission uses the proven in-process path; Time is
+  still fine (~1.6h/2000q). Reopen MTP only if a raw-`/completion` exact-template rebuild is worth a
+  GPU session for the ~1.37× Time edge.
+- **Remaining before the 26/6 final Docker:** (1) rebuild the image with `GGML_NATIVE=OFF` (portable
+  llama-cpp wheel → cannot SIGILL on an old-CPU judge machine); (2) optional method-writeup polish.
+  Both need a GPU session (paused; RunPod balance ~$7.7, 0 pods running).
+- Removed the rejected-overfit research scratch (CODEX-ACCURACY mission, codex-webmax probes, r-notes,
+  analysis-output) from the repo. The block below is superseded.
+
 ## ▶▶ NEXT SESSION — START HERE (2026-06-14). Accuracy CLOSED; focus = ship the MTP Docker.
 
 ### State (honest)
