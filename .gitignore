@@ -36,3 +36,7 @@ notes/_*.txt
 notes/*public463*preflight*.json
 notes/*measured-gate*.json
 notes/*experiment-assessment*.json
+# Public-leaderboard probe tooling + human-review matrices (group-testing scratch).
+scripts/probe_decoder.py
+docs/*human-review*/
+output-probes/
