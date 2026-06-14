@@ -21,38 +21,65 @@ Mục lục:
 
 ## 0. Cài đặt nhanh (Quickstart)
 
-Cross-platform (Linux / macOS / Windows), cần **Python ≥ 3.11**:
+Cần **Python ≥ 3.11**. Cài **một lệnh** — trình cài dùng `pipx`, tách `neko` khỏi Python hệ thống,
+**không** tải mô hình nào:
 
 ```bash
-git clone https://github.com/meiiie/bang_c.git
-cd bang_c
+# macOS / Linux
+curl -fsSL https://neko.holilihu.online/install.sh | bash
 
-# (1) Cài Neko Core — một lệnh. Sinh CLI: `neko` (alias `neko-core`, `bang-c`).
-pip install -e .
-
-# (2) Tuỳ chọn — thêm runtime mô hình GGUF local qua llama.cpp:
-pip install -e ".[local]"
-
-# Kiểm tra:
-neko --doctor
+# Windows (PowerShell)
+irm https://neko.holilihu.online/install.ps1 | iex
 ```
 
-> **Portable wheel (chạy mọi CPU):** nếu cài bước (2) trên một máy sẽ phân phối đi nơi khác, build
-> `llama-cpp-python` từ nguồn với cờ portable để tránh SIGILL trên CPU lạ:
-> ```bash
-> CMAKE_ARGS="-DGGML_NATIVE=off" FORCE_CMAKE=1 \
->   pip install --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
-> ```
-> Thêm `-DGGML_CUDA=on` nếu có GPU NVIDIA. Xem §10 "Portable wheel".
+> URL dự phòng (nếu domain không truy cập được): `https://raw.githubusercontent.com/meiiie/bang_c/main/install.sh`
+> (và `…/install.ps1`). Cài thẳng từ nguồn: `pipx install "git+https://github.com/meiiie/bang_c.git"`.
 
-Chạy thử (không cần model — chế độ dry-run):
+Sinh CLI `neko` (alias `neko-core`, `bang-c`). Kiểm tra: `neko --doctor`, `neko --version`.
+
+### Dùng ngay với API — KHÔNG cần tải mô hình nặng
+
+Đây là đường khuyến nghị để **tái dùng Neko Core làm Agentic CLI**: trỏ vào một API
+OpenAI-compatible (NVIDIA NIM, FPT, OpenAI…) và đặt **API key trong một file JSON** (kiểu
+`~/.claude.json`), không phải tải GGUF 14GB.
 
 ```bash
-neko --workflow quick-dry-run --input <bộ-câu-hỏi>.json --limit 5
+neko --init-user        # tạo ~/.neko-core/config.json (active_profile = nvidia-gemma31b-api)
 ```
 
-Để chạy thật với mô hình local + xuất `pred.csv` theo hợp đồng `/data → /output`, xem
-[§4 Nhà cung cấp](#4-nhà-cung-cấp-mô-hình--thiết-lập-api) và [§6 Workflow](#6-workflow--chiến-lược-strategies).
+Mở `~/.neko-core/config.json`, dán key vào `runtime.api_key` (xem [§4](#4-nhà-cung-cấp-mô-hình--thiết-lập-api)):
+
+```json
+{
+  "runtime": {
+    "active_profile": "nvidia-gemma31b-api",
+    "api_key": "nvapi-xxxxxxxx"
+  }
+}
+```
+
+```bash
+neko --doctor                                   # phải báo provider=nvidia, key OK
+neko --workflow self-consistency --input <bộ-câu-hỏi>.json --limit 5
+```
+
+> Thứ tự ưu tiên key: biến môi trường `HACKC_API_KEY` / `NVIDIA_API_KEY` **thắng**, rồi mới đến
+> `api_key` trong file JSON. **Không bao giờ** đặt key vào `configs/default.json` (đã commit) —
+> chỉ để trong `~/.neko-core/config.json` hoặc `./.neko-core/config.json` (đều đã `.gitignore`).
+
+### (Tuỳ chọn) Chạy mô hình GGUF local
+
+Nặng hơn — chỉ cần khi muốn chạy offline trên máy mình:
+
+```bash
+pipx inject neko-core "huggingface-hub>=0.32,<1" "llama-cpp-python>=0.3.9,<0.4"
+# (hoặc từ nguồn: git clone … && pip install -e ".[local]")
+```
+
+> **Portable wheel (chạy mọi CPU):** nếu phân phối image/máy đi nơi khác, build `llama-cpp-python`
+> từ nguồn để tránh SIGILL trên CPU lạ — `CMAKE_ARGS="-DGGML_NATIVE=off" FORCE_CMAKE=1 pip install
+> --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"` (thêm `-DGGML_CUDA=on` nếu có GPU
+> NVIDIA). Xem §10 "Portable wheel".
 
 ---
 
@@ -148,14 +175,25 @@ truyền qua `--config`). Cấu trúc:
 }
 ```
 
-**Thứ tự ưu tiên (override)**: `biến môi trường` › `--profile` (profile trong config) › `runtime`
-mặc định trong config. Mục tiêu: thích nghi với biến thể đề/private-test **mà không sửa mã nguồn**.
+**Config xếp lớp (layered)** — khi KHÔNG truyền `--config`, ba nguồn được hợp nhất sâu, lớp sau ghi
+đè lớp trước (file override có thể chỉ chứa **vài khoá** bạn muốn đổi):
+
+1. `…/resources/default.json` (hoặc `configs/default.json`) — **mặc định nướng sẵn** (nền đầy đủ).
+2. `~/.neko-core/config.json` — **cấu hình người dùng** (kiểu `~/.claude.json`): nơi đặt **API key**
+   + provider mặc định. Tạo bằng `neko --init-user`.
+3. `./.neko-core/config.json` — **cấu hình theo dự án** (ghi đè (2) cho từng repo). Tạo bằng `neko --init`.
+
+Truyền `--config path.json` để **bỏ qua xếp lớp** và dùng đúng một file (đường thi/CI dùng cách này).
+
+**Thứ tự ưu tiên (override)**: `biến môi trường` › `--profile` › `./.neko-core` › `~/.neko-core` ›
+`runtime` mặc định. Mục tiêu: thích nghi đề/private-test **mà không sửa mã nguồn**.
 
 ```powershell
 neko --profiles                       # liệt kê các profile
 neko --profile nvidia-gemma31b-api --doctor
 $env:HACKC_PROFILE = "gemma26b-q4-local"     # chọn profile qua env
-neko --config path\to\custom.json …          # dùng config khác
+neko --init-user                              # tạo ~/.neko-core/config.json (key + provider)
+neko --config path\to\custom.json …          # dùng đúng một file, bỏ qua xếp lớp
 ```
 
 ## 4. Nhà cung cấp mô hình & thiết lập API
