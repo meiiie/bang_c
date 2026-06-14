@@ -5,42 +5,65 @@
 
 ![Neko Core banner](docs/assets/neko-core-banner-left-logo.png)
 
-Status: competition harness
+Trạng thái: bài dự thi **HackAIthon 2026 — Bảng C (Innovator)**
 
-Neko Core is a config-first inference harness for HackAIthon 2026 Bang C. It
-is intentionally separate from Wiii Core: the runtime container stays small,
-reproducible, and limited to the contest contract, while development workflows
-keep traces, review tasks, and model checks outside the submitted artifact.
+**Neko Core** là một harness suy luận *config-first*, đóng gói thành **một Docker image
+offline, tự chứa**: đọc đề trắc nghiệm tại `/data`, chạy mô hình **Gemma-4-26B-A4B
+(QAT Q4_0 GGUF)** ngay trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần
+API key, không cần mạng — đúng "Yêu cầu đầu ra" của Bảng C.
 
-## Reproduce the contest result (HackAIthon Bảng C judges read this)
+## Cách tái lập kết quả trong container (Ban Tổ chức đọc phần này)
 
-The submission is a **self-contained, offline Docker image**. It reads
-`/data/*_test.csv`, runs Gemma-4-26B-A4B (QAT Q4_0 GGUF, MoE) locally, and writes
-`/output/pred.csv` (`qid,answer`). No API key, no network. Two commands:
+Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô hình bên trong**. Chỉ **2 lệnh**:
 
 ```bash
-# 1. Pull the pinned, self-contained image (the model is baked in)
+# 1) Kéo image (mô hình ~14GB đã nằm sẵn trong image; tổng ~23.5GB)
 docker pull hacamy12345/neko-core:gemma26b-q4-clean-20260614
 
-# 2. Run on a folder containing public_test.csv or private_test.csv
+# 2) Chạy trên thư mục chứa public_test.csv hoặc private_test.csv
 docker run --rm --gpus all \
-  -v /path/to/data:/data \
-  -v /path/to/output:/output \
+  -v /duong/dan/data:/data \
+  -v /duong/dan/output:/output \
   hacamy12345/neko-core:gemma26b-q4-clean-20260614
-# -> writes /path/to/output/pred.csv  (qid,answer; one option letter per row)
+# => sinh ra /duong/dan/output/pred.csv  (hai cot: qid,answer)
 ```
 
-`gemma26b-q4-clean-20260614` is the v0.6.0 submission image: built fresh from this
-commit (no public-test hard-codes in any layer), default workflow `self-consistency`,
-public-463 leaderboard **88.34**.
+Container tự động đọc `public_test.csv`/`private_test.csv` trong `/data`, chạy workflow mặc
+định `self-consistency` (mô hình suy luận từng bước rồi trích ra chữ cái đáp án), và ghi
+`/output/pred.csv`. File `pred.csv` được **ghi TRƯỚC khi kiểm tra hợp đồng** và tự sửa cho
+khớp đúng các `qid` đầu vào, nên một câu lỗi không bao giờ làm hỏng (về 0) cả lần chạy.
+Toàn bộ chạy **offline** (không web, không API key, không phụ thuộc dịch vụ ngoài).
 
-The entrypoint runs `--workflow self-consistency --data-dir /data --output-dir
-/output --auto-resume`; the pred.csv is contract-repaired (covers exactly the
-input qids with valid letters) and written **before** any validation, so a single
-bad question can never zero the run. To rebuild the image from source instead of
-pulling, see [Docker](#docker). Method/idea write-up:
-[`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) (VI) and
-[`docs/method-writeup.md`](docs/method-writeup.md) (EN).
+> `gemma26b-q4-clean-20260614` là image bản **v0.6.0**, **dựng lại sạch từ chính commit này**
+> (không có đáp án public-test gắn cứng trong bất kỳ layer nào). Điểm leaderboard public-463: **88.34**.
+
+### Hợp đồng đầu vào / đầu ra
+
+| Hạng mục | Giá trị |
+|---|---|
+| Đầu vào | `/data/public_test.csv` hoặc `/data/private_test.csv` |
+| Đầu ra | `/output/pred.csv` |
+| Cột | `qid,answer` |
+| Giá trị `answer` | chữ cái phương án theo TỪNG dòng (A, B, C, D… tới J cho câu nhiều lựa chọn) |
+
+### Mô hình & tuân thủ quy tắc Bảng C
+
+- LLM: **Gemma-4 series** — cụ thể `Gemma-4-26B-A4B QAT Q4_0 GGUF`, chạy local qua
+  llama.cpp (offline). (Danh mục cho phép: Qwen3.5 ≤ 9B / Gemma-4; embedding-rerank: BGE-m3 / Qwen-Rerank.)
+- Không gắn cứng đáp án public-test; mọi đòn bẩy phải tổng quát hoá cho bộ private 2000 câu.
+
+### Tài liệu thuyết minh phương pháp (chấm điểm Ý tưởng)
+
+- [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) — **Tiếng Việt** (bản được chấm).
+- [`docs/method-writeup.md`](docs/method-writeup.md) — English.
+
+Mã nguồn + cách reproduce ở repo này; ảnh `pred.csv` mẫu sinh từ container nằm trong các
+phần dưới. Muốn dựng lại image từ mã nguồn (thay vì kéo về), xem mục [Docker](#docker).
+
+---
+
+> **Phần bên dưới là tài liệu kỹ thuật/phát triển (tiếng Anh)** dành cho người đóng góp mã
+> nguồn — không bắt buộc đọc để chấm bài.
 
 ## Install Neko Core (development tooling)
 
