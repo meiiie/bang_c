@@ -3,7 +3,7 @@
 [![CI](https://github.com/meiiie/bang_c/actions/workflows/ci.yml/badge.svg)](https://github.com/meiiie/bang_c/actions/workflows/ci.yml)
 [![Release](https://github.com/meiiie/bang_c/actions/workflows/release.yml/badge.svg)](https://github.com/meiiie/bang_c/actions/workflows/release.yml)
 
-![Neko Core banner](docs/assets/neko-core-banner.jpg)
+![Neko Core banner](docs/assets/neko-core-banner.png)
 
 Trạng thái: bài dự thi **HackAIthon 2026 — Bảng C (Innovator)**
 
