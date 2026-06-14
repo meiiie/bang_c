@@ -26,18 +26,24 @@ Trường **Đại học Hàng hải Việt Nam (VMU)**.
 
 ## Cách tái lập kết quả trong container (Ban Tổ chức đọc phần này)
 
-Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô hình bên trong**. Chỉ **2 lệnh**:
+Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô hình bên trong**.
+
+**Yêu cầu:** máy có **GPU NVIDIA** + NVIDIA Container Toolkit (cho cờ `--gpus all`). Image **chạy
+trên mọi CPU** (Intel/AMD, có hay không AVX-512) và **hoàn toàn offline** khi chạy.
 
 ```bash
-# 1) Kéo image (mô hình ~14GB đã nằm sẵn trong image; tổng ~23.5GB)
+# 1) Kéo image (mô hình đã nướng sẵn bên trong; ~23.5GB)
 docker pull hacamy12345/neko-core:gemma26b-q4-clean-20260614
 
-# 2) Chạy trên thư mục chứa public_test.csv hoặc private_test.csv
+# 2) Đặt đề thi vào ./data rồi chạy
+mkdir -p data output
+cp public_test.csv data/            # hoặc private_test.csv
+
 docker run --rm --gpus all \
-  -v /duong/dan/data:/data \
-  -v /duong/dan/output:/output \
+  -v "$PWD/data:/data" \
+  -v "$PWD/output:/output" \
   hacamy12345/neko-core:gemma26b-q4-clean-20260614
-# => sinh ra /duong/dan/output/pred.csv  (hai cot: qid,answer)
+# => ./output/pred.csv   (hai cột: qid,answer)
 ```
 
 Container tự động đọc `public_test.csv`/`private_test.csv` trong `/data`, chạy workflow mặc định
