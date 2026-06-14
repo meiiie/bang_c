@@ -1,0 +1,112 @@
+# Kaniko-compatible MTP variant of the Gemma-4-26B-A4B image.
+#
+# Same runtime as Dockerfile.gemma-mtp (the proven in-process local_llamacpp solver
+# PLUS a CUDA llama-server built with draft-mtp speculative decoding, ~1.37x token
+# throughput, with a transparent fallback to local_llamacpp so a speed-lever failure
+# can never zero the Accuracy result). This file exists because Kaniko (the RunPod
+# build path that avoids Docker-in-Docker) does not reliably support BuildKit
+# `--mount=type=secret` or heredoc RUN blocks. See docs/runpod-operations.md.
+#
+# It intentionally does NOT accept HF_TOKEN as a build argument (build args can be
+# retained in image metadata). The Gemma GGUFs are ungated and download anonymously,
+# so no token is needed at all (huggingface_hub would still read HF_TOKEN from the
+# executor env if a future model became gated).
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+ARG MAIN_REPO=google/gemma-4-26B-A4B-it-qat-q4_0-gguf
+ARG MAIN_FILE=gemma-4-26B_q4_0-it.gguf
+ARG DRAFT_REPO=unsloth/gemma-4-26B-A4B-it-GGUF
+ARG DRAFT_FILE=mtp-gemma-4-26B-A4B-it.gguf
+# Pinned to the exact llama.cpp commit the 1.37x was measured on (draft-mtp support).
+ARG LLAMA_CPP_REF=597b6672e800c10e474bbdc53106b9b7b502fc4c
+# Realistic contest GPUs: Ampere (A100/A40/A5000/3090/A6000), Ada (4090/L40), Hopper via PTX.
+ARG CUDA_ARCHITECTURES=80-real;86-real;89-real;90-virtual
+ARG LLAMA_CPP_EXTRA_INDEX_URL=https://abetlen.github.io/llama-cpp-python/whl/cu124
+# Build parallelism. Capped low: unbounded -j spawns hundreds of nvcc jobs and
+# OOM-kills (Error 137) on RAM-limited builders. Raise on a big-RAM machine.
+ARG BUILD_JOBS=4
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
+    DEBIAN_FRONTEND=noninteractive \
+    HACKC_DATA_DIR=/data \
+    HACKC_OUTPUT_DIR=/output \
+    HACKC_PROVIDER=local_llamacpp \
+    HACKC_LOCAL_MODEL_ID=google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 \
+    HACKC_LOCAL_MODEL_PATH=/models/gemma-4-26B_q4_0-it.gguf \
+    HACKC_LLAMACPP_N_CTX=8192 \
+    HACKC_LLAMACPP_N_GPU_LAYERS=-1 \
+    NEKO_LOCAL_SERVER_MODE=1 \
+    NEKO_LLAMA_SERVER_BIN=/usr/local/bin/llama-server \
+    NEKO_MAIN_MODEL_PATH=/models/gemma-4-26B_q4_0-it.gguf \
+    NEKO_MTP_DRAFT_MODEL_PATH=/models/mtp-gemma-4-26B-A4B-it.gguf \
+    NEKO_MTP_DRAFT_N_MAX=2 \
+    PATH=/usr/local/cuda/bin:${PATH}
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        curl \
+        git \
+        libgomp1 \
+        python3 \
+        python3-pip \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build llama-server (CUDA, draft-mtp) from the pinned commit. nvcc cross-compiles for
+# the target arch list, so no GPU is required at build time. The ui.cpp sed works around
+# a generated zero-size asset array that otherwise aborts the llama-server build.
+RUN curl -fsSL --retry 5 --retry-delay 3 -o /tmp/llama.tar.gz "https://github.com/ggml-org/llama.cpp/archive/${LLAMA_CPP_REF}.tar.gz" \
+    && mkdir -p /tmp/llama.cpp \
+    && tar xzf /tmp/llama.tar.gz -C /tmp/llama.cpp --strip-components=1 \
+    && rm /tmp/llama.tar.gz \
+    && cd /tmp/llama.cpp \
+    && cmake -B build \
+        -DGGML_CUDA=ON \
+        -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+        -DLLAMA_CURL=OFF \
+        -DCMAKE_BUILD_TYPE=Release \
+    && (sed -i 's/\[\] = {};/[] = {0};/g' build/tools/ui/ui.cpp 2>/dev/null || true) \
+    && cmake --build build --config Release -j "${BUILD_JOBS}" --target llama-server \
+    && cp build/bin/llama-server /usr/local/bin/llama-server \
+    && find build -name '*.so*' -exec cp -a {} /usr/local/lib/ \; \
+    && echo /usr/local/lib > /etc/ld.so.conf.d/llama.conf \
+    && ldconfig \
+    && /usr/local/bin/llama-server --help 2>/dev/null | grep -q -- 'draft-mtp' \
+    && rm -rf /tmp/llama.cpp
+
+# In-process fallback solver (llama-cpp-python, CUDA wheel) + app deps.
+COPY requirements.txt requirements-local.txt ./
+RUN if [ -n "${LLAMA_CPP_EXTRA_INDEX_URL}" ]; then \
+        pip install --no-cache-dir --extra-index-url "${LLAMA_CPP_EXTRA_INDEX_URL}" -r requirements-local.txt; \
+    else \
+        pip install --no-cache-dir -r requirements-local.txt; \
+    fi
+
+# Bake both GGUFs (anonymous download; no token needed).
+COPY scripts/docker_fetch_models.py ./scripts/docker_fetch_models.py
+RUN MAIN_REPO="${MAIN_REPO}" MAIN_FILE="${MAIN_FILE}" \
+    DRAFT_REPO="${DRAFT_REPO}" DRAFT_FILE="${DRAFT_FILE}" \
+    python scripts/docker_fetch_models.py --target-dir /models --with-draft \
+    && test -s "/models/${MAIN_FILE}" \
+    && test -s "/models/${DRAFT_FILE}"
+
+COPY src ./src
+COPY configs ./configs
+COPY docker/neko-entrypoint.sh /usr/local/bin/neko-entrypoint
+COPY README.md ./
+
+RUN mkdir -p /data /output \
+    && chmod +x /usr/local/bin/neko-entrypoint \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}" \
+    && python -m hackaithon_c.run --doctor
+
+# No CMD: the entrypoint's no-argument branch runs self-consistency via local_server
+# (MTP), with the in-process local_llamacpp fallback wired in.
+ENTRYPOINT ["neko-entrypoint"]

@@ -20,15 +20,19 @@ The submission is a **self-contained, offline Docker image**. It reads
 
 ```bash
 # 1. Pull the pinned, self-contained image (the model is baked in)
-docker pull hacamy12345/neko-core:gemma26b-q4
+docker pull hacamy12345/neko-core:gemma26b-q4-clean-20260614
 
 # 2. Run on a folder containing public_test.csv or private_test.csv
 docker run --rm --gpus all \
   -v /path/to/data:/data \
   -v /path/to/output:/output \
-  hacamy12345/neko-core:gemma26b-q4
+  hacamy12345/neko-core:gemma26b-q4-clean-20260614
 # -> writes /path/to/output/pred.csv  (qid,answer; one option letter per row)
 ```
+
+`gemma26b-q4-clean-20260614` is the v0.6.0 submission image: built fresh from this
+commit (no public-test hard-codes in any layer), default workflow `self-consistency`,
+public-463 leaderboard **88.34**.
 
 The entrypoint runs `--workflow self-consistency --data-dir /data --output-dir
 /output --auto-resume`; the pred.csv is contract-repaired (covers exactly the

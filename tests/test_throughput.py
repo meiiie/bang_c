@@ -105,7 +105,11 @@ class LocalServerProviderTests(unittest.TestCase):
         args, kwargs = post.call_args
         self.assertEqual(args[0], "http://127.0.0.1:9090/v1/chat/completions")
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer local")
-        self.assertEqual(kwargs["json"]["messages"][1]["content"], "user")
+        # local_server merges system into the user turn (Gemma has no system role), so the
+        # reasoning instructions survive llama-server's chat template (single user message).
+        self.assertEqual(len(kwargs["json"]["messages"]), 1)
+        self.assertEqual(kwargs["json"]["messages"][0]["role"], "user")
+        self.assertEqual(kwargs["json"]["messages"][0]["content"], "system\n\nuser")
         self.assertEqual(kwargs["json"]["max_tokens"], 7)
         self.assertEqual(kwargs["json"]["seed"], 42)
         self.assertNotIn("top_k", kwargs["json"])

@@ -73,6 +73,9 @@ def build_chat_client(
                 max_retries=config.max_retries,
                 retry_base_delay_seconds=config.retry_base_delay_seconds,
                 retry_max_delay_seconds=config.retry_max_delay_seconds,
+                # Gemma has no system role; merge it into the user turn so llama-server
+                # keeps the reasoning instructions (matches the in-process path).
+                merge_system_into_user=True,
             )
         )
     raise ValueError(

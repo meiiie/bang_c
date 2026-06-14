@@ -2,6 +2,54 @@
 
 Durable lessons learned while building Neko Core. Newest on top.
 
+## 2026-06-14 — packaging the MTP image on RunPod (tar ownership + Kaniko destroys SSH)
+
+- **Windows-created tarballs fail to extract as root on Linux: use `tar --no-same-owner`.**
+  A context tarball built with Windows git-bash `tar czf` stamps Windows uid/gid
+  (e.g. 197609/197121). GNU tar on the pod, running as root, tries to `chown` every entry
+  to those nonexistent ids → `Cannot change ownership ... Invalid argument` → exit 2, and
+  with `set -e`/`&&` the whole step dies. The gzip is fine (`gzip -t` passes); it is purely
+  the ownership restore. FIX: always extract a Windows→pod tarball with
+  `tar xzf ctx.tar.gz -C dest --no-same-owner`. (Bit two launches before I caught it.)
+- **Running `/kaniko/executor` directly on a pod root CLOBBERS the pod's sshd.** Kaniko is
+  built to BE the container: it deletes / (minus ignore-paths) and re-extracts the base
+  image, which wipes the running sshd's host keys/libs → all new SSH sessions get
+  `kex_exchange_identification: Connection reset`. So a Kaniko build run this way is BLIND
+  (no SSH to monitor or read kaniko.log). Consequences/rules:
+  - Do ALL verification (build steps, functional smoke) on the pod WHILE SSH is alive,
+    BEFORE invoking the executor; treat the executor as the irreversible last step.
+  - `--ignore-path=/workspace` preserves the context/auth/logs on /workspace, but NOT sshd.
+  - Verify a Kaniko build's success by polling Docker Hub for the pushed tag, not via SSH.
+  - The launch ssh (`setsid bash run.sh ... & disown`) TIMING OUT at 120s is EXPECTED — the
+    run started; VERIFY (pgrep/log), never relaunch (double-run / double-load).
+- **`set -o pipefail` + `grep -q` on a verbose command = false failure (SIGPIPE).** A check like
+  `llama-server --help | grep -q draft-mtp || fail` FAILS under pipefail even when the match is
+  found: `grep -q` exits on the first match and closes the pipe → the producer (`--help`, still
+  writing) gets SIGPIPE (exit 141) → pipefail reports the pipe as failed. Symptom that misleads:
+  the same check passes when run by hand (interactive shells have no pipefail). FIX: capture to a
+  file then grep — `cmd >/tmp/out 2>&1 || true; grep -q PAT /tmp/out || fail`. (Docker `RUN` uses
+  `/bin/sh` with no pipefail, so the identical line in a Dockerfile is fine — this only bites
+  `set -uo pipefail` harness scripts.)
+- **GitHub git-protocol is slow/flaky from rented pods; download a source tarball over HTTPS.**
+  `git clone` (full history) of llama.cpp crawled at ~93 KB/s on a 3090 pod and a shallow
+  `git fetch --depth 1 <sha>` died with `fatal: early EOF / invalid index-pack output`, while HF
+  HTTPS downloads on the SAME pod were fast. git-pack negotiation/compression is the bottleneck.
+  FIX: `curl -fsSL https://github.com/<org>/<repo>/archive/<sha>.tar.gz | tar xz --strip-components=1`
+  — one plain HTTPS GET from codeload, no git-protocol. (Also: never omit `--depth 1` if you do use git.)
+- **`pkill -f "<pattern>"` matches your OWN ssh command line → self-kill.** Running
+  `ssh host 'pkill -9 -f "git clone"'` killed the ssh session itself (exit 255, no output) because
+  the remote `bash -c` command line CONTAINS the string "git clone" (as the pkill argument), so
+  `-f` (full-cmdline match) matched it. FIX: kill by process NAME (`pkill -9 git`, no `-f`), or use
+  a pattern that cannot appear in your own command.
+- **Poll/condition checks must ignore error text that echoes the thing being matched.** A monitor
+  doing `if "A_DONE" in ssh_output` fired a false "done" because an ssh TIMEOUT error string echoes
+  the failed command (`ls .../A_DONE .../A_FAILED`) → the marker name was present in the *error*, not
+  the output. FIX: guard on `"(ssh err" not in output` before testing for the marker.
+- **A dynamically-linked llama-server needs its libs on the path BEFORE any `--help`/run.** The
+  built `llama-server` is a thin binary linking `libggml*.so` (in `build/bin/`). Running it without
+  `LD_LIBRARY_PATH` (or the Dockerfile's `cp *.so /usr/local/lib && ldconfig`) makes even `--help`
+  fail to load → misleading "feature missing" verdicts. Set the lib path before the capability check.
+
 ## 2026-06-11 — GPU selection economics (why A5000 community, and the real trade-off)
 
 - **Match the GPU to the workload's bottleneck, not its size.** Gemma-4-26B-A4B is an MoE

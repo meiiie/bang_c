@@ -19,6 +19,11 @@ class NvidiaConfig:
     max_retries: int = 6
     retry_base_delay_seconds: float = 1.5
     retry_max_delay_seconds: float = 30.0
+    # Gemma's chat template has no real system role. llama-server (local_server) drops/
+    # mishandles a separate system message -> reasoning instructions lost -> short answers.
+    # Set True for local_server to merge system into the user turn (what llama-cpp-python's
+    # in-process gemma chat_format does), restoring the proven self-consistency behavior.
+    merge_system_into_user: bool = False
 
     @classmethod
     def from_env(
@@ -81,12 +86,16 @@ class NvidiaChatClient:
     ) -> str:
         import requests
 
-        payload: dict[str, Any] = {
-            "model": self._config.model,
-            "messages": [
+        if self._config.merge_system_into_user and system_prompt:
+            messages = [{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}]
+        else:
+            messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
-            ],
+            ]
+        payload: dict[str, Any] = {
+            "model": self._config.model,
+            "messages": messages,
             "temperature": 0.0 if temperature is None else temperature,
             "top_p": 0.1 if top_p is None else top_p,
             "max_tokens": max_tokens,

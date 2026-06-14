@@ -2,6 +2,23 @@
 
 All notable Neko Core changes are tracked here.
 
+## 0.6.0 - 2026-06-14
+
+- Added an MTP (Multi-Token Prediction) runtime for the final contest image. A CUDA
+  `llama-server` built with `--spec-type draft-mtp` runs the Gemma-4-26B-A4B Q4_0 model
+  for ~1.37x token throughput (measured on RTX 3090) via the `local_server` provider,
+  with a transparent fallback to the in-process `local_llamacpp` path so a speed-lever
+  failure can never zero the Accuracy result. Packaged in `Dockerfile.gemma-mtp`
+  (BuildKit) and `Dockerfile.gemma-mtp.kaniko` (RunPod/Kaniko). The MTP draft GGUF is
+  the 0.46 GB prediction-head model from `unsloth/gemma-4-26B-A4B-it-GGUF` (ungated).
+- Removed the public-463 bespoke answer rules from the runtime source (`principles.py`,
+  `calculation.py`): keyword->fixed-answer hard-codes for specific public-test items.
+  The shipped `self_consistency` path never invoked them; building the final image from
+  the cleaned tree guarantees no public-test hard-code is present in any image layer.
+- Promoted the safety-refusal lever and the constrained-decoding repair pass to the
+  contest default, and shipped a bulletproof `pred.csv` contract that writes the file
+  before validating, so a solver gap or a bad row can never zero a run.
+
 ## 0.5.0 - 2026-06-11
 
 - Added chain-of-thought reasoning as the contest path (`self-consistency` workflow):

@@ -11,13 +11,17 @@ Vòng-2 scoring is due 26/6/2026). Missing the deadline = automatic disqualifica
 
 | # | Deliverable (rule wording) | Where / status |
 |---|---|---|
-| 1 | **Docker Container** on Docker Hub — reads `/data/*_test.csv`, writes `/output/pred.csv` (`qid,answer`) | `hacamy12345/neko-core:gemma26b-q4` (pinned digest below); self-contained, offline |
+| 1 | **Docker Container** on Docker Hub — reads `/data/*_test.csv`, writes `/output/pred.csv` (`qid,answer`) | `hacamy12345/neko-core:gemma26b-q4-clean-20260614` (v0.6.0, clean rebuild, no hard-codes; digest sha256:73629f54…); self-contained, offline |
 | 2 | **GitHub** repo with code + how to reproduce the result in the container | this repo; reproduce steps in `README.md` (top "Reproduce" section) + below |
 | 3 | **Tài liệu thuyết minh phương pháp** (free format; best shows creativity + effectiveness of the optimization strategy) | `docs/method-writeup-vi.md` (VI, the scored Idea doc) + `docs/method-writeup.md` (EN) |
 
 Vòng-2 scoring (private 2000q): Accuracy 80đ · Time 10đ · Ý tưởng 10đ. The shipped run is
 Gemma-4-26B-A4B QAT-Q4_0, self-consistency CoT (k=1, 2048 tokens) + safety-refusal +
-constrained-repair + bulletproof contract-repair. Leaderboard band 88.55. 211 unit tests green.
+constrained-repair + bulletproof contract-repair. Public-463 leaderboard **88.34** (clean
+v0.6.0 rebuild; the prior 88.55 is the same path within ±1-question build noise). 227 unit
+tests green. (Pre-final hardening TODO: build llama-cpp-python with `GGML_NATIVE=OFF` so the
+image cannot SIGILL on an old-CPU judge machine; MTP/local_server deferred — chat-template
+divergence from the in-process path not yet at accuracy parity.)
 
 ## Required Runtime Contract
 
