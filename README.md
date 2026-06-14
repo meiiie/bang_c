@@ -75,9 +75,10 @@ không API key, không phụ thuộc dịch vụ ngoài).
 
 ### Tài liệu thuyết minh phương pháp (chấm điểm Ý tưởng)
 
-- [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) — **Tiếng Việt** (bản được chấm)
+- [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) — **Tiếng Việt** (bản chi tiết)
 - [`docs/method-writeup.md`](docs/method-writeup.md) — English
-- [`docs/Neko-Core-Thuyet-minh-phuong-phap.pptx`](docs/Neko-Core-Thuyet-minh-phuong-phap.pptx) — bản trình bày
+
+> Bản trình bày **PPTX** được nộp riêng theo kênh của Ban Tổ chức.
 
 ---
 
