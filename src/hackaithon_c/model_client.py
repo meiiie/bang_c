@@ -56,6 +56,7 @@ def build_chat_client(
                 default_max_retries=config.max_retries,
                 default_retry_base_delay_seconds=config.retry_base_delay_seconds,
                 default_retry_max_delay_seconds=config.retry_max_delay_seconds,
+                default_api_key=config.api_key,
             )
         )
     if selected_provider == "local_server":

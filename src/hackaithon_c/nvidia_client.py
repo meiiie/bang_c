@@ -35,14 +35,24 @@ class NvidiaConfig:
         default_max_retries: int = 6,
         default_retry_base_delay_seconds: float = 1.5,
         default_retry_max_delay_seconds: float = 30.0,
+        default_api_key: str = "",
     ) -> "NvidiaConfig":
-        # Provider-neutral key first (the OpenAI-compatible client now also serves the
-        # FPT AI Marketplace dev profile); NVIDIA_API_KEY kept as a back-compat alias.
+        # Key precedence: env (HACKC_API_KEY, then the NVIDIA_API_KEY back-compat alias)
+        # wins, then `default_api_key` (from ~/.neko-core/config.json's "api_key"). The
+        # provider-neutral name is first because the OpenAI-compatible client also serves
+        # other dev profiles (e.g. FPT AI Marketplace).
         api_key = (
-            os.environ.get("HACKC_API_KEY") or os.environ.get("NVIDIA_API_KEY") or ""
+            os.environ.get("HACKC_API_KEY")
+            or os.environ.get("NVIDIA_API_KEY")
+            or default_api_key
+            or ""
         ).strip()
         if not api_key:
-            raise RuntimeError("HACKC_API_KEY (or NVIDIA_API_KEY) is required unless --dry-run is used")
+            raise RuntimeError(
+                "No API key found. Set HACKC_API_KEY (or NVIDIA_API_KEY), or add "
+                '"api_key" under "runtime" in ~/.neko-core/config.json '
+                "(run `neko --init-user`). Not needed for local providers or --dry-run."
+            )
         return cls(
             api_key=api_key,
             base_url=os.environ.get("NVIDIA_BASE_URL", default_base_url).rstrip("/"),

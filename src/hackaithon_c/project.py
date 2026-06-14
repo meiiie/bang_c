@@ -46,6 +46,55 @@ def init_project(root: Path, *, force: bool = False) -> ProjectInitResult:
     )
 
 
+USER_CONFIG_TEMPLATE = {
+    "_comment": (
+        "Neko Core user config (like ~/.claude.json). Put your API key + chosen provider "
+        "here to reuse Neko Core as an Agentic CLI WITHOUT a local model. Never commit "
+        "this file. Env vars HACKC_API_KEY / NVIDIA_API_KEY override these values."
+    ),
+    "runtime": {
+        "active_profile": "nvidia-gemma31b-api",
+        "api_key": "",
+        "_hint": (
+            "Paste your key in api_key (or set HACKC_API_KEY). Switch provider via "
+            "active_profile (e.g. fpt-gemma-api); list options with `neko --profiles`."
+        ),
+    },
+}
+
+
+def init_user_config(*, force: bool = False) -> ProjectInitResult:
+    """Scaffold the user-level config at ``~/.neko-core/config.json`` — the claude.json-
+    style home file that holds your API key + chosen provider. Only the keys you set
+    override the baked default (it is merged on top)."""
+    target_dir = Path.home() / LOCAL_CONFIG_DIR
+    target_path = target_dir / LOCAL_CONFIG_NAME
+
+    if target_path.exists() and not force:
+        return ProjectInitResult(
+            config_path=target_path,
+            created=False,
+            message=(
+                f"Existing user config kept: {target_path} "
+                "(use --force to overwrite)"
+            ),
+        )
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(
+        json.dumps(USER_CONFIG_TEMPLATE, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return ProjectInitResult(
+        config_path=target_path,
+        created=True,
+        message=(
+            f"User config ready: {target_path}\n"
+            "Edit \"api_key\" (and \"active_profile\" if needed), then run `neko --doctor`."
+        ),
+    )
+
+
 def _validate_json_file(path: Path) -> None:
     json.loads(path.read_text(encoding="utf-8"))
 

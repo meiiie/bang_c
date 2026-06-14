@@ -74,6 +74,15 @@ class HarnessConfig:
         return str(self.runtime.get("api_model", self.default_model))
 
     @property
+    def api_key(self) -> str:
+        # An API key MAY live in a user-level config (`~/.neko-core/config.json`) so
+        # Neko Core can be reused as an Agentic CLI on an API provider without env-var
+        # juggling and WITHOUT downloading a local model. Env vars still win
+        # (HACKC_API_KEY / NVIDIA_API_KEY) — see NvidiaConfig.from_env. NEVER put a key
+        # in the tracked configs/default.json; keep it in the gitignored .neko-core file.
+        return str(self.runtime.get("api_key", "")).strip()
+
+    @property
     def base_url(self) -> str:
         return str(self.runtime["base_url"])
 
@@ -314,16 +323,23 @@ class HarnessConfig:
 
 
 def load_config(path: str | Path | None = None, *, profile: str | None = None) -> HarnessConfig:
-    config_path = Path(path) if path else _default_config_path()
-    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    if path is not None:
+        # Explicit --config: load exactly that file, no layering. The contest image and
+        # CI rely on this for a single deterministic source of truth.
+        config_path = Path(path)
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+    else:
+        # Layered: baked default  <-  user (~/.neko-core/config.json)  <-  project
+        # (./.neko-core/config.json). Overlays may be PARTIAL — set only what you change.
+        config_path, raw = _layered_config()
     active_profile = _selected_profile(raw, profile)
     _validate_config(raw, config_path, active_profile)
     return HarnessConfig(raw=raw, path=config_path, profile=active_profile)
 
 
-def _default_config_path() -> Path:
+def _base_config_path() -> Path:
+    """The full baked default that the optional overlays merge on top of."""
     candidates = (
-        Path.cwd() / LOCAL_CONFIG_DIR / LOCAL_CONFIG_NAME,
         Path.cwd() / "configs" / DEFAULT_CONFIG_NAME,
         Path(__file__).resolve().parents[2] / "configs" / DEFAULT_CONFIG_NAME,
         Path(__file__).resolve().parent / "resources" / DEFAULT_CONFIG_NAME,
@@ -334,6 +350,35 @@ def _default_config_path() -> Path:
     raise FileNotFoundError(
         "Default config not found. Run from the repository root or pass --config."
     )
+
+
+def config_overlay_paths() -> tuple[Path, ...]:
+    """Optional override files, lowest precedence first:
+
+    1. ``~/.neko-core/config.json``  — user-level (the ``claude.json``-style home config;
+       the natural place for your API key + chosen provider/profile).
+    2. ``./.neko-core/config.json``  — project-level (overrides the user file per repo).
+
+    Both are optional and may be partial JSON objects (only the keys you want to change)."""
+    return (
+        Path.home() / LOCAL_CONFIG_DIR / LOCAL_CONFIG_NAME,
+        Path.cwd() / LOCAL_CONFIG_DIR / LOCAL_CONFIG_NAME,
+    )
+
+
+def _layered_config() -> tuple[Path, dict[str, Any]]:
+    base_path = _base_config_path()
+    raw = json.loads(base_path.read_text(encoding="utf-8"))
+    effective_path = base_path
+    for overlay in config_overlay_paths():
+        if not overlay.exists():
+            continue
+        overlay_raw = json.loads(overlay.read_text(encoding="utf-8"))
+        if not isinstance(overlay_raw, dict):
+            raise ValueError(f"Config overlay {overlay} must be a JSON object")
+        raw = _merge_dicts(raw, overlay_raw)
+        effective_path = overlay
+    return effective_path, raw
 
 
 def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None) -> None:

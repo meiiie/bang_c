@@ -40,3 +40,6 @@ notes/*experiment-assessment*.json
 scripts/probe_decoder.py
 docs/*human-review*/
 output-probes/
+
+# Local config overlays (may hold an API key) — see config.py config_overlay_paths().
+.neko-core/

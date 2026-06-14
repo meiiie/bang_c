@@ -40,7 +40,7 @@ from .manifest import build_run_manifest, write_run_manifest
 from .model_client import build_challenger_client, build_chat_client, effective_provider
 from .model_inventory import classify_model, collect_model_inventory, render_model_inventory
 from .policy import evaluate_policy, render_policy_report
-from .project import init_project
+from .project import init_project, init_user_config
 from .review import render_trace_review, review_trace_dir
 from .review_tasks import (
     build_review_tasks,
@@ -74,6 +74,7 @@ def parse_args(argv: tuple[str, ...] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None, help="Optional local dev limit")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     parser.add_argument("--init", action="store_true", help="Create a project-local .neko-core/config.json")
+    parser.add_argument("--init-user", dest="init_user", action="store_true", help="Create a user-level ~/.neko-core/config.json (for API key + provider, like claude.json)")
     parser.add_argument("--force", action="store_true", help="Overwrite files for commands that support it")
     parser.add_argument("--doctor", action="store_true", help="Run environment and contract diagnostics")
     parser.add_argument("--capabilities", action="store_true", help="Print harness capability registry")
@@ -194,6 +195,11 @@ def main(argv: tuple[str, ...] | None = None) -> int:
 
     if args.init:
         result = init_project(Path.cwd(), force=args.force)
+        print(result.message)
+        return 0
+
+    if args.init_user:
+        result = init_user_config(force=args.force)
         print(result.message)
         return 0
 
