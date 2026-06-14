@@ -2,7 +2,7 @@
 
 ## Claude Code Notes
 
-- Read `docs/claude-code/README.md` before long or multi-step sessions.
+- Read `AGENTS.md` (canonical rules) and `notes/RESUME-HERE.md` (current project state) before long or multi-step sessions.
 - Preferred local model/effort for this project: Opus 4.8 with ultracode in
   interactive sessions; for `claude -p`, use `--model opus --effort max`.
 - Use plan mode for multi-file runtime, Docker, RunPod, model, or contest-submission work.

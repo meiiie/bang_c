@@ -24,11 +24,10 @@ nothing here ships in the Docker container.
 - [2026-06-10 — Architecture proposal](2026-06-10-architecture-proposal.md) —
   non-overfit, multilingual-robust, calibrated redesign + 4-phase roadmap + how
   Claude Code's harness informs it. **Ready to execute.**
-- [**EXECUTOR-PLAYBOOK.md**](EXECUTOR-PLAYBOOK.md) — the self-running loop manual the
-  implementing agent follows: loop protocol, phases P0–P4, guardrails, how to measure
-  without gold labels, Definition of Done. **Start here to implement.**
-- [fable5-handoff-prompt.md](fable5-handoff-prompt.md) — paste-ready kickoff prompt.
-- [worklog.md](worklog.md) — append-only execution journal (P0/P1-code/P2 done, gate status).
+- [worklog.md](worklog.md) — append-only execution journal.
+- [session-2026-06-12.md](session-2026-06-12.md) — consolidated session report (measured results).
+- [mtp-measured-2026-06-13.md](mtp-measured-2026-06-13.md) · [router-tir-measured-2026-06-13.md](router-tir-measured-2026-06-13.md) · [public-test-composition-2026-06-11.md](public-test-composition-2026-06-11.md) — key measured analyses.
+- [mtp-packaging-session-2026-06-14.md](mtp-packaging-session-2026-06-14.md) — image packaging session + lessons.
 - [lessons.md](lessons.md) — durable lessons.
 - `../docs/method-writeup.md` — contest method write-up (Ý tưởng 10 pts), DRAFT.
 
