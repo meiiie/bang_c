@@ -5,6 +5,7 @@
 > — cắm mô hình/API mới, thêm workflow/agent/tool, mở rộng pipeline — mà không phải đọc lại mã nguồn.
 
 Mục lục:
+0. [Cài đặt nhanh (Quickstart)](#0-cài-đặt-nhanh-quickstart)
 1. [Triết lý & tổng quan](#1-triết-lý--tổng-quan)
 2. [Kiến trúc pipeline (vòng lặp agentic)](#2-kiến-trúc-pipeline-vòng-lặp-agentic)
 3. [Hệ thống cấu hình (config-first)](#3-hệ-thống-cấu-hình-config-first)
@@ -15,6 +16,43 @@ Mục lục:
 8. [Mở rộng](#8-mở-rộng)
 9. [Quy trình phát triển & kiểm thử](#9-quy-trình-phát-triển--kiểm-thử)
 10. [Nguyên tắc thiết kế](#10-nguyên-tắc-thiết-kế)
+
+---
+
+## 0. Cài đặt nhanh (Quickstart)
+
+Cross-platform (Linux / macOS / Windows), cần **Python ≥ 3.11**:
+
+```bash
+git clone https://github.com/meiiie/bang_c.git
+cd bang_c
+
+# (1) Cài Neko Core — một lệnh. Sinh CLI: `neko` (alias `neko-core`, `bang-c`).
+pip install -e .
+
+# (2) Tuỳ chọn — thêm runtime mô hình GGUF local qua llama.cpp:
+pip install -e ".[local]"
+
+# Kiểm tra:
+neko --doctor
+```
+
+> **Portable wheel (chạy mọi CPU):** nếu cài bước (2) trên một máy sẽ phân phối đi nơi khác, build
+> `llama-cpp-python` từ nguồn với cờ portable để tránh SIGILL trên CPU lạ:
+> ```bash
+> CMAKE_ARGS="-DGGML_NATIVE=off" FORCE_CMAKE=1 \
+>   pip install --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
+> ```
+> Thêm `-DGGML_CUDA=on` nếu có GPU NVIDIA. Xem §10 "Portable wheel".
+
+Chạy thử (không cần model — chế độ dry-run):
+
+```bash
+neko --workflow quick-dry-run --input <bộ-câu-hỏi>.json --limit 5
+```
+
+Để chạy thật với mô hình local + xuất `pred.csv` theo hợp đồng `/data → /output`, xem
+[§4 Nhà cung cấp](#4-nhà-cung-cấp-mô-hình--thiết-lập-api) và [§6 Workflow](#6-workflow--chiến-lược-strategies).
 
 ---
 
