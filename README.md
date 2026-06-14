@@ -37,7 +37,7 @@ docker pull hacamy12345/neko-core:gemma26b-q4-portable-20260614
 
 # 2) Đặt đề thi vào ./data rồi chạy
 mkdir -p data output
-cp public_test.csv data/            # hoặc private_test.csv
+cp private_test.csv data/            # (hoặc public_test.csv)
 
 docker run --rm --gpus all \
   -v "$PWD/data:/data" \
@@ -46,7 +46,7 @@ docker run --rm --gpus all \
 # => ./output/pred.csv   (hai cột: qid,answer)
 ```
 
-Container tự động đọc `public_test.csv`/`private_test.csv` trong `/data`, chạy workflow mặc định
+Container tự động đọc `private_test.csv` (hoặc `public_test.csv`) trong `/data`, chạy workflow mặc định
 `self-consistency` (mô hình suy luận từng bước rồi trích ra chữ cái đáp án), và ghi `/output/pred.csv`.
 File `pred.csv` được **ghi TRƯỚC khi kiểm tra hợp đồng** và tự sửa cho khớp đúng các `qid` đầu vào,
 nên một câu lỗi không bao giờ làm hỏng (về 0) cả lần chạy. Toàn bộ chạy **offline** (không web,
@@ -62,7 +62,7 @@ không API key, không phụ thuộc dịch vụ ngoài).
 
 | Hạng mục | Giá trị |
 |---|---|
-| Đầu vào | `/data/public_test.csv` hoặc `/data/private_test.csv` |
+| Đầu vào | `/data/private_test.csv` (hoặc `/data/public_test.csv`) |
 | Đầu ra | `/output/pred.csv` |
 | Cột | `qid,answer` |
 | Giá trị `answer` | chữ cái phương án theo TỪNG dòng (A, B, C, D… tới J cho câu nhiều lựa chọn) |
