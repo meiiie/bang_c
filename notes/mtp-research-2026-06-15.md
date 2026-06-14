@@ -51,16 +51,34 @@ complicates the portable build + supply-chain. Decide vs a generic draft model o
 structured (code/math/reasoning) output. Our earlier measure was ~1.37× — consistent with a
 conservative draft setting; tuning `--draft-max`/`--draft-block-size` should lift it.
 
+## 2b. ⚠️ COMPLIANCE — the MTP assistant is a GRAY AREA for Bảng C rules
+
+Bảng C restricts LLMs to the **Gemma-4 / Qwen3.5≤9B** series. The `gemma-4-26B-A4B-it-assistant`
+MTP head is a **separate file**, with a **distinct architecture** (`gemma4_assistant`), that needs a
+**non-upstream fork** (atomic-llama-cpp-turboquant), and the GGUF is a **third-party (AtomicChat)
+conversion**, not Google's official file.
+
+- **Substance = compliant:** it's Gemma-4's OWN MTP head, and speculative decoding is lossless (the
+  Gemma-4 target verifies every token → the answer is exactly Gemma-4's; the draft only accelerates,
+  like KV-cache/flash-attn/quant — an inference technique, not a different answering model).
+- **Form = risky:** a strict judge glancing at "is this Gemma-4?" sees a 2nd model file + odd arch +
+  a forked runtime → could flag it / demand justification. Provenance (3rd-party convert) adds doubt.
+
+**Verdict:** Time is 10pt; Accuracy is 80pt + disqualification risk. NOT worth shipping the
+assistant+fork. Either (a) get BTC's explicit OK that spec-decoding draft/MTP-heads count as "using
+Gemma-4", or (b) use a **smaller genuine Gemma-4 model** as the draft on **upstream** llama.cpp (no
+fork, no exotic arch → unambiguously Gemma-4, lower acceptance). The shipped pure Gemma-4-26B-A4B
+portable image stays the safe submission.
+
 ## 3. Resume order (do NOT skip step 1)
 
 1. **Accuracy parity first** — switch `local_server` to `/completion` + exact Gemma prompt; prove
    fallback ≈ in-process (~1.5%) and answers match. This is the actual fix; MTP is irrelevant until
    parity holds.
-2. **Then add MTP for Time** — choose the path:
-   - (a) atomic fork + `gemma-4-26B-A4B-it-assistant` MTP head (best speed, lossless, but fork in the
-     image), or
-   - (b) a generic small Gemma draft on upstream llama.cpp (simpler/portable, lower acceptance).
-   Measure decode speed + verify lossless (answers identical to step-1 baseline) on the dev set.
+2. **Then add MTP for Time** — but mind §2b (compliance). Preferred path = **(b) a smaller genuine
+   Gemma-4 draft on UPSTREAM llama.cpp** (no fork, unambiguously Gemma-4). Only use the
+   `gemma-4-26B-A4B-it-assistant` MTP head + atomic fork (best speed) **if BTC confirms** it counts
+   as "using Gemma-4". Measure decode speed + verify lossless (answers identical to step-1 baseline).
 3. Gate on owner before any GPU spend / image rebuild. Time is only 10pt vs Accuracy 80pt — keep the
    shipped portable image as the safe artifact; MTP is a Time upgrade, not a prerequisite.
 
