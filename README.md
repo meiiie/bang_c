@@ -114,6 +114,9 @@ See [`docs/runpod-operations.md`](docs/runpod-operations.md) and [`docs/release-
 
 ### Architecture & docs
 
+- [`docs/AGENTIC-CLI-DEVELOPER-GUIDE.md`](docs/AGENTIC-CLI-DEVELOPER-GUIDE.md) — **deep guide** for
+  developing Neko Core as a reusable AI Agentic CLI (providers/API setup, env vars, workflows,
+  agent/tool registries, how to extend). Read this to build on Neko Core beyond the contest.
 - [`docs/harness-architecture.md`](docs/harness-architecture.md) — layered pipeline + contracts
 - [`docs/evaluation-rubric.md`](docs/evaluation-rubric.md) — scoring model
 - [`docs/local-gemma-runtime.md`](docs/local-gemma-runtime.md) — local Gemma runtime
