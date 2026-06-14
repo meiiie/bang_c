@@ -5,8 +5,9 @@
 Phạm Thị Thu Thảo (KTN63ĐH), Nghiêm Thị Mỹ Linh (KPM63ĐH).
 
 Trạng thái: Leaderboard đã xác nhận **88.55** (CoT self‑consistency + đòn bẩy an‑toàn).
-Image nộp v0.6.0 (`gemma26b-q4-clean-20260614`, dựng sạch lại từ commit nộp) cho **88.34** trên
-public‑463 — cùng đường, lệch ±1 câu do nhiễu số học giữa các bản build llama.cpp; trần thật ~88.5.
+Image nộp v0.6.0 là `gemma26b-q4-portable-20260614` (runtime llama.cpp build `GGML_NATIVE=off` →
+**chạy mọi CPU**; đầu ra giống hệt bản tiền thân `gemma26b-q4-clean-20260614` đã đạt **88.34** trên
+public‑463). Cùng đường, lệch ±1 câu do nhiễu số học giữa các bản build llama.cpp; trần thật ~88.5.
 Cập nhật: 2026‑06‑14
 
 > Mọi con số trong tài liệu là **đo thật**: trên leaderboard chính thức, hoặc trên mô hình thi
