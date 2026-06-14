@@ -33,7 +33,7 @@ trên mọi CPU** (Intel/AMD, có hay không AVX-512) và **hoàn toàn offline*
 
 ```bash
 # 1) Kéo image (mô hình đã nướng sẵn bên trong; ~23.5GB)
-docker pull hacamy12345/neko-core:gemma26b-q4-clean-20260614
+docker pull hacamy12345/neko-core:gemma26b-q4-portable-20260614
 
 # 2) Đặt đề thi vào ./data rồi chạy
 mkdir -p data output
@@ -42,7 +42,7 @@ cp public_test.csv data/            # hoặc private_test.csv
 docker run --rm --gpus all \
   -v "$PWD/data:/data" \
   -v "$PWD/output:/output" \
-  hacamy12345/neko-core:gemma26b-q4-clean-20260614
+  hacamy12345/neko-core:gemma26b-q4-portable-20260614
 # => ./output/pred.csv   (hai cột: qid,answer)
 ```
 
@@ -52,8 +52,11 @@ File `pred.csv` được **ghi TRƯỚC khi kiểm tra hợp đồng** và tự 
 nên một câu lỗi không bao giờ làm hỏng (về 0) cả lần chạy. Toàn bộ chạy **offline** (không web,
 không API key, không phụ thuộc dịch vụ ngoài).
 
-> `gemma26b-q4-clean-20260614` là image bản **v0.6.0**, **dựng lại sạch từ chính commit này**
-> (không có đáp án public-test gắn cứng trong bất kỳ layer nào). Điểm leaderboard public-463: **88.34**.
+> `gemma26b-q4-portable-20260614` là image bản **v0.6.0**, **dựng lại sạch từ chính commit này**
+> (không có đáp án public-test gắn cứng trong bất kỳ layer nào). Runtime `llama-cpp-python` được
+> build từ nguồn với `GGML_NATIVE=off` nên **chạy trên mọi CPU**. Đầu ra **giống hệt** bản tiền thân
+> `gemma26b-q4-clean-20260614` đã đạt **88.34** trên leaderboard public-463 (suy luận chạy trên GPU,
+> giải mã tham lam → kết quả không đổi theo CPU). Digest: `sha256:5d264f5de625080c…b989b23a6`.
 
 ### Hợp đồng đầu vào / đầu ra
 

@@ -11,7 +11,7 @@ Vòng-2 scoring is due 26/6/2026). Missing the deadline = automatic disqualifica
 
 | # | Deliverable (rule wording) | Where / status |
 |---|---|---|
-| 1 | **Docker Container** on Docker Hub — reads `/data/*_test.csv`, writes `/output/pred.csv` (`qid,answer`) | `hacamy12345/neko-core:gemma26b-q4-clean-20260614` (v0.6.0, clean rebuild, no hard-codes; digest sha256:73629f54…); self-contained, offline |
+| 1 | **Docker Container** on Docker Hub — reads `/data/*_test.csv`, writes `/output/pred.csv` (`qid,answer`) | `hacamy12345/neko-core:gemma26b-q4-portable-20260614` (v0.6.0, clean rebuild, no hard-codes; `llama-cpp-python` source-built `GGML_NATIVE=off` → runs on any CPU; digest sha256:5d264f5d…); self-contained, offline. Outputs identical to the prior `…-clean-20260614` (88.34 leaderboard). |
 | 2 | **GitHub** repo with code + how to reproduce the result in the container | this repo; reproduce steps in `README.md` (top "Reproduce" section) + below |
 | 3 | **Tài liệu thuyết minh phương pháp** (free format; best shows creativity + effectiveness of the optimization strategy) | `docs/method-writeup-vi.md` (VI, the scored Idea doc) + `docs/method-writeup.md` (EN) |
 
