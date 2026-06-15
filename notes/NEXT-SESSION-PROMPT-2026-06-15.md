@@ -66,6 +66,14 @@ CPU gate separates the ~1-3% legal/admin slice → always-on/loose-gate RAG nets
   A/B vs the 88.34 baseline** with a strict **no-regression gate on the 431 currently-agreed answers**.
   Upside ~+0.5–1.5pp; risk it distracts the other ~457 questions (every prior always-on lever hurt
   unexpectedly). Pursue only with owner GPU sign-off. Evidence: `notes/rag-oracle-dev-2026-06-15.md`.
+  - **A-adjacent research thread — "current/real-time law RAG"** (`notes/realtime-law-rag-research-2026-06-15.md`):
+    REAL-TIME at inference is IMPOSSIBLE in the offline container — only "current-as-of-build-time"
+    (rebuild a baked corpus before each submission). The prior RAG test used a STALE corpus; a 2026
+    in-force snapshot (`undertheseanlp/UTS_VLC`, validated vs vbpl.vn) WOULD contain the 2025 reform
+    facts — BUT the **gating problem still blocks contest use** (a fresher corpus is necessary-not-
+    sufficient). Only untested combo = fresh corpus + a PRECISE gate; dev-validate a better gate
+    offline BEFORE any GPU (low-probability per prior evidence). Real real-time law belongs to the
+    agentic-CLI path (network allowed) — see §7.
 - **B. MTP for the Time score (clean path only)**: FIRST fix `local_server` `/completion` exact-Gemma
   -template parity, THEN use a SMALL upstream Gemma-4 draft. Do NOT ship the `gemma-4-26B-A4B-it
   -assistant` MTP head — it needs the atomic-llama-cpp fork + arch `gemma4_assistant` = compliance
@@ -85,6 +93,11 @@ CPU gate separates the ~1-3% legal/admin slice → always-on/loose-gate RAG nets
 - **OKF** (Google Open Knowledge Format, v0.1 experimental) = future knowledge-layer option for the
   agentic-CLI reuse story; **zero contest benefit** (authoring format, not a technique). Do NOT adopt
   for the contest. `notes/okf-assessment-2026-06-15.md`.
+- **Real-time / current-law RAG** = legitimate ONLY for the agentic CLI (network allowed at inference):
+  a retrieval TOOL (web search / vbpl.vn) or a scheduled OKF/corpus rebuild with per-chunk
+  `last_modified` metadata. Impossible/ineffective for the offline contest (see §5 A-adjacent thread).
+  `notes/realtime-law-rag-research-2026-06-15.md`. The Wiii parent already has a web-search stack
+  (SearXNG+Crawl4AI+Jina) that is exactly this pattern.
 - Neko Core as a reusable Agentic CLI: `docs/AGENTIC-CLI-DEVELOPER-GUIDE.md`.
 
 ## 8. First actions for the new session
