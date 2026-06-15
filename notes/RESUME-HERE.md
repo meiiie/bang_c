@@ -1,28 +1,42 @@
-# ▶ RESUME HERE — next-session entry point (updated 2026-06-12, post GPU Q4 measurement)
+# ▶ RESUME HERE — next-session entry point (updated 2026-06-15, portable submission confirmed 88.34)
 
 Read this FIRST. It is self-contained: project identity, rules, current state, and how to
 continue without losing context.
 
 ---
 
-## ✅ FINALIZED (2026-06-14 evening) — submission shipped; read this first
+## ✅ FINALIZED (2026-06-15) — PORTABLE submission shipped + confirmed; read this first
 
-- **Vòng-2 image SHIPPED + GitHub finalized.** Docker Hub
-  `hacamy12345/neko-core:gemma26b-q4-clean-20260614` (clean v0.6.0 rebuild, self-consistency,
-  public-463 **88.34**). GitHub `main` at the v0.6.0 commit; README "Reproduce" → that tag.
-  All 3 BTC deliverables in place (image + repo/repro + method-writeup).
-- **MTP SHELVED.** It IS lossless, but the harness `local_server` (llama-server `/chat/completions`)
-  path can't reach in-process accuracy parity cheaply: the merge-system fix cut fallback 75%→52%
-  with only 73% answer-agreement — not enough. Submission uses the proven in-process path; Time is
-  still fine (~1.6h/2000q). Reopen MTP only if a raw-`/completion` exact-template rebuild is worth a
-  GPU session for the ~1.37× Time edge.
-- **Remaining before the 26/6 final Docker:** (1) rebuild the image with `GGML_NATIVE=OFF` (portable
-  llama-cpp wheel → cannot SIGILL on an old-CPU judge machine); (2) optional method-writeup polish.
-  Both need a GPU session (paused; RunPod balance ~$7.7, 0 pods running).
-- Removed the rejected-overfit research scratch (CODEX-ACCURACY mission, codex-webmax probes, r-notes,
-  analysis-output) from the repo. The block below is superseded.
+- **Vòng-2 PORTABLE image SHIPPED + CONFIRMED 88.34.** Docker Hub
+  `hacamy12345/neko-core:gemma26b-q4-portable-20260614` (digest `sha256:5d264f5d…`, 24.5GB) — same as
+  the clean image but `llama-cpp-python` source-built `GGML_NATIVE=off` → **runs on ANY x86-64 CPU**
+  (no SIGILL on AMD/old-Intel without AVX-512). Ran the full 463 on the portable runtime (fresh pod,
+  RTX 3090 / AMD Ryzen 5800X no-AVX-512), pred.csv 463 rows, **0 fallbacks**, owner submitted →
+  **88.34**. Locked submission. `latest`/`v0.6.0` retagged to this digest; Docker Hub Overview set.
+  GitHub `main` synced; README "Reproduce" → portable tag (private_test.csv prioritized). All 3 BTC
+  deliverables in place (image + repo/repro + method-writeup; PPTX submitted separately by the team).
+  Predecessor `gemma26b-q4-clean-20260614` (23.5GB) still on Hub. GGML_NATIVE=OFF rebuild = DONE.
+- **2000-private robustness reviewed (code-level) → bulletproof:** `solve_problem` try/except
+  (fail_fast=false) → one bad question = fallback, never crashes; per-question independent (KV bounded
+  n_ctx=8192, model loaded once → no context overflow over 2000); write-before-validate +
+  contract-repair → pred.csv always covers the input qids; retry×2 + checkpoint + auto-resume. Loader
+  validated against BTC's REAL file (`public-test_1780368312.json` = list 463 {qid,question,choices},
+  parses 463/463, byte-identical to the 463-run input). No rebuild needed.
+- **Accuracy levers — ALL measured DEAD (do NOT re-spend):** router/TIR (−9.29pp), maj@k (wash),
+  quant Q6/Q8 (worse), 31B (Time), few-shot/tiered/Qwen-standalone, and **targeted RAG** — re-tested
+  dev-side 2026-06-15: retrieval WORKS (current-VN-2025 corpus surfaces the right fact #1) but NO
+  cheap gate separates the ~1-3% slice (keyword gate misses/over-fires; score-gate fires 34%) →
+  RAG-gate path dev-disproven (`notes/rag-oracle-dev-2026-06-15.md`). Gap is knowledge-bound;
+  88.34/88.55 ≈ honest offline ceiling.
+- **MTP SHELVED** (Time-only). Lossless, but `local_server` chat path can't reach in-process parity
+  cheaply. Research + COMPLIANCE note `notes/mtp-research-2026-06-15.md`: the
+  `gemma-4-26B-A4B-it-assistant` MTP head is a GRAY-AREA (arch `gemma4_assistant` + atomic-llama-cpp
+  fork) → prefer a smaller upstream Gemma-4 draft or get BTC's OK; fix `/completion` parity first.
+- **Open candidate (only one left):** gate-free SHORT "current-VN-2025" prompt-context line for all
+  questions — can't be dev-validated offline, needs ONE paired GPU A/B vs the 88.34 baseline with a
+  no-regression gate. RunPod balance ~$6.7, 0 pods running.
 
-## ▶▶ NEXT SESSION — START HERE (2026-06-14). Accuracy CLOSED; focus = ship the MTP Docker.
+## ▶▶ (SUPERSEDED — kept for history) NEXT SESSION 2026-06-14: ship the MTP Docker.
 
 ### State (honest)
 - **Contestant = clean Gemma-4-26B-A4B Q4 `self_consistency` ≈ 88.55** (overfit removed, locked,

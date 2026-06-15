@@ -14,12 +14,22 @@ Reasoning tokens are *where accuracy comes from* (can't be removed), but the *le
 tunable: prompt for "reason in 2–3 short steps, then ANSWER:". Reduces avg tokens/time while
 keeping the benefit. There is a floor (calculation needs the steps). Tune against accuracy.
 
-## 3. Web search / retrieval — RULED OUT (hard constraint)
+## 3. Web search / retrieval — partially CORRECTED (see update below)
 The contest container is **offline & self-contained** (reads /data, writes /output/pred.csv,
-no network). **Web search is impossible in the runtime**, regardless of whether some
-questions would benefit. Knowledge gaps must be answered from the model's parametric
-knowledge + reasoning. Rerank/embedding (BGE-m3/Qwen-Rerank) also add nothing for closed-book
-self-contained MCQ (no corpus to retrieve from) — see worklog discussion. Do NOT add them.
+no network). **Web search is impossible in the runtime** — this part is permanent and correct;
+knowledge gaps from *live* web data cannot be answered.
+
+> **CORRECTION (2026-06-15):** the original claim "no corpus to retrieve from → rerank/embedding
+> add nothing" is OUTDATED. A packaged OFFLINE corpus *was* later built (`data/rag/legal_corpus.jsonl`
+> from VN statutes + `scripts/build_rag_corpus.py`), and a BM25 retriever + `rag` workflow + router
+> ship in the code. Offline RAG over a baked corpus is therefore *possible* (no network needed).
+> The real verdict is more nuanced: **retrieval WORKS but GATING fails** — no cheap (CPU-only) gate
+> cleanly selects the ~1-3% legal/admin slice that benefits, so always-on/loosely-gated RAG injects
+> noise and nets flat/negative. Measured-dead as a *gated* lever, NOT because "no corpus exists."
+> Full evidence: `notes/rag-oracle-dev-2026-06-15.md`, `notes/router-tir-measured-2026-06-13.md`,
+> `notes/2026-06-13-guardrail-fix-and-accuracy-research-frame.md` (§Phase 4). BGE-m3/Qwen-Rerank are
+> allowed by the rules but unused (BM25 was sufficient for the dev test); do not add them without a
+> measured win.
 
 ## 4. Sensitive / culturally-specific robustness — TEST PLANNED
 Vietnamese-authored civics/history/geography MCQ expect the **Vietnamese-official answer**
