@@ -325,6 +325,15 @@ một strategy mới, thêm nhánh trong `solver.py` và (nếu cần) một pro
 **Thêm tool/agent**: khai báo trong `tool_registry.py` / `agents.py` với hợp đồng đầy đủ (phase,
 quyền, input/output, guardrail) để `--tools`/`--agents` và `--policy` nhìn thấy + kiểm soát.
 
+**Lớp tri thức — tương thích OKF (hướng tương lai)**: corpus RAG hiện dùng JSONL `{id, title, text}`
+nạp bởi BM25 retriever (`retrieval.py`). Google **Open Knowledge Format (OKF, 6/2026)** — thư mục
+file markdown + YAML frontmatter, *vendor-neutral, offline, "chỉ là file"* — là một lựa chọn tự nhiên
+để làm **lớp tri thức tái dùng** cho Neko Core ngoài cuộc thi: một adapter đọc body markdown của các
+OKF bundle (frontmatter `title`/`tags` → metadata, body → `text`) là đủ cho retriever hiện tại, không
+cần SDK. Phù hợp triết lý offline-first của harness. *Lưu ý:* OKF mới v0.1 (thử nghiệm) và **không
+giúp điểm cuộc thi** (đây là format lưu/chia-sẻ tri thức, không phải kỹ thuật suy luận) — chỉ cân
+nhắc cho bản tái dùng về sau, khi OKF đạt ≥v1.0. Đánh giá chi tiết: `notes/okf-assessment-2026-06-15.md`.
+
 ## 9. Quy trình phát triển & kiểm thử
 
 ```powershell
