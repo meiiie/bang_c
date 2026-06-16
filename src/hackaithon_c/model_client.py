@@ -6,6 +6,7 @@ from typing import Protocol
 
 from .config import HarnessConfig
 from .local_client import LocalLlamaChatClient, LocalLlamaConfig
+from .local_server_client import LocalServerChatClient, LocalServerConfig
 from .nvidia_client import NvidiaChatClient, NvidiaConfig
 
 
@@ -60,23 +61,19 @@ def build_chat_client(
             )
         )
     if selected_provider == "local_server":
-        # An in-container llama.cpp `llama-server` speaking the OpenAI-compatible
-        # protocol on localhost. Same offline/self-contained guarantee as
-        # local_llamacpp, but the server's continuous batching lets the harness
-        # solve several questions concurrently (--workers). No API key involved;
-        # llama-server ignores Authorization.
-        return NvidiaChatClient(
-            NvidiaConfig(
-                api_key="local",
+        # An in-container llama.cpp `llama-server` (the MTP fast path). We drive its RAW
+        # `/completion` endpoint with the exact official Gemma-4 prompt we build ourselves,
+        # NOT `/v1/chat/completions` — the server's own chat template drifted from the proven
+        # in-process formatting and collapsed answers (~75% fallback). Same offline/self-
+        # contained guarantee as local_llamacpp; no API key (llama-server ignores auth).
+        return LocalServerChatClient(
+            LocalServerConfig(
                 base_url=os.environ.get("HACKC_LOCAL_SERVER_URL", config.local_server_url).rstrip("/"),
                 model=config.default_model,
                 timeout_seconds=config.timeout_seconds,
                 max_retries=config.max_retries,
                 retry_base_delay_seconds=config.retry_base_delay_seconds,
                 retry_max_delay_seconds=config.retry_max_delay_seconds,
-                # Gemma has no system role; merge it into the user turn so llama-server
-                # keeps the reasoning instructions (matches the in-process path).
-                merge_system_into_user=True,
             )
         )
     raise ValueError(

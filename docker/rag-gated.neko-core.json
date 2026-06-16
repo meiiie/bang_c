@@ -1,0 +1,11 @@
+{
+  "runtime": {
+    "rag_gate": "reranker",
+    "rag_reranker_backend": "llamacpp",
+    "rag_reranker_model": "/models/bge-reranker.gguf",
+    "rag_reranker_threshold": 0.85,
+    "rag_reranker_n_ctx": 2048,
+    "rag_reranker_n_gpu_layers": 0,
+    "rag_corpus_path": "/app/data/rag/current_vn_2025.jsonl"
+  }
+}

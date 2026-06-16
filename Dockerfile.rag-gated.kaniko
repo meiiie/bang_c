@@ -1,0 +1,66 @@
+# Kaniko-compatible final contest image — the clean +RAG variant.
+#
+# Same proven portable runtime as Dockerfile.gemma-local.kaniko (in-process Gemma-26B-A4B Q4 on a
+# GGML_NATIVE=off llama-cpp-python wheel), PLUS a packaged BGE-reranker + offline 2025 corpus and the
+# `rag-gated` workflow: self-consistency on every item, with targeted RAG ONLY on the dense-gated
+# current-fact slice (cross-encoder relevance >= 0.85, reading-guarded). Non-gated items are identical
+# to the shipped self-consistency path; the gate fires on the genuine VN-2025 admin-reform slice
+# (validated: 6/463 at thr=0.85, 0 false-positives) and the reranker runs on CPU (no GPU contention).
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+ARG MODEL_REPO=google/gemma-4-26B-A4B-it-qat-q4_0-gguf
+ARG MODEL_FILE=gemma-4-26B_q4_0-it.gguf
+ARG RERANKER_REPO=gpustack/bge-reranker-v2-m3-GGUF
+ARG RERANKER_FILE=bge-reranker-v2-m3-Q8_0.gguf
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
+    HACKC_DATA_DIR=/data \
+    HACKC_OUTPUT_DIR=/output \
+    HACKC_PROVIDER=local_llamacpp \
+    HACKC_LOCAL_MODEL_ID=google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 \
+    HACKC_LOCAL_MODEL_PATH=/models/gemma-4-26B_q4_0-it.gguf \
+    HACKC_LLAMACPP_N_CTX=8192 \
+    HACKC_LLAMACPP_N_GPU_LAYERS=-1 \
+    CUDACXX=/usr/local/cuda/bin/nvcc \
+    PATH=/usr/local/cuda/bin:${PATH}
+
+WORKDIR /app
+
+COPY requirements.txt requirements-local.txt ./
+# Portable runtime: source-build llama-cpp-python with CUDA + GGML_NATIVE=off so the image runs on
+# ANY judge CPU. The prebuilt cu124 wheel SIGILLs during INFERENCE on older CPUs (verified on RunPod
+# community hosts) -> the container would crash and write no pred.csv. This same wheel serves BOTH
+# Gemma (GPU) and the BGE-reranker (CPU). GGML_NATIVE=off emits a portable binary with runtime CPU
+# feature dispatch. -j capped to avoid nvcc OOM on small builders.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cmake build-essential git \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
+    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off" FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=8 \
+       python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
+
+# Gemma-26B-A4B Q4 (the answering model, GPU) + the BGE reranker GGUF (the dense gate, CPU).
+RUN MODEL_REPO="${MODEL_REPO}" MODEL_FILE="${MODEL_FILE}" RERANKER_REPO="${RERANKER_REPO}" RERANKER_FILE="${RERANKER_FILE}" python -c \
+    "import os; from pathlib import Path; from huggingface_hub import hf_hub_download; d=Path('/models'); d.mkdir(parents=True, exist_ok=True); \
+m=hf_hub_download(repo_id=os.environ['MODEL_REPO'], filename=os.environ['MODEL_FILE'], local_dir=d); assert (d/os.environ['MODEL_FILE']).exists(); \
+r=hf_hub_download(repo_id=os.environ['RERANKER_REPO'], filename=os.environ['RERANKER_FILE'], local_dir=d); \
+import shutil; shutil.copy(r, d/'bge-reranker.gguf'); print('models:', m, r)" \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}" && test -s /models/bge-reranker.gguf
+
+COPY src ./src
+COPY configs ./configs
+COPY data/rag/current_vn_2025.jsonl ./data/rag/current_vn_2025.jsonl
+COPY docker/rag-gated.neko-core.json ./.neko-core/config.json
+COPY docker/neko-entrypoint.sh /usr/local/bin/neko-entrypoint
+COPY README.md ./
+
+RUN mkdir -p /data /output \
+    && chmod +x /usr/local/bin/neko-entrypoint \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}" \
+    && test -s /app/data/rag/current_vn_2025.jsonl \
+    && python -m hackaithon_c.run --doctor
+
+ENTRYPOINT ["neko-entrypoint"]
+CMD ["--workflow", "rag-gated", "--data-dir", "/data", "--output-dir", "/output", "--run-dir", "/output/neko-run", "--auto-resume", "--checkpoint-every", "1"]

@@ -1,5 +1,54 @@
 # MTP research — resume plan (2026-06-15)
 
+## ⬆️ UPDATE / CORRECTION (2026-06-15, later) — read this first
+Verified against the official HF model card + llama.cpp upstream status. Corrects §2b below:
+- **The drafter is GOOGLE'S OFFICIAL model: `google/gemma-4-26B-A4B-it-assistant`** (0.4B, **same
+  262K vocab** as the 26B-A4B, "exact same quality" = lossless). It is NOT a 3rd-party model — the
+  `AtomicChat/...-GGUF` is merely a GGUF *conversion* of Google's official model. So the DRAFTER is
+  unambiguously **Gemma-4 Series → MODEL-compliant.** The earlier "gray / 3rd-party" framing was wrong.
+- **The fork is an INFERENCE ENGINE, not a model.** The contest rule restricts *models*
+  (Gemma-4 / Qwen / BGE-m3 / Qwen-Rerank), not the inference engine. Running official Gemma-4 models on
+  a llama.cpp fork does NOT violate the model rule; it is a build-complexity + a strict-judge
+  *perception* concern only, resolvable with a clear method writeup.
+- **CRUCIAL — there are TWO different MTP shapes; the one we use needs NO FORK:**
+  - ✅ **`--spec-type draft-mtp` + a draft-mtp GGUF** (`unsloth/...` → `mtp-gemma-4-26B-A4B-it.gguf`,
+    ~441M). This is supported in **UPSTREAM llama.cpp** (PR #23398, merged 2026-06-07) — **NO FORK.**
+    This is EXACTLY what `docker/neko-entrypoint.sh` + `scripts/gpu/run_mtp_server.sh` already run, and
+    what measured **1.37×** on 2026-06-13 (upstream commit 597b6672). The draft is a Gemma-4 MTP head
+    (derived from the official Gemma-4-26B-A4B) → Gemma-4 Series; upstream engine → minimal perception
+    risk. **This is the path for Cách 2.**
+  - ⚠️ `--spec-type mtp` + the `gemma4_assistant` head (AtomicChat GGUF) needs the `atomic-llama-cpp`
+    fork (upstream can't load the arch — #22735). Possibly faster, but forked engine. **NOT used.**
+  - (Transformers `assistant_model=` works fork-free but its 26B inference is slower than our llama.cpp
+    Q4 base → nets the whole run slower → defeats the Time purpose. Not used.)
+- **Net:** **Cách 2 = the no-fork upstream `draft-mtp` + unsloth draft (ALREADY integrated, 1.37×,
+  lossless, with a safe fallback to in-process if llama-server is unhealthy).** The ONE remaining
+  blocker is the §1 **parity bug** (the `local_server` provider posts to `/v1/chat/completions` →
+  server applies its own template → malformed Gemma prompt → 75% answer-fallback). FIX = make the
+  `local_server` client POST to the raw `/completion` endpoint with the EXACT in-process Gemma prompt.
+  No fork, no exotic arch — just the parity fix + a GPU re-validate + Docker wiring. Time is already
+  safe (~1.6 h/2000 q) so the edge is small, but the path is now clean (no fork).
+
+## ✅ PARITY FIX IMPLEMENTED (2026-06-15, offline, no GPU) — solved via Google's official docs
+The in-process path uses the GGUF-embedded template (config `local_chat_format=""`), NOT
+`format_gemma` (which DROPS system). The exact official Gemma-4 prompt (ai.google.dev/gemma/docs/core/
+prompt-structure): no system role → system merged into the user turn with a blank line:
+`<start_of_turn>user\n{system}\n\n{user}<end_of_turn>\n<start_of_turn>model\n` (server adds BOS, stop
+`<end_of_turn>`). New `src/hackaithon_c/local_server_client.py::LocalServerChatClient` builds that
+prompt and POSTs it to the RAW `/completion` endpoint (bypassing the server chat template), with the
+GBNF letter grammar + retry; `build_chat_client` now uses it for `local_server` instead of the
+OpenAI-chat client. 244/244 tests green; imports stay torch-free.
+- **GPU VERIFY PASSED (2026-06-15):** built llama-server (pinned ref 597b6672, upstream draft-mtp, NO
+  fork) + main Q4 + unsloth draft, ran the harness via the `local_server` MTP path on N=60 →
+  **fallbacks=0** (vs the old ~75% — the /completion parity fix WORKS), all 60 `gemma_self_consistency`,
+  **96.7% agreement (58/60) vs the locked 88.34 in-process pred** (the 2 diffs = self-consistency
+  sampling noise on borderline items). Wall 205s/60. Speed lever (~1.37×) already measured 2026-06-13.
+  Artifacts `Temp/pod_mtp/verify_out/`. → Parity is SOLVED + verified; the no-fork upstream MTP path is
+  shippable. Remaining = build + push the MTP Docker image (owner-gated: Docker push + leaderboard).
+
+---
+
+
 Web research into how llama.cpp + the community handle (a) the **chat-template / accuracy blocker**
 and (b) **MTP speculative decoding** for Gemma-4. Pairs with the verdict in
 `mtp-packaging-session-2026-06-14.md`: *MTP is lossless; the accuracy loss was the `local_server`

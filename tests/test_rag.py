@@ -354,6 +354,227 @@ class RouterTests(unittest.TestCase):
             self.assertEqual(pred.strategy, "gemma_reading")
 
 
+class RagGatedTests(unittest.TestCase):
+    """The shippable ``rag_gated`` strategy: self-consistency everywhere EXCEPT the
+    reranker-gated current-fact slice. The hard contrast with ``router`` pinned here is
+    that ``rag_gated`` does NOT reroute quant->TIR or passage->reading, so every non-gated
+    item is byte-identical to the locked ``self_consistency`` path — the clean +RAG ship."""
+
+    CALC = Problem(
+        qid="q_calc",
+        question="Một cửa hàng có 3 thùng, mỗi thùng chứa 12 hộp. Hỏi tổng cộng có bao nhiêu hộp?",
+        choices=["36", "24", "15", "48"],
+    )
+
+    def _fire(self, relevance):
+        def fake(model_ref, query, documents, *, backend="llamacpp", **kwargs):
+            return relevance
+        return fake
+
+    def test_rag_gated_fires_rag_on_dense_gated_item(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = _write_corpus(directory)
+            client = _ScriptClient("ANSWER: A")
+            with mock.patch("hackaithon_c.solver.reranker_relevance", self._fire(0.9)):
+                pred = solve_problem(
+                    PROSE,
+                    client,
+                    strategy="rag_gated",
+                    config=_config(
+                        rag_corpus_path=path,
+                        rag_gate="reranker",
+                        rag_reranker_model="stub/reranker",
+                        self_consistency_samples=1,
+                    ),
+                )
+        self.assertEqual(pred.strategy, "gemma_rag")
+
+    def test_rag_gated_non_gated_item_identical_to_self_consistency(self) -> None:
+        # The clean-ship guarantee: a non-gated item yields the SAME strategy AND answer
+        # as the plain self_consistency strategy on the same config.
+        with tempfile.TemporaryDirectory() as directory:
+            path = _write_corpus(directory)
+            cfg = _config(
+                rag_corpus_path=path,
+                rag_gate="reranker",
+                rag_reranker_model="stub/reranker",
+                self_consistency_samples=1,
+            )
+            with mock.patch("hackaithon_c.solver.reranker_relevance", self._fire(0.1)):
+                gated = solve_problem(PROSE, _ScriptClient("ANSWER: C"), strategy="rag_gated", config=cfg)
+            plain = solve_problem(PROSE, _ScriptClient("ANSWER: C"), strategy="self_consistency", config=cfg)
+        self.assertEqual(gated.strategy, "gemma_self_consistency")
+        self.assertEqual(gated.answer, plain.answer)
+        self.assertFalse(any(s.role == "rag" for s in gated.trace))
+
+    def test_rag_gated_does_not_route_quant_to_tir(self) -> None:
+        # router would send a calculation question to TIR; rag_gated must keep it on the
+        # self-consistency path. Asserting BOTH sides proves the contrast is real (the
+        # item genuinely classifies as quantitative) AND that rag_gated drops that lever.
+        with tempfile.TemporaryDirectory() as directory:
+            path = _write_corpus(directory)
+            cfg = _config(rag_corpus_path=path, self_consistency_samples=1)
+            routed = solve_problem(self.CALC, _ScriptClient("ANSWER: A"), strategy="router", config=cfg)
+            gated = solve_problem(self.CALC, _ScriptClient("ANSWER: A"), strategy="rag_gated", config=cfg)
+        # router sends it down the TIR path (gemma_tir / gemma_tir_degraded with a stub
+        # client that emits no runnable tool call); the point is it LEFT self-consistency.
+        self.assertTrue(routed.strategy.startswith("gemma_tir"))
+        self.assertEqual(gated.strategy, "gemma_self_consistency")
+        self.assertFalse(any(s.role in ("tir", "rag") for s in gated.trace))
+
+    def test_rag_gated_without_corpus_is_self_consistency(self) -> None:
+        client = _ScriptClient("ANSWER: A")
+        pred = solve_problem(
+            LEGAL, client, strategy="rag_gated", config=_config(self_consistency_samples=1)
+        )
+        self.assertEqual(pred.strategy, "gemma_self_consistency")
+        self.assertFalse(any(s.role == "rag" for s in pred.trace))
+
+    def test_rag_gated_never_fires_rag_on_reading_passage(self) -> None:
+        # The reading guard: a supplied-passage question must NOT fire RAG even when the corpus
+        # scores HIGHLY relevant — the answer is in the text. Pod regression that motivated this:
+        # a Granny-Smith apple comprehension passage (kind=reading) scored relevant to the VN-2025
+        # admin corpus and RAG flipped the answer. Without the guard this routes to gemma_rag.
+        from hackaithon_c.solver import classify_problem, _is_reading
+        reading_q = Problem(
+            qid="q_reading_passage",
+            question=(
+                "Đoạn thông tin: Theo Luật Tổ chức chính quyền địa phương, tỉnh là đơn vị hành "
+                "chính cấp cao nhất ở địa phương của Việt Nam, dưới tỉnh là các đơn vị cấp xã. "
+                "Câu hỏi: Theo đoạn trên, tỉnh là đơn vị hành chính ở cấp nào?"
+            ),
+            choices=["Cấp cao nhất ở địa phương", "Cấp thấp nhất", "Cấp trung ương", "Không xác định"],
+        )
+        self.assertTrue(_is_reading(classify_problem(reading_q, _config())))  # fixture really is reading
+        with tempfile.TemporaryDirectory() as directory:
+            path = _write_corpus(directory)
+            client = _ScriptClient("ANSWER: A")
+            with mock.patch("hackaithon_c.solver.reranker_relevance", self._fire(0.99)):
+                pred = solve_problem(
+                    reading_q,
+                    client,
+                    strategy="rag_gated",
+                    config=_config(
+                        rag_corpus_path=path,
+                        rag_gate="reranker",
+                        rag_reranker_model="stub/reranker",
+                        self_consistency_samples=1,
+                    ),
+                )
+        self.assertEqual(pred.strategy, "gemma_self_consistency")
+        self.assertFalse(any(s.role == "rag" for s in pred.trace))
+
+
+class RerankerGateTests(unittest.TestCase):
+    """The dense-reranker gate (config rag_gate="reranker").
+
+    The reranker backend is optional/heavy (torch), so the GATING LOGIC is pinned
+    here with a scripted relevance function — the same separation of control flow
+    from the model used everywhere else in this suite. The real cross-encoder
+    separation is dev-validated in notes/rag-dense-gate-2026-06-15.
+    """
+
+    def _run(self, relevance, *, question=PROSE, threshold=0.5):
+        captured = {}
+
+        def fake_relevance(model_ref, query, documents, *, backend="llamacpp", **kwargs):
+            captured["query"] = query
+            captured["model"] = model_ref
+            captured["documents"] = documents
+            captured["backend"] = backend
+            return relevance
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = _write_corpus(directory)
+            client = _ScriptClient("ANSWER: A")
+            with mock.patch("hackaithon_c.solver.reranker_relevance", fake_relevance):
+                pred = solve_problem(
+                    question,
+                    client,
+                    strategy="router",
+                    config=_config(
+                        rag_corpus_path=path,
+                        rag_gate="reranker",
+                        rag_reranker_model="stub/reranker",
+                        rag_reranker_threshold=threshold,
+                        self_consistency_samples=1,
+                    ),
+                )
+        return pred, captured
+
+    def test_reranker_high_relevance_fires_rag_even_without_legal_markers(self) -> None:
+        # PROSE ("thủ đô Việt Nam") has NO legal markers — the marker gate never
+        # fires it (test_router_non_legal_prose_stays_self_consistency). The reranker
+        # gate decides on semantic relevance instead, so a high score routes to RAG.
+        pred, captured = self._run(0.9)
+        self.assertEqual(pred.strategy, "gemma_rag")
+        # The gate scores the QUESTION (not question+choices) against the corpus.
+        self.assertEqual(captured["query"], PROSE.question)
+        self.assertEqual(captured["model"], "stub/reranker")
+
+    def test_reranker_low_relevance_stays_self_consistency(self) -> None:
+        pred, _ = self._run(0.1)
+        self.assertEqual(pred.strategy, "gemma_self_consistency")
+        self.assertFalse(any(s.role == "rag" for s in pred.trace))
+
+    def test_reranker_unavailable_backend_degrades_to_self_consistency(self) -> None:
+        # reranker_relevance returns None when torch/transformers/the model are
+        # missing: the gate must read that as "do not fire", never crash.
+        pred, _ = self._run(None)
+        self.assertEqual(pred.strategy, "gemma_self_consistency")
+        self.assertFalse(any(s.role == "rag" for s in pred.trace))
+
+    def test_reranker_gate_still_off_without_corpus(self) -> None:
+        # rag_gate="reranker" must not override the hard OFF-by-default guarantee:
+        # no corpus configured -> never fire, never even call the reranker.
+        called = {"n": 0}
+
+        def fake_relevance(*args, **kwargs):
+            called["n"] += 1
+            return 0.99
+
+        client = _ScriptClient("ANSWER: A")
+        with mock.patch("hackaithon_c.solver.reranker_relevance", fake_relevance):
+            pred = solve_problem(
+                PROSE,
+                client,
+                strategy="router",
+                config=_config(
+                    rag_gate="reranker",
+                    rag_reranker_model="stub/reranker",
+                    self_consistency_samples=1,
+                ),
+            )
+        self.assertEqual(pred.strategy, "gemma_self_consistency")
+        self.assertEqual(called["n"], 0)
+
+
+class RerankGateBackendTests(unittest.TestCase):
+    """The llamacpp ship backend's score extraction — pinned to the pod-verified
+    behaviour (create_embedding returns the rank logit as embedding[0]; sigmoid maps
+    it; max over candidate chunks). No llama_cpp import: the model is mocked."""
+
+    def test_sigmoid_maps_reranker_logits(self) -> None:
+        from hackaithon_c.rag_gate import _sigmoid
+
+        self.assertAlmostEqual(_sigmoid(0.0), 0.5)
+        self.assertGreater(_sigmoid(5.0), 0.99)   # a reform-question logit (~+5..+7)
+        self.assertLess(_sigmoid(-10.0), 0.001)   # an off-topic logit (~-9..-11)
+
+    def test_llama_reranker_takes_max_sigmoid_over_documents(self) -> None:
+        from hackaithon_c.rag_gate import _LlamaReranker
+
+        logits = iter([-10.0, 5.0, -8.0])
+
+        class _MockLlama:
+            def create_embedding(self, text):  # noqa: ARG002 - text unused in mock
+                return {"data": [{"embedding": [next(logits)]}]}
+
+        reranker = _LlamaReranker(model=_MockLlama())
+        score = reranker.score("q", ["d1", "d2", "d3"], max_length=512)
+        self.assertGreater(score, 0.99)  # max logit 5.0 -> sigmoid ~0.993
+
+
 class ConfigTests(unittest.TestCase):
     def test_rag_workflow_registered_off_default(self) -> None:
         config = load_config()
@@ -361,6 +582,34 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.workflows["rag"]["phase"], "development")
         self.assertEqual(config.rag_corpus_path, "")
         self.assertEqual(config.workflows["self-consistency"]["phase"], "runtime")
+
+    def test_rag_gated_workflow_shippable_at_runtime_phase(self) -> None:
+        # The clean +RAG ship is a runtime (not development) workflow, so the contest
+        # entrypoint can select it without --allow-development-workflow.
+        config = load_config()
+        self.assertEqual(config.workflows["rag-gated"]["strategy"], "rag_gated")
+        self.assertEqual(config.workflows["rag-gated"]["phase"], "runtime")
+
+    def test_rag_gate_defaults_to_marker(self) -> None:
+        # The shipped 88.34 path must be untouched: gate defaults to the lexical
+        # marker heuristic and the reranker is only engaged when explicitly set.
+        config = load_config()
+        self.assertEqual(config.rag_gate, "marker")
+        self.assertEqual(config.rag_reranker_model, "")
+        self.assertEqual(config.rag_reranker_threshold, 0.5)
+        self.assertEqual(config.rag_reranker_candidates, 8)
+        # Ship backend defaults: portable llamacpp, reranker offloaded to GPU.
+        self.assertEqual(config.rag_reranker_backend, "llamacpp")
+        self.assertEqual(config.rag_reranker_n_ctx, 2048)
+        self.assertEqual(config.rag_reranker_n_gpu_layers, -1)
+
+    def test_rag_reranker_backend_rejects_unknown_value(self) -> None:
+        self.assertEqual(_config(rag_reranker_backend="bogus").rag_reranker_backend, "llamacpp")
+        self.assertEqual(_config(rag_reranker_backend="TRANSFORMERS").rag_reranker_backend, "transformers")
+
+    def test_rag_gate_rejects_unknown_value(self) -> None:
+        self.assertEqual(_config(rag_gate="bogus").rag_gate, "marker")
+        self.assertEqual(_config(rag_gate="RERANKER").rag_gate, "reranker")
 
 
 if __name__ == "__main__":

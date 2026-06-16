@@ -73,7 +73,10 @@ class LocalServerProviderTests(unittest.TestCase):
             client = build_chat_client(load_config(), provider="local_server")
         self.assertEqual(client._config.base_url, "http://127.0.0.1:9999/v1")
 
-    def test_local_server_posts_openai_chat_completions(self) -> None:
+    def test_local_server_posts_raw_completion_with_official_gemma_prompt(self) -> None:
+        # Parity fix: local_server posts the EXACT official Gemma-4 prompt to the RAW
+        # /completion endpoint (NOT /v1/chat/completions, whose server template drifted ->
+        # ~75% fallback). System is merged into the user turn per ai.google.dev docs.
         class Response:
             status_code = 200
             headers: dict[str, str] = {}
@@ -82,7 +85,7 @@ class LocalServerProviderTests(unittest.TestCase):
                 return None
 
             def json(self) -> dict[str, object]:
-                return {"choices": [{"message": {"content": "B"}}]}
+                return {"content": "B"}
 
         with (
             mock.patch.dict(os.environ, {"HACKC_LOCAL_SERVER_URL": "http://127.0.0.1:9090/v1"}),
@@ -90,29 +93,26 @@ class LocalServerProviderTests(unittest.TestCase):
         ):
             client = build_chat_client(load_config(), provider="local_server")
             answer = client.complete(
-                "system",
-                "user",
-                max_tokens=7,
-                temperature=0,
-                top_p=0.1,
-                top_k=5,
-                seed=42,
-                letters="ABCD",
+                "system", "user", max_tokens=7, temperature=0, top_p=0.1,
+                top_k=5, seed=42, letters="ABCD",
             )
 
         self.assertEqual(answer, "B")
         post.assert_called_once()
         args, kwargs = post.call_args
-        self.assertEqual(args[0], "http://127.0.0.1:9090/v1/chat/completions")
-        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer local")
-        # local_server merges system into the user turn (Gemma has no system role), so the
-        # reasoning instructions survive llama-server's chat template (single user message).
-        self.assertEqual(len(kwargs["json"]["messages"]), 1)
-        self.assertEqual(kwargs["json"]["messages"][0]["role"], "user")
-        self.assertEqual(kwargs["json"]["messages"][0]["content"], "system\n\nuser")
-        self.assertEqual(kwargs["json"]["max_tokens"], 7)
-        self.assertEqual(kwargs["json"]["seed"], 42)
-        self.assertNotIn("top_k", kwargs["json"])
+        # /completion lives at the server ROOT, not under /v1
+        self.assertEqual(args[0], "http://127.0.0.1:9090/completion")
+        payload = kwargs["json"]
+        self.assertEqual(
+            payload["prompt"],
+            "<start_of_turn>user\nsystem\n\nuser<end_of_turn>\n<start_of_turn>model\n",
+        )
+        self.assertEqual(payload["n_predict"], 7)
+        self.assertEqual(payload["stop"], ["<end_of_turn>"])
+        self.assertEqual(payload["seed"], 42)
+        self.assertEqual(payload["grammar"], 'root ::= "A" | "B" | "C" | "D"')
+        self.assertNotIn("Authorization", kwargs["headers"])  # llama-server needs no auth
+        self.assertEqual(payload["top_k"], 5)  # llama-server /completion honors top_k
 
 
 class LocalServerEndToEndTests(unittest.TestCase):
@@ -133,9 +133,7 @@ class LocalServerEndToEndTests(unittest.TestCase):
                 length = int(self.headers.get("Content-Length", "0"))
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
                 requests_seen.append({"path": self.path, "payload": payload})
-                body = json.dumps({"choices": [{"message": {"content": "B"}}]}).encode(
-                    "utf-8"
-                )
+                body = json.dumps({"content": "B"}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -208,11 +206,12 @@ class LocalServerEndToEndTests(unittest.TestCase):
             rows,
             [{"qid": "stub_1", "answer": "B"}, {"qid": "stub_2", "answer": "B"}],
         )
-        self.assertEqual([request["path"] for request in requests_seen], ["/v1/chat/completions"] * 2)
+        self.assertEqual([request["path"] for request in requests_seen], ["/completion"] * 2)
         for request in requests_seen:
             payload = request["payload"]
-            self.assertEqual(payload["model"], load_config().default_model)
-            self.assertFalse(payload["stream"])
+            self.assertTrue(payload["prompt"].startswith("<start_of_turn>user\n"))
+            self.assertTrue(payload["prompt"].endswith("<start_of_turn>model\n"))
+            self.assertEqual(payload["stop"], ["<end_of_turn>"])
 
 
 class MtpServerScriptTests(unittest.TestCase):
@@ -425,9 +424,7 @@ class NekoEntrypointServerModeTests(unittest.TestCase):
                         length = int(self.headers.get("Content-Length", "0"))
                         self.rfile.read(length)
                         log("POST " + self.path)
-                        body = json.dumps(
-                            {"choices": [{"message": {"content": "B"}}]}
-                        ).encode("utf-8")
+                        body = json.dumps({"content": "B"}).encode("utf-8")
                         self.send_response(200)
                         self.send_header("Content-Type", "application/json")
                         self.send_header("Content-Length", str(len(body)))
@@ -527,7 +524,7 @@ class NekoEntrypointServerModeTests(unittest.TestCase):
             [{"qid": "entry_1", "answer": "B"}, {"qid": "entry_2", "answer": "B"}],
         )
         self.assertIn("GET /health", log_text)
-        self.assertEqual(log_text.count("POST /v1/chat/completions"), 2)
+        self.assertEqual(log_text.count("POST /completion"), 2)
         self.assertTrue(server_closed, log_text)
 
 

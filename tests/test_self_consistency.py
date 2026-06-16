@@ -159,10 +159,16 @@ class SelfConsistencySolveTests(unittest.TestCase):
 
 
 class CrossModelChallengeTests(unittest.TestCase):
-    """P3 — escalate to an independent challenger model only when primary agreement is low."""
+    """P3 — escalate to an independent challenger model only when primary agreement is low.
+
+    These pin the escalation MECHANIC, so the quant-only cluster gate is disabled here (the default
+    `_problem()` is a `short` item); the gate itself is pinned in ChallengeClusterGateTests."""
 
     def setUp(self) -> None:
-        self.config = _config_with_samples(5)
+        base = _config_with_samples(5)
+        raw = copy.deepcopy(base.raw)
+        raw["runtime"]["challenge_quant_only"] = False
+        self.config = replace(base, raw=raw)
         self.k = self.config.self_consistency_samples
 
     def _split(self, top: int, other: int) -> list[str]:
@@ -203,6 +209,64 @@ class CrossModelChallengeTests(unittest.TestCase):
         self.assertEqual(pred.answer, "A")
         self.assertEqual(pred.strategy, "gemma_self_consistency")
         self.assertAlmostEqual(pred.confidence, a / self.k)
+
+
+class ChallengeClusterGateTests(unittest.TestCase):
+    """The cluster gate (challenge_quant_only, default True): the cross-model challenger fires ONLY on
+    quantitative items — cross-family verification helps logic/math where reasoning errors are
+    catchable, not pure knowledge (where a second guess only adds false-flip risk)."""
+
+    QUANT = Problem(
+        qid="cq",
+        question="Một cửa hàng có 12 thùng, mỗi thùng 8 hộp. Tính tổng số hộp = ?",
+        choices=("96", "88", "104", "80"),
+    )
+    KNOW = Problem(
+        qid="ck",
+        question="Thủ đô của Việt Nam là thành phố nào?",
+        choices=("Hà Nội", "Huế", "Đà Nẵng", "Sài Gòn"),
+    )
+
+    def _cfg(self, quant_only: bool):
+        base = _config_with_samples(5)
+        raw = copy.deepcopy(base.raw)
+        raw["runtime"]["challenge_quant_only"] = quant_only
+        return replace(base, raw=raw)
+
+    def _low(self, k: int):  # bare-majority A vs B -> agreement < threshold 0.75
+        a = k // 2 + 1
+        return ["ANSWER: A"] * a + ["ANSWER: B"] * (k - a)
+
+    def test_quant_low_agreement_escalates(self) -> None:
+        cfg = self._cfg(True)
+        primary = ScriptedClient(self._low(cfg.self_consistency_samples))
+        challenger = ScriptedClient(["ANSWER: A"] * cfg.challenger_samples)
+        pred = solve_with_challenge(self.QUANT, primary, challenger, config=cfg)
+        self.assertEqual(pred.strategy, "gemma_self_consistency_challenged")
+        self.assertEqual(challenger.calls, cfg.challenger_samples)
+
+    def test_knowledge_low_agreement_does_not_escalate(self) -> None:
+        cfg = self._cfg(True)
+        primary = ScriptedClient(self._low(cfg.self_consistency_samples))
+        challenger = ScriptedClient(["ANSWER: B"] * cfg.challenger_samples)
+        pred = solve_with_challenge(self.KNOW, primary, challenger, config=cfg)
+        self.assertEqual(pred.strategy, "gemma_self_consistency")  # gate blocked the challenger
+        self.assertEqual(challenger.calls, 0)
+
+    def test_quant_only_off_escalates_knowledge_too(self) -> None:
+        cfg = self._cfg(False)
+        primary = ScriptedClient(self._low(cfg.self_consistency_samples))
+        challenger = ScriptedClient(["ANSWER: A"] * cfg.challenger_samples)
+        pred = solve_with_challenge(self.KNOW, primary, challenger, config=cfg)
+        self.assertEqual(pred.strategy, "gemma_self_consistency_challenged")
+        self.assertEqual(challenger.calls, cfg.challenger_samples)
+
+    def test_challenged_strategy_dispatches_via_solve_problem(self) -> None:
+        cfg = self._cfg(True)
+        primary = ScriptedClient(self._low(cfg.self_consistency_samples))
+        challenger = ScriptedClient(["ANSWER: A"] * cfg.challenger_samples)
+        pred = solve_problem(self.QUANT, primary, strategy="challenged", config=cfg, challenger=challenger)
+        self.assertEqual(pred.strategy, "gemma_self_consistency_challenged")
 
 
 if __name__ == "__main__":

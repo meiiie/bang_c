@@ -33,6 +33,7 @@ from .prompting import (
     with_safety_clause,
 )
 from .principles import adjudicate_principle
+from .rag_gate import reranker_relevance
 from .retrieval import cached_retriever
 from .schema import Prediction, Problem, ProblemProfile, TraceStep
 from .tool_runtime import extract_code, run_python
@@ -124,6 +125,16 @@ def solve_problem(
         if strategy == "rag":
             return _with_trace(
                 _solve_rag(problem, profile, client, config=config),
+                trace,
+            )
+        if strategy == "rag_gated":
+            return _with_trace(
+                _solve_rag_gated(problem, profile, client, config=config),
+                trace,
+            )
+        if strategy == "challenged":
+            return _with_trace(
+                solve_with_challenge(problem, client, challenger, config=config),
                 trace,
             )
         if strategy == "router":
@@ -1116,14 +1127,45 @@ def _is_quantitative(profile: ProblemProfile) -> bool:
     return profile.kind == "calculation" or "has_calculation" in profile.features
 
 
-def _is_rag_eligible(profile: ProblemProfile, config: HarnessConfig) -> bool:
-    """Targeted RAG fires ONLY on the legal/admin factual slice, and only when a
-    corpus is configured (default: none, so the router never fires it). The marker
-    set is Vietnamese because the packaged corpus is Vietnamese law — a gate matched
-    to the corpus, not a language heuristic for answering. The strong (>=2 distinct
-    markers) feature is required: single hits are dominated by diacritic-stripped
-    polysemy (biology "cơ quan", medical "cấp tính")."""
-    return bool(config.rag_corpus_path) and "has_legal_admin_strong" in profile.features
+def _is_rag_eligible(
+    problem: Problem, profile: ProblemProfile, config: HarnessConfig
+) -> bool:
+    """Targeted RAG fires ONLY on the factual slice the corpus can answer, and only
+    when a corpus is configured (default: none, so the router never fires it).
+
+    Two gates, selected by ``config.rag_gate``:
+
+    - ``"marker"`` (default): the >=2 distinct legal/admin markers feature. Lexical,
+      Vietnamese (matched to the packaged corpus, not a language heuristic), and the
+      only option in the stdlib container. The strong (>=2) requirement avoids
+      diacritic-stripped polysemy (biology "cơ quan", medical "cấp tính").
+    - ``"reranker"``: BM25 narrows to candidate chunks, then a dense cross-encoder
+      scores question-vs-chunk relevance; fires only above ``rag_reranker_threshold``.
+      This collapses the lexical false-positives the marker/BM25 gate cannot
+      separate (notes/rag-dense-gate-2026-06-15). If the optional reranker backend is
+      unavailable the relevance is ``None`` -> gate off, so the run never breaks.
+    """
+    if not config.rag_corpus_path:
+        return False
+    if config.rag_gate == "reranker":
+        try:
+            retriever = cached_retriever(config.rag_corpus_path)
+            candidates = retriever.retrieve(problem.question, config.rag_reranker_candidates)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        if not candidates:
+            return False
+        relevance = reranker_relevance(
+            config.rag_reranker_model,
+            problem.question,
+            [snippet.text for snippet in candidates],
+            backend=config.rag_reranker_backend,
+            max_length=config.rag_reranker_max_length,
+            n_ctx=config.rag_reranker_n_ctx,
+            n_gpu_layers=config.rag_reranker_n_gpu_layers,
+        )
+        return relevance is not None and relevance >= config.rag_reranker_threshold
+    return "has_legal_admin_strong" in profile.features
 
 
 def _is_reading(profile: ProblemProfile) -> bool:
@@ -1275,7 +1317,41 @@ def _solve_router(
         return _solve_tir(problem, profile, client, config=config)
     if _is_reading(profile):
         return _solve_reading(problem, profile, client, config=config)
-    if _is_rag_eligible(profile, config):
+    if _is_rag_eligible(problem, profile, config):
+        return _solve_rag(problem, profile, client, config=config)
+    return _solve_self_consistency(problem, profile, client, config=config)
+
+
+def _solve_rag_gated(
+    problem: Problem,
+    profile: ProblemProfile,
+    client: ChatClient,
+    *,
+    config: HarnessConfig,
+) -> Prediction:
+    """Self-consistency everywhere EXCEPT the reranker-gated current-fact slice.
+
+    The shipped contest path is plain self-consistency. This strategy adds ONLY targeted RAG,
+    and only when the dense ``_is_rag_eligible`` gate (BM25 narrow -> cross-encoder relevance >=
+    threshold) judges a corpus chunk genuinely relevant — so a question leaves the
+    self-consistency path solely on the current-fact slice the offline corpus can answer.
+
+    Distinct from the two existing RAG-touching strategies:
+    - ``rag`` forces ``_solve_rag``'s BM25 retrieval on EVERY item, over-firing on mere lexical
+      overlap (the lexical false positives the dense gate was built to kill).
+    - ``router`` also reroutes quantitative -> TIR and passage -> reading-grounding; those levers
+      measured net-flat/negative, so bundling them dilutes the clean RAG win.
+
+    Here non-eligible items are byte-identical to the ``self_consistency`` strategy, so this is
+    the locked self-consistency baseline plus exactly the gated current-fact fixes — nothing else.
+
+    Reading guard: RAG never fires on a supplied-passage (reading) question even if the corpus
+    scores relevant — the answer is IN the passage, and injecting retrieved chunks only adds
+    off-topic noise. (Pod-observed false positive: a Granny-Smith apple comprehension passage
+    scored relevant to the VN-2025 admin corpus and flipped the answer.) This mirrors the router's
+    "reading wins over RAG" ordering; reading items fall through to the locked self-consistency path.
+    """
+    if _is_rag_eligible(problem, profile, config) and not _is_reading(profile):
         return _solve_rag(problem, profile, client, config=config)
     return _solve_self_consistency(problem, profile, client, config=config)
 
@@ -1294,9 +1370,11 @@ def solve_with_challenge(
     items so the time budget is spent where it changes the answer. Degrades to plain
     self-consistency when no challenger is provided.
 
-    Not yet wired into the CLI dispatch: constructing a second provider client needs a
-    real model to validate, so the CLI keeps `challenger=None` until then. The logic here
-    is fully unit-tested with stub clients.
+    Wired via the `challenged` strategy + `build_challenger_client` (run.py builds the challenger
+    when `challenger_provider`/`challenger_model_path` are set, else None -> degrades to plain
+    self-consistency). NOTE: the primary pass here is non-diversified self-consistency; to actually
+    surface a low-agreement signal on a temp=0 model use the diversified `tiered` strategy (which
+    rotates + seeds samples). This simple form is kept for the cluster-gate unit pins.
     """
     profile = classify_problem(problem, config)
     answers, trace_steps = _collect_reasoning_votes(
@@ -1309,7 +1387,14 @@ def solve_with_challenge(
     _, votes, total = majority_vote(answers)
     agreement = agreement_confidence(votes, total)
 
-    if challenger is not None and agreement < config.self_consistency_challenge_threshold:
+    # Cluster gate: by default escalate ONLY quantitative items — cross-family verification helps
+    # logic/math (catchable reasoning errors), not pure knowledge (a second guess that can false-flip).
+    cluster_eligible = (not config.challenge_quant_only) or _is_quantitative(profile)
+    if (
+        challenger is not None
+        and cluster_eligible
+        and agreement < config.self_consistency_challenge_threshold
+    ):
         challenger_answers, challenger_trace = _collect_reasoning_votes(
             problem,
             challenger,
