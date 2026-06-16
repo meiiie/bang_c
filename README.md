@@ -37,7 +37,7 @@ Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô 
 trên mọi CPU** (Intel/AMD, có hay không AVX-512) và **hoàn toàn offline** khi chạy.
 
 ```bash
-# 1) Kéo image (mô hình ≤5B đã nướng sẵn bên trong; ~6GB)
+# 1) Kéo image (mô hình ≤5B đã nướng sẵn bên trong; ~17GB nén — phần lớn là base CUDA PyTorch)
 docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
 
 # 2) Đặt đề thi vào ./data rồi chạy
