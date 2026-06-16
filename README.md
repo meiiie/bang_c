@@ -21,7 +21,7 @@ ngay trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần 
 
 | Yêu cầu BTC | Đáp ứng |
 |---|---|
-| **Docker Container trên Docker Hub** | ✅ `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` (digest `sha256:8a38b8da…c4740`, ~16.84GB) |
+| **Docker Container trên Docker Hub** | ✅ `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` (= `:v0.7.0` = `:latest`, digest `sha256:a48b63bc…87b8`, ~16.84GB) |
 | **Entry-point đọc `public_test.csv` / `private_test.csv` tại `/data`** | ✅ tự nhận diện theo `contest.input_candidates` (ưu tiên `private_test.csv` → `public_test.csv` → biến thể `.json`); đọc CSV bằng `csv.DictReader` (hỗ trợ BOM). **Đã smoke-test trên GPU** với `public_test.csv` |
 | **Ghi `pred.csv` vào `/output` với hai cột `qid,answer`** | ✅ ghi-trước-khi-validate, đủ mọi `qid`, mỗi `answer` là 1 chữ cái A–J hợp lệ theo số phương án từng câu |
 | **GitHub chứa code + cách reproduce** | ✅ [github.com/meiiie/bang_c](https://github.com/meiiie/bang_c) — mã nguồn + `Dockerfile.qwen-selfconsist.kaniko` + hướng dẫn `docker run` (dưới) |
@@ -110,16 +110,16 @@ docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
 
 | | |
 |---|---|
-| Tag nộp (canonical) | `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` |
-| Digest | `sha256:8a38b8daa8c11d7459bbaeba5b438dfa4f3ef0573e8f9a80a4259a1c603c4740` |
+| Tag (3 tag, cùng 1 digest) | `:qwen3-4b-selfconsist-20260616` = `:v0.7.0` = `:latest` |
+| Digest | `sha256:a48b63bcfc45aa9d2d1273625c4c160ec5a6d78a02a0f7374f7745d1f10a87b8` |
 | Kích thước | ~16.84GB nén (base CUDA PyTorch chiếm phần lớn; model chỉ ~2.7GB) |
 | Phiên bản | Neko Core **v0.7.0** (mốc pivot ≤5B) |
 | Mô hình nướng sẵn | `Qwen3-4B-Instruct-2507` Q5_K_M GGUF tại `/models/qwen3-4b.gguf` |
 | Runtime | `llama-cpp-python` build nguồn `GGML_NATIVE=off` (chạy mọi CPU) |
 | Metadata | OCI labels (`docker inspect` xem `org.opencontainers.image.*` + `neko.model/workflow/contest`) |
 
-> **Lưu ý tag:** dùng đúng tag có ngày ở trên (canonical, bất biến). Tag `:latest` của repo có thể
-> còn trỏ tới image Gemma 26B cũ (**không hợp lệ** dưới luật ≤5B) — **đừng dùng `:latest`**.
+> Cả ba tag (`:qwen3-4b-selfconsist-20260616`, `:v0.7.0`, `:latest`) đều trỏ cùng digest `a48b63bc…87b8`
+> = image ≤5B Qwen3-4B v0.7.0. Tag có ngày là canonical (bất biến) — nên pin nó khi nộp.
 
 ### Mô hình & tuân thủ quy tắc Bảng C
 

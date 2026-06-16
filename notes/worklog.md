@@ -1277,3 +1277,12 @@ Owner: smoke-test image Vòng-2 + hoàn chỉnh docs (đặc biệt README).
   CSV smoke + 83.59 run); 100% literal proof = `docker run` on a Docker+GPU host (README has the command).
 - **README thorough pass:** project structure → Qwen ≤5B; build-recipe with kaniko command; "Kết quả đã
   đo" (83.59 + CSV/A–J details + CSV-smoke verification); doc links incl. the ≤5B pivot note.
+
+### 2026-06-16 (tiếp) — v0.7.0 image rebuilt with labels + 3 tags (latest fixed)
+
+Owner chose full rebuild. Rebuilt Dockerfile.qwen-selfconsist.kaniko (OCI labels + branding v0.7.0) via
+kaniko on a 3090, pushed **3 tags in one build** → all = digest `sha256:a48b63bc…87b8` (16.84GB):
+`qwen3-4b-selfconsist-20260616` + `v0.7.0` + `latest`. **`:latest` now = the ≤5B Qwen image** (was the
+disqualified Gemma 26B). `docker inspect` now shows org.opencontainers.image.* + neko.model/workflow/contest.
+Pred unchanged (deterministic; same model/config). README digest updated. balance $0.75→$0.61.
+SUBMISSION PACKAGE now 100% complete: valid image (3 tags, labeled, v0.7.0) + pred 83.59 + GitHub + docs.
