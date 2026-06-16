@@ -132,6 +132,14 @@ class HarnessConfig:
         )
 
     @property
+    def model_policy(self) -> dict | None:
+        """Config-driven model allowlist (``runtime.model_policy``): family aliases + size caps.
+        When absent, ``model_inventory.policy_from_config`` falls back to the legacy DEFAULT_POLICY,
+        so the allowlist is defined purely in config — adding/widening a family is a data edit."""
+        raw = self.runtime.get("model_policy")
+        return raw if isinstance(raw, dict) else None
+
+    @property
     def default_strategy(self) -> str:
         return str(self.runtime.get("default_strategy", "auto"))
 
@@ -157,6 +165,15 @@ class HarnessConfig:
     @property
     def challenger_samples(self) -> int:
         return max(1, int(self.runtime.get("challenger_samples", 3)))
+
+    @property
+    def challenge_quant_only(self) -> bool:
+        """Cross-model challenge fires ONLY on quantitative (logic/math) items by default.
+
+        SOTA: cross-family verification helps logic/math/reading where reasoning errors are
+        catchable, NOT pure knowledge (if both models lack a fact, the challenger only adds a second
+        guess and can false-flip). Set False to escalate every low-agreement item (measure first)."""
+        return bool(self.runtime.get("challenge_quant_only", True))
 
     @property
     def reasoning_temperature(self) -> float:
@@ -211,6 +228,68 @@ class HarnessConfig:
     def rag_top_k(self) -> int:
         # How many retrieved excerpts to show the model per question.
         return max(1, int(self.runtime.get("rag_top_k", 4)))
+
+    @property
+    def rag_gate(self) -> str:
+        # How the router decides a question is RAG-eligible.
+        #   "marker"   (default) -> the >=2 legal/admin marker heuristic; lexical, the
+        #               only option in the stdlib container.
+        #   "reranker" -> a dense cross-encoder scores the question against the corpus
+        #               chunks; fires only when relevance >= rag_reranker_threshold.
+        #               Solves the lexical-false-positive gating failure that made
+        #               marker/BM25 gating net-negative (notes/rag-dense-gate-2026-06-15).
+        #               Requires an optional reranker backend; if unavailable the gate
+        #               degrades to never-fire (RAG off), never crashing.
+        value = str(self.runtime.get("rag_gate", "marker")).strip().lower()
+        return value if value in {"marker", "reranker"} else "marker"
+
+    @property
+    def rag_reranker_model(self) -> str:
+        # Cross-encoder used by the "reranker" gate (allowed BGE-m3 / Qwen-Rerank family).
+        # Empty = no model configured, so the reranker gate degrades to never-fire.
+        return str(self.runtime.get("rag_reranker_model", "")).strip()
+
+    @property
+    def rag_reranker_threshold(self) -> float:
+        # Minimum sigmoid relevance for the reranker gate to fire RAG. 0.5 cleanly
+        # isolates the current-fact slice with zero false positives on the dev pool
+        # (notes/rag-dense-gate-2026-06-15); tune via paired GPU A/B before shipping.
+        return float(self.runtime.get("rag_reranker_threshold", 0.5))
+
+    @property
+    def rag_reranker_max_length(self) -> int:
+        # Token cap per (question, chunk) pair fed to the reranker.
+        return max(64, int(self.runtime.get("rag_reranker_max_length", 512)))
+
+    @property
+    def rag_reranker_candidates(self) -> int:
+        # BM25 narrows to this many candidate chunks, then the reranker scores them:
+        # cheap recall + precise relevance, so the gate scales to a large corpus
+        # without reranking every chunk per question.
+        return max(1, int(self.runtime.get("rag_reranker_candidates", 8)))
+
+    @property
+    def rag_reranker_backend(self) -> str:
+        # Which engine runs the cross-encoder:
+        #   "llamacpp"     (default, shippable) -> a BGE-reranker GGUF via the same
+        #                  llama-cpp-python as Gemma; no torch, stays portable.
+        #                  rag_reranker_model is then a local .gguf PATH.
+        #   "transformers" (dev/eval) -> the torch cross-encoder; rag_reranker_model
+        #                  is a HuggingFace model id.
+        value = str(self.runtime.get("rag_reranker_backend", "llamacpp")).strip().lower()
+        return value if value in {"llamacpp", "transformers"} else "llamacpp"
+
+    @property
+    def rag_reranker_n_ctx(self) -> int:
+        # Context window for the llamacpp reranker (question + chunk fit easily).
+        return max(256, int(self.runtime.get("rag_reranker_n_ctx", 2048)))
+
+    @property
+    def rag_reranker_n_gpu_layers(self) -> int:
+        # GPU offload for the llamacpp reranker. -1 = all layers on GPU (fast; the
+        # 568M reranker adds ~0.6GB next to Gemma's ~15GB, fits a 24GB card). Set 0
+        # to keep the reranker on CPU if GPU memory is tight (slower, never OOMs).
+        return int(self.runtime.get("rag_reranker_n_gpu_layers", -1))
 
     @property
     def enable_safety_refusal(self) -> bool:
@@ -448,6 +527,8 @@ def _validate_config(raw: dict[str, Any], path: Path, active_profile: str | None
         "tir",
         "reading",
         "rag",
+        "rag_gated",
+        "challenged",
         "router",
     }
     for name, workflow in raw.get("workflows", {}).items():

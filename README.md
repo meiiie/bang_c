@@ -8,9 +8,14 @@
 Trạng thái: bài dự thi **HackAIthon 2026 — Bảng C (Innovator)**
 
 **Neko Core** là một harness suy luận *config-first*, đóng gói thành **một Docker image offline,
-tự chứa**: đọc đề trắc nghiệm tại `/data`, chạy mô hình **Gemma-4-26B-A4B (QAT Q4_0 GGUF)** ngay
-trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần API key, không cần mạng — đúng
+tự chứa**: đọc đề trắc nghiệm tại `/data`, chạy mô hình **Qwen3-4B-Instruct-2507 (GGUF, dense ≤5B)**
+ngay trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần API key, không cần mạng — đúng
 "Yêu cầu đầu ra" của Bảng C.
+
+> **Cập nhật quy tắc 2026-06-16:** Ban Tổ chức chuyển sang **giới hạn ≤5B tham số, mở lựa chọn mô
+> hình**. Mô hình thi đấu vì vậy là **Qwen3-4B-Instruct-2507** (dense 4B, ≤5B rõ ràng), thay cho
+> Gemma-4-26B trước đây (26B > 5B). Allowlist mô hình giờ là **config-driven** (`runtime.model_policy`
+> trong `configs/default.json`) — đổi luật chỉ là sửa dữ liệu, không sửa code.
 
 ## Đội thi — Neko Core
 
@@ -32,8 +37,8 @@ Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô 
 trên mọi CPU** (Intel/AMD, có hay không AVX-512) và **hoàn toàn offline** khi chạy.
 
 ```bash
-# 1) Kéo image (mô hình đã nướng sẵn bên trong; ~23.5GB)
-docker pull hacamy12345/neko-core:gemma26b-q4-portable-20260614
+# 1) Kéo image (mô hình ≤5B đã nướng sẵn bên trong; ~6GB)
+docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
 
 # 2) Đặt đề thi vào ./data rồi chạy
 mkdir -p data output
@@ -42,7 +47,7 @@ cp private_test.csv data/            # (hoặc public_test.csv)
 docker run --rm --gpus all \
   -v "$PWD/data:/data" \
   -v "$PWD/output:/output" \
-  hacamy12345/neko-core:gemma26b-q4-portable-20260614
+  hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
 # => ./output/pred.csv   (hai cột: qid,answer)
 ```
 
@@ -52,11 +57,15 @@ File `pred.csv` được **ghi TRƯỚC khi kiểm tra hợp đồng** và tự 
 nên một câu lỗi không bao giờ làm hỏng (về 0) cả lần chạy. Toàn bộ chạy **offline** (không web,
 không API key, không phụ thuộc dịch vụ ngoài).
 
-> `gemma26b-q4-portable-20260614` là image bản **v0.6.0**, **dựng lại sạch từ chính commit này**
-> (không có đáp án public-test gắn cứng trong bất kỳ layer nào). Runtime `llama-cpp-python` được
-> build từ nguồn với `GGML_NATIVE=off` nên **chạy trên mọi CPU**. Đầu ra **giống hệt** bản tiền thân
-> `gemma26b-q4-clean-20260614` đã đạt **88.34** trên leaderboard public-463 (suy luận chạy trên GPU,
-> giải mã tham lam → kết quả không đổi theo CPU). Digest: `sha256:5d264f5de625080c…b989b23a6`.
+> `qwen3-4b-selfconsist-20260616` được **dựng sạch từ chính commit này** (không có đáp án public-test
+> gắn cứng trong bất kỳ layer nào), dùng `Dockerfile.qwen-selfconsist.kaniko`. Runtime `llama-cpp-python`
+> build từ nguồn với `GGML_NATIVE=off` nên **chạy trên mọi CPU** (wheel prebuilt SIGILL trên CPU cũ).
+> Mô hình nướng sẵn: `Qwen3-4B-Instruct-2507` Q5_K_M GGUF (~2.7GB). Workflow mặc định `self-consistency`,
+> chọn robust > 1pp accuracy (rủi ro thật của Bảng C là container về 0 điểm do OOM/timeout/crash, không
+> phải sai vài câu) — RAG và LoRA fine-tune được nướng vào image kế tiếp, đo riêng.
+>
+> _(Image cũ `gemma26b-q4-portable-20260614` đạt 88.34→88.98 trên public-463 nhưng dùng mô hình 26B —
+> **không còn hợp lệ** dưới luật ≤5B mới; giữ lại chỉ để tham chiếu lịch sử.)_
 
 ### Hợp đồng đầu vào / đầu ra
 
@@ -69,8 +78,10 @@ không API key, không phụ thuộc dịch vụ ngoài).
 
 ### Mô hình & tuân thủ quy tắc Bảng C
 
-- LLM: **Gemma-4 series** — cụ thể `Gemma-4-26B-A4B QAT Q4_0 GGUF`, chạy local qua llama.cpp
-  (offline). Danh mục cho phép của Bảng C: Qwen3.5 ≤ 9B / Gemma-4; embedding-rerank: BGE-m3 / Qwen-Rerank.
+- LLM: **Qwen3-4B-Instruct-2507** (dense 4B, GGUF Q5_K_M), chạy local qua llama.cpp (offline). Tuân
+  thủ luật Bảng C mới (2026-06-16): **≤5B tham số, mở mô hình, một mô hình duy nhất, không mô hình/API
+  ngoài**. Allowlist là **config-driven** (`runtime.model_policy`): `{"aliases":["*"],"max_params_b":5.0}`
+  ép mọi mô hình ≤5B; cờ `count_active_for_moe` để chốt total-vs-active cho MoE nếu cần.
 - **Không gắn cứng đáp án public-test**; mọi đòn bẩy phải tổng quát hoá cho bộ private 2000 câu.
 
 ### Tài liệu thuyết minh phương pháp (chấm điểm Ý tưởng)

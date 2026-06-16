@@ -4,11 +4,20 @@
 (CNT63ĐH, trưởng nhóm), Bùi Việt Hoàng (CLC63ĐH), Phạm Thị Minh Hồng (CNT63ĐH),
 Phạm Thị Thu Thảo (KTN63ĐH), Nghiêm Thị Mỹ Linh (KPM63ĐH).
 
-Trạng thái: Leaderboard đã xác nhận **88.55** (CoT self‑consistency + đòn bẩy an‑toàn).
+> **⚠️ CẬP NHẬT LUẬT 2026‑06‑16 — pivot ≤5B.** Ban Tổ chức chuyển sang **giới hạn ≤5B tham số, mở
+> mô hình, một mô hình, không mô hình/API ngoài, kỳ vọng fine‑tune**. Mô hình thi đấu vì vậy đổi từ
+> **Gemma‑4‑26B‑A4B (26B > 5B → không hợp lệ)** sang **Qwen3‑4B‑Instruct‑2507** (dense 4B, ≤5B rõ ràng).
+> Image nộp mới: `qwen3-4b-selfconsist-20260616` (self‑consistency, robust). Số đo ≤5B (đo thật, RTX
+> 3090/A4000, 2026‑06‑16): Qwen3‑4B baseline k=1 = **80.22%** (quant 73.91 / civics 78.67 / reading
+> 85.41); +combined‑RAG = 83.33% nhưng **confounded** (chi tiết: `notes/2026-06-16-le5b-rules-and-model-policy.md`).
+> Đòn bẩy Idea mới: **allowlist mô hình config‑driven** (`runtime.model_policy`) — đổi luật BTC chỉ là
+> sửa dữ liệu, không sửa code. Các con số Gemma 88.x bên dưới là **lịch sử** (mô hình cũ, không còn hợp lệ).
+
+Trạng thái (lịch sử, Gemma 26B): Leaderboard đã xác nhận **88.55** (CoT self‑consistency + đòn bẩy an‑toàn).
 Image nộp v0.6.0 là `gemma26b-q4-portable-20260614` (runtime llama.cpp build `GGML_NATIVE=off` →
 **chạy mọi CPU**; đầu ra giống hệt bản tiền thân `gemma26b-q4-clean-20260614` đã đạt **88.34** trên
 public‑463). Cùng đường, lệch ±1 câu do nhiễu số học giữa các bản build llama.cpp; trần thật ~88.5.
-Cập nhật: 2026‑06‑14
+Cập nhật: 2026‑06‑16
 
 > Mọi con số trong tài liệu là **đo thật**: trên leaderboard chính thức, hoặc trên mô hình thi
 > đấu (Gemma‑4‑26B‑A4B QAT‑Q4_0 GGUF, llama.cpp, GPU NVIDIA thuê thật). Không phỏng đoán.

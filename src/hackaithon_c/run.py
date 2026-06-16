@@ -38,7 +38,12 @@ from .exporter import write_predictions, write_trace
 from .loader import filter_problems_by_qids, find_input_file, load_problems
 from .manifest import build_run_manifest, write_run_manifest
 from .model_client import build_challenger_client, build_chat_client, effective_provider
-from .model_inventory import classify_model, collect_model_inventory, render_model_inventory
+from .model_inventory import (
+    classify_model,
+    collect_model_inventory,
+    policy_from_config,
+    render_model_inventory,
+)
 from .policy import evaluate_policy, render_policy_report
 from .project import init_project, init_user_config
 from .review import render_trace_review, review_trace_dir
@@ -709,17 +714,19 @@ def main(argv: tuple[str, ...] | None = None) -> int:
 
 
 def validate_runtime_model(model_id: str, config) -> None:
-    selected = classify_model(
-        model_id,
-        allowed_llm_families=config.allowed_model_families,
-        allowed_embedding_families=config.allowed_embedding_families,
-    )
+    policy = policy_from_config(config)
+    selected = classify_model(model_id, policy=policy)
     if selected.allowed and selected.category == "llm":
         return
+    allowed = ", ".join(
+        f"{'/'.join(rule.aliases)}"
+        + (f" (<= {rule.max_params_b:g}B)" if rule.max_params_b is not None else "")
+        for rule in policy.llm
+    )
     raise ValueError(
         "Runtime model is not allowed by Bang C rules: "
         f"{model_id} ({selected.reason}). "
-        "Use a Gemma-4 model or a Qwen3.5 model with size <= 9B."
+        f"Allowed LLM families: {allowed}."
     )
 
 

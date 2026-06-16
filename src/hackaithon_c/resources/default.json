@@ -43,6 +43,17 @@
     "base_url": "https://integrate.api.nvidia.com/v1",
     "allowed_model_families": ["gemma-4", "qwen3.5"],
     "allowed_embedding_families": ["bge-m3", "qwen-rerank"],
+    "model_policy": {
+      "count_active_for_moe": false,
+      "llm_families": [
+        {"aliases": ["gemma-4", "gemma4"]},
+        {"aliases": ["qwen3.5", "qwen-3.5"], "max_params_b": 9.0}
+      ],
+      "embedding_families": [
+        {"aliases": ["bge-m3"]},
+        {"aliases": ["qwen-rerank", "qwen_rerank"]}
+      ]
+    },
     "default_strategy": "auto",
     "self_consistency_samples": 1,
     "reasoning_max_tokens": 2048,
@@ -189,6 +200,20 @@
     "router": {
       "description": "CANDIDATE: question-type router on the real-test composition -- quantitative -> TIR (Python exec), passage -> reading-grounding mode, legal/admin factual -> targeted RAG (only when rag_corpus_path is set; default off), everything else -> diverse self-consistency. The 'good combination' for the mixed humanities+math contest. Pending real-model measurement.",
       "strategy": "router",
+      "verify": false,
+      "dry_run": false,
+      "phase": "development"
+    },
+    "rag-gated": {
+      "description": "SHIPPABLE +RAG path: the contest self-consistency default on every item, PLUS targeted RAG only on the dense-gated current-fact slice (cross-encoder relevance >= rag_reranker_threshold over rag_corpus_path; empty corpus or gate-off => identical to self-consistency). No TIR/reading routing, so non-gated items are byte-identical to the self-consistency baseline -- the locked path plus the clean current-fact fixes, nothing else.",
+      "strategy": "rag_gated",
+      "verify": false,
+      "dry_run": false,
+      "phase": "runtime"
+    },
+    "challenged": {
+      "description": "CANDIDATE: cross-model verification — Gemma self-consistency, and on LOW-AGREEMENT quantitative items only (challenge_quant_only), pull diversified votes from an independent Qwen3.5 challenger (cross-family > self-verify; self over-trusts systematic errors) and re-tally the combined pool. No challenger configured => byte-identical to self-consistency. Pending quant-dev measurement.",
+      "strategy": "challenged",
       "verify": false,
       "dry_run": false,
       "phase": "development"

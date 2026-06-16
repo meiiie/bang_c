@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from dataclasses import replace
@@ -37,8 +38,12 @@ from hackaithon_c.loader import filter_problems_by_qids, load_problems
 from hackaithon_c.local_client import LocalLlamaChatClient, LocalLlamaConfig
 from hackaithon_c.manifest import build_run_manifest, write_run_manifest
 from hackaithon_c.model_inventory import (
+    DEFAULT_POLICY,
+    FamilyRule,
+    ModelPolicy,
     classify_model,
     collect_model_inventory,
+    policy_from_config,
     render_model_inventory,
 )
 from hackaithon_c.normalize import normalize_answer
@@ -996,6 +1001,60 @@ class ContestContractTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "not allowed by Bang C rules"):
             validate_runtime_model("baai/bge-m3", self.config)
+
+    def test_default_config_yields_legacy_model_policy(self) -> None:
+        # The shipped config reproduces DEFAULT_POLICY exactly, so the allowlist lives in data.
+        policy = policy_from_config(self.config)
+        self.assertEqual(policy, DEFAULT_POLICY)
+
+    def test_model_policy_is_config_driven_extensible(self) -> None:
+        # A brand-new <=5B family is enabled by a CONFIG edit alone — no code branch per model.
+        wide_5b = ModelPolicy(
+            llm=(FamilyRule(aliases=("*",), max_params_b=5.0),),
+            embedding=(FamilyRule(aliases=("bge-m3",)),),
+        )
+        self.assertTrue(classify_model("qwen/qwen3-4b-instruct-2507", policy=wide_5b).allowed)
+        self.assertTrue(classify_model("microsoft/phi-4-mini-3.8b", policy=wide_5b).allowed)
+        self.assertFalse(classify_model("google/gemma-4-26b-it", policy=wide_5b).allowed)
+        # The same wildcard family, sourced from config (no Python change):
+        cfg = load_config(self._write_policy_config({
+            "count_active_for_moe": False,
+            "llm_families": [{"aliases": ["*"], "max_params_b": 5.0}],
+            "embedding_families": [{"aliases": ["bge-m3"]}],
+        }))
+        self.assertEqual(policy_from_config(cfg), wide_5b)
+        validate_runtime_model("qwen/qwen3-4b-instruct-2507", cfg)
+        with self.assertRaisesRegex(ValueError, "not allowed by Bang C rules"):
+            validate_runtime_model("google/gemma-4-26b-it", cfg)
+
+    def test_model_policy_counts_active_params_when_configured(self) -> None:
+        # Flip a single config flag to score MoE ids on their active (aNb) param count instead of total.
+        active_5b = ModelPolicy(
+            llm=(FamilyRule(aliases=("gemma-4",), max_params_b=5.0),),
+            embedding=(),
+            count_active_for_moe=True,
+        )
+        total_5b = ModelPolicy(
+            llm=(FamilyRule(aliases=("gemma-4",), max_params_b=5.0),),
+            embedding=(),
+            count_active_for_moe=False,
+        )
+        moe = "google/gemma-4-26b-a4b-it"
+        self.assertTrue(classify_model(moe, policy=active_5b).allowed)   # 4B active <= 5B
+        self.assertFalse(classify_model(moe, policy=total_5b).allowed)   # 26B total > 5B
+
+    def _write_policy_config(self, policy: dict) -> str:
+        import json
+        import tempfile
+        from pathlib import Path
+
+        base = json.loads(Path(self.config.path).read_text(encoding="utf-8"))
+        base.setdefault("runtime", {})["model_policy"] = policy
+        tmp = tempfile.mkdtemp(prefix="neko-policy-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        target = Path(tmp) / "policy_override.json"
+        target.write_text(json.dumps(base), encoding="utf-8")
+        return str(target)
 
     def test_workflow_registry_resolves_named_profiles(self) -> None:
         workflows = list_workflows(self.config)

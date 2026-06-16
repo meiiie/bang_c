@@ -1,0 +1,59 @@
+# Kaniko-compatible contest image — the ≤5B BTC-rules submission (robust self-consistency).
+#
+# BTC moved to a ≤5B param cap (2026-06-16): the Gemma-4-26B image is out, so this is the valid
+# contestant. Dense Qwen3-4B-Instruct-2507 (clean ≤5B, no MoE total/active ambiguity), in-process on a
+# GGML_NATIVE=off llama-cpp-python wheel that runs on ANY judge CPU, self-consistency on every item.
+# Deliberately NO reranker / corpus: the dominant contest risk is a Docker 0-score (OOM / timeout /
+# crash), not 1pp of accuracy — so the first valid submission is maximally robust, small, and fast.
+# RAG and a fine-tuned LoRA are layered in a later, separately-validated image.
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+ARG MODEL_REPO=unsloth/Qwen3-4B-Instruct-2507-GGUF
+ARG MODEL_FILE=Qwen3-4B-Instruct-2507-Q5_K_M.gguf
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
+    HACKC_DATA_DIR=/data \
+    HACKC_OUTPUT_DIR=/output \
+    HACKC_PROVIDER=local_llamacpp \
+    HACKC_LOCAL_MODEL_ID=qwen3-4b-instruct-2507 \
+    HACKC_LOCAL_MODEL_PATH=/models/qwen3-4b.gguf \
+    HACKC_LLAMACPP_N_CTX=8192 \
+    HACKC_LLAMACPP_N_GPU_LAYERS=-1 \
+    CUDACXX=/usr/local/cuda/bin/nvcc \
+    PATH=/usr/local/cuda/bin:${PATH}
+
+WORKDIR /app
+
+COPY requirements.txt requirements-local.txt ./
+# Portable runtime: source-build llama-cpp-python with CUDA + GGML_NATIVE=off so the image runs on
+# ANY judge CPU. The prebuilt cu124 wheel SIGILLs during INFERENCE on older CPUs (verified on RunPod
+# community hosts) -> the container would crash and write no pred.csv. GGML_NATIVE=off emits a portable
+# binary with runtime CPU feature dispatch. -j capped to avoid nvcc OOM on small builders.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cmake build-essential git \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
+    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off" FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=8 \
+       python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
+
+# Qwen3-4B-Instruct-2507 Q5_K_M (the answering model, GPU). ~2.7GB.
+RUN MODEL_REPO="${MODEL_REPO}" MODEL_FILE="${MODEL_FILE}" python -c \
+    "import os, shutil; from pathlib import Path; from huggingface_hub import hf_hub_download; d=Path('/models'); d.mkdir(parents=True, exist_ok=True); \
+m=hf_hub_download(repo_id=os.environ['MODEL_REPO'], filename=os.environ['MODEL_FILE'], local_dir=d); shutil.copy(m, d/'qwen3-4b.gguf'); print('model:', m)" \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}"
+
+COPY src ./src
+COPY configs ./configs
+COPY docker/qwen-selfconsist.neko-core.json ./.neko-core/config.json
+COPY docker/neko-entrypoint.sh /usr/local/bin/neko-entrypoint
+COPY README.md ./
+
+RUN mkdir -p /data /output \
+    && chmod +x /usr/local/bin/neko-entrypoint \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}" \
+    && python -m hackaithon_c.run --doctor
+
+ENTRYPOINT ["neko-entrypoint"]
+CMD ["--workflow", "self-consistency", "--data-dir", "/data", "--output-dir", "/output", "--run-dir", "/output/neko-run", "--auto-resume", "--checkpoint-every", "1"]

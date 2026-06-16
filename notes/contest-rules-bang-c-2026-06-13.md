@@ -1,5 +1,10 @@
 # HackAIthon 2026 Bang C rules notes - 2026-06-13
 
+> **PARTIALLY SUPERSEDED (2026-06-16).** The family/size section below (Qwen3.5 ≤9B / Gemma-4) is
+> OBSOLETE — BTC announced a **≤5B param cap with open model choice**. See
+> [2026-06-16-le5b-rules-and-model-policy.md](2026-06-16-le5b-rules-and-model-policy.md). The output
+> contract, scoring (Accuracy 80 / Time 10 / Idea 10), and deadlines below are still current.
+
 Source: `C:\Users\Admin\Downloads\Thể lệ HackAIthon 2026.pdf`, pages 8-9.
 
 ## Bang C constraints

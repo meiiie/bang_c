@@ -1149,3 +1149,107 @@ Docker 0-điểm (OOM/timeout/crash), KHÔNG phải 1pp accuracy → ưu tiên R
 **NEXT:** (1) re-package Docker image 26B+safety+constrained (cần 1 GPU smoke xác nhận grammar
 + safety chạy đúng trong image); (2) tùy chọn build 31B image song song; (3) hoàn thiện Idea
 doc EN. PAUSE trước GPU spend.
+
+---
+
+## 2026-06-16 — ≤5B rules pivot + config-driven model policy refactor
+
+BTC đổi luật: **cap ≤5B params, mở model** ("vẫn dùng được model khác, lưu ý kích thước"),
+single model, no external models/search, **fine-tune được kỳ vọng**, thu data internet để train OK.
+Chi tiết + hệ quả: `notes/2026-06-16-le5b-rules-and-model-policy.md`.
+
+**Đã làm (theo yêu cầu owner "sửa luôn, dễ mở rộng, đừng hardcore code, cập nhật tài liệu"):**
+- Bỏ allowlist **hardcode** trong `model_inventory.classify_model` (các nhánh `if "gemma-4"…`,
+  `if "qwen3.5"…`). Thay bằng **config-driven**: `FamilyRule` / `ModelPolicy` /
+  `policy_from_config` / `classify_model(id, *, policy)` / `_params_b(active=)`. Generic, 0 nhánh
+  per-model. Cờ `count_active_for_moe` để chốt total-vs-active khi BTC trả lời.
+- `config.model_policy` accessor; `validate_runtime_model` dùng `policy_from_config`, error message
+  dựng từ policy (hết tên family cứng). Xoá 2 helper chết.
+- `configs/default.json` + `resources/default.json`: thêm block `runtime.model_policy` **tái lập y
+  hệt luật cũ** (`policy_from_config(default) == DEFAULT_POLICY`). Pivot ≤5B = sửa DATA, 0 Python.
+- 3 test mới (legacy-equiv, config-extensible wildcard ≤5B, active-param flip). **257 green, ruff clean.**
+
+**Qwen3-4B baseline test:** GPU run 2026-06-16 (3090) build wheel + tải GGUF Q5_K_M OK, **chết ở
+`validate_runtime_model`** vì tarball trên pod mang validator CŨ (hardcode) → từ chối id thật
+`qwen3-4b-instruct-2507`. Đúng bug refactor này vá. `run_qwen_test.sh` đã sửa sang policy ≤5B
+wildcard + id thật (hết hack relabel). Re-run cần: **rebuild `neko-mtp-context.tar.gz` từ src hiện
+tại** rồi launch. Pod mồ côi đã terminate; **balance $2.07 thấp → CHỜ owner duyệt trước khi tốn GPU.**
+
+**M4 Mac train được không:** CÓ — LoRA/QLoRA qua Apple MLX (`mlx-lm`), không cần thuê GPU cho bước
+train, nhưng RAM-bound (M4 Pro/Max 24GB+ thoải mái; base M4 16GB chật). Thuê GPU/Colab/Kaggle nhanh
+& ổn hơn cho iterate. Artifact cuối **convert GGUF** cho Docker x86+CUDA (train ≠ serve device).
+
+**NEXT:** chờ owner duyệt re-run Qwen3-4B baseline (đo 4B mất bao nhiêu accuracy vs Gemma-26B battery
+trước fine-tune) — make-or-break cho pivot ≤5B. Mọi GPU spend PAUSE trước khi owner OK.
+
+### 2026-06-16 (tiếp) — Qwen3-4B baseline MEASURED (owner greenlit pivot ≤5B)
+
+Owner chốt: ≤5B bắt buộc → chạy baseline tới khi có kết quả. Rebuild tarball từ src (validator
+config-driven), overlay policy ≤5B wildcard + id thật. RTX 3090, Q5_K_M, k=1, NO fine-tune, 450q proxy.
+
+**Qwen3-4B-Instruct-2507 vs Gemma-26B battery:**
+- quant 73.91% (85/115) Δ−12.76 · civics 78.67% (118/150) Δ−13.00 · reading 85.41% (158/185) Δ−6.26
+- **OVERALL 80.22% (361/450)** · 0 fallbacks (format `ANSWER:` sạch) · 8.5s/q · bal $2.06→$1.77
+
+Gap đúng dự đoán: knowledge-bound bleed nặng nhất (civics −13 recall thuần, quant −12.76
+knowledge+method), reading comprehension nhẹ nhất (−6). Đây là **sàn trước recovery**. CONFIRM thesis
+pivot: ≤5B không chứa nổi kiến thức → đường về ~90% = (1) RAG fact-vault (civics; đã +3 leaderboard
+trên Gemma, upside lớn hơn trên 4B), (2) method-RAG (quant; đã +2 trên Gemma), (3) fine-tune (giờ bắt
+buộc + Idea thưởng), (4) tùy chọn k>1 trên quant. 80.22% thô CHƯA competitive nhưng là base sạch.
+Validator config-driven chạy đúng trên pod (hết bug lần trước).
+
+**NEXT (đề xuất, chờ owner chọn):** (a) fine-tune Qwen3-4B (LoRA, MLX/Mac hoặc thuê) để kéo general
+knowledge + domain; (b) gắn RAG fact-vault + method-RAG lên Qwen3-4B (đo lại 450q) — kéo civics/quant;
+(c) thử k>1 trên quant. Mọi GPU spend PAUSE trước khi owner OK.
+
+### 2026-06-16 (tiếp) — Recovery (a): RAG-on-Qwen3-4B = directional + nhưng CONFOUNDED
+
+rag-gated + combined corpus (fact37+method30=67), BGE-reranker thr0.4, Qwen3-4B, 450q, k=1, A4000,
+0 fallback, ~$0.32 (bal $1.77→$1.45).
+
+| cluster | +RAG | base | Δ | fires |
+|---|---|---|---|---|
+| quant | 76.52 (88/115) | 73.91 | +2.61 | 24 |
+| civics | 84.67 (127/150) | 78.67 | +6.00 | **2** |
+| reading | 86.49 (160/185) | 85.41 | +1.08 | **91** |
+| OVERALL | **83.33** (375/450) | 80.22 | **+3.11** | 117/450 |
+
+**KHÔNG đọc là "RAG +3 / civics +6".** 2 lỗi làm delta không sạch: (1) **noise confound** — base vs RAG
+là 2 run k=1 temp0.8 KHÔNG seed → 333 câu không-gate ra sample khác nhau → delta lẫn noise. Bằng chứng:
+civics +6 (+9 câu) mà **chỉ 2 gate fire** → tối đa +2 là RAG, +7 còn lại là noise. (2) **gate over-fire
+thr0.4** — reading fired **91/185 (49%)**, combined corpus + thr thấp fire bừa trên reading (ship dùng
+0.85 để tránh). Tín hiệu ĐÁNG TIN = **quant +2.61** (24 fire đúng chỗ method giúp; khớp Gemma +2).
+Robustness OK: RAG+≤5B chạy end-to-end sạch. Fact-vault hẹp KHÔNG chạm được civics −13 (chỉ 2 fire).
+
+**NEXT để có số sạch:** (1) seeded A/B (RAG on/off cùng seed → chỉ câu gate khác) — cần seed local llama;
+(2) tune threshold / dual-gate (fact 0.85 vs method 0.4 tách); (3) mở corpus broad civics + fine-tune
+(lever lớn cho parametric knowledge). Mọi GPU PAUSE trước owner OK.
+
+### 2026-06-16 (tiếp) — ≤5B submission package: pred.csv DONE + image artifacts ready
+
+Owner: "hoàn thiện, chạy 463 nộp, build docker hub image, theo thể lệ để có cái nộp đã." Pivot ship
+sang ≤5B robust fallback (Gemma-26B disqualified).
+
+**Artifacts ≤5B (committed-ready):**
+- `Dockerfile.qwen-selfconsist.kaniko` — Qwen3-4B-Instruct-2507 Q5_K_M, portable GGML_NATIVE=off wheel,
+  self-consistency (NO reranker/corpus = robust > 1pp; rủi ro thật là Docker 0-điểm). ENV model_id
+  qwen3-4b-instruct-2507, path /models/qwen3-4b.gguf. CMD self-consistency.
+- `docker/qwen-selfconsist.neko-core.json` — overlay model_policy ≤5B (`*`≤5.0) + self_consistency + chat_format "".
+  Validate local: merge → validate_runtime_model(qwen3-4b) PASS, workflow self-consistency resolves.
+- README.md + docs/method-writeup-vi.md updated to ≤5B Qwen + config-driven policy (rule-compliance).
+- Context `Temp/pod_mtp/neko-qwen-context.tar.gz`.
+
+**Vòng-1 pred.csv DONE (valid):** Qwen3-4B self-consistency on 463 public test, RTX 3090, wall 1401s
+(**3.0s/q**), harness valid=True / contract 40/40 / 0 fallbacks. 463 rows, A–J (49 many-choice → E..J),
+0 empty/non-alpha. File `Temp/pod_mtp/qwen3-4b-pred-463.csv`. (Script's post-check falsely flagged 24
+"non-ABCD" — it assumed A–D; fixed to A–J. The pred itself is fine; harness check is authoritative.)
+Cost $0.13. balance $1.45→$1.32.
+
+**Vòng-2 image push — BLOCKED for Claude (data-exfil hard-block), Path B = owner runs it.** The kaniko
+launcher (COPY repo + push to external Docker Hub) is hard-blocked by the auto-mode classifier even with
+owner grant. Owner runs `kaniko_qwen_launch.py` themselves (`! python ...`) → provision pod → kaniko build
++push `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` → verify Hub → terminate (~$0.25). Script handed
+to owner verbatim.
+
+**NEXT:** (1) owner runs the kaniko push; (2) accuracy track = fine-tune Qwen3-4B (LoRA, the big ≤5B lever)
++ clean RAG re-measure (seeded A/B, dual-gate). Submission floor (80% valid ≤5B) now secured.

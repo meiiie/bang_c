@@ -1,0 +1,16 @@
+{
+  "runtime": {
+    "self_consistency_samples": 1,
+    "local_chat_format": "",
+    "model_policy": {
+      "count_active_for_moe": false,
+      "llm_families": [
+        {"aliases": ["*"], "max_params_b": 5.0}
+      ],
+      "embedding_families": [
+        {"aliases": ["bge-m3"]},
+        {"aliases": ["qwen-rerank", "qwen_rerank"]}
+      ]
+    }
+  }
+}
