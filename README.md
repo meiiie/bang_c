@@ -84,6 +84,19 @@ không API key, không phụ thuộc dịch vụ ngoài).
   ép mọi mô hình ≤5B; cờ `count_active_for_moe` để chốt total-vs-active cho MoE nếu cần.
 - **Không gắn cứng đáp án public-test**; mọi đòn bẩy phải tổng quát hoá cho bộ private 2000 câu.
 
+### Kết quả đã đo (minh bạch)
+
+- **Public-463 leaderboard: 83.59** — Qwen3-4B self-consistency, đo thật trên leaderboard chính thức.
+  Đây là bản ≤5B **chưa fine-tune, chưa RAG** (sàn an toàn). Đường tăng điểm tiếp theo: fine-tune
+  (LoRA) + RAG có kiểm soát — xem [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md).
+- **Hợp đồng đầu ra:** mỗi lần chạy harness tự kiểm `valid=True` + ghi `pred.csv` đủ mọi `qid`, đúng
+  hai cột, mỗi đáp án là chữ cái A–J hợp lệ theo số phương án của TỪNG câu (49/463 câu có > 4 phương án).
+  Container đọc CSV (`csv.DictReader`, hỗ trợ BOM) **và** JSON; thứ tự tìm: `private_test.csv` →
+  `public_test.csv` → `private_test.json` → `public_test.json` (`contest.input_candidates`).
+- **Đã smoke-test đường CSV (GPU, 2026-06-16):** chạy ship config trên `public_test.csv` (đúng format
+  BTC) → `pred.csv` hợp lệ (463 dòng, 0 fallback, contract 40/40) và **trùng khớp 463/463 (100%)** với
+  bản pred JSON đã đạt 83.59 → loader đọc CSV BTC cho ra đúng đáp án ghi điểm.
+
 ### Tài liệu thuyết minh phương pháp (chấm điểm Ý tưởng)
 
 - [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) — **Tiếng Việt** (bản chi tiết)
@@ -104,9 +117,11 @@ offline; development tracing/eval lives outside the shipped artifact.
 ```text
 src/hackaithon_c/      Harness: loader -> classifier -> prompting -> solver -> normalizer
                        -> contract validation -> pred.csv exporter (+ config, calibration, checkpoint)
-configs/default.json   Config-first runtime: providers, model paths, profiles, thresholds, rubric
+configs/default.json   Config-first runtime: providers, model paths, profiles, thresholds, rubric,
+                       runtime.model_policy (the config-driven ≤5B model allowlist)
 docker/                neko-entrypoint.sh (reads /data, writes /output/pred.csv)
-Dockerfile.gemma-local.kaniko   The contest image build (Kaniko, self-contained Gemma Q4_0)
+                       + qwen-selfconsist.neko-core.json (the baked ≤5B image config overlay)
+Dockerfile.qwen-selfconsist.kaniko   The ≤5B contest image build (Kaniko, self-contained Qwen3-4B Q5_K_M)
 scripts/               Build + dev helpers
 tests/                 Unit tests (run: python -m unittest discover -s tests)
 docs/                  Method write-up, architecture, evaluation rubric
@@ -126,11 +141,22 @@ notes/                 Measured-result analysis (the leaders + the rejected leve
 NVIDIA is an optional **development-only** provider (`--profile nvidia-gemma31b-api` + `NVIDIA_API_KEY`);
 the contest path stays `local_llamacpp` with the baked GGUF.
 
-### Build the contest image
+### Build the contest image (reproducibility)
 
-The self-contained Gemma image is large; build it on a machine with enough disk/RAM/network. For
-RunPod builders without Docker-in-Docker, `Dockerfile.gemma-local.kaniko` builds it via Kaniko (the
-`llama-cpp-python` runtime is source-built with `GGML_NATIVE=OFF` so the image runs on any CPU).
+The submitted image is built from this commit by `Dockerfile.qwen-selfconsist.kaniko` — it source-builds
+`llama-cpp-python` with `GGML_NATIVE=OFF` (so the binary runs on any judge CPU) and bakes
+`Qwen3-4B-Instruct-2507` Q5_K_M GGUF + the harness + the `docker/qwen-selfconsist.neko-core.json` config
+overlay. No public-test answers are baked into any layer.
+
+```bash
+# Build + push (Kaniko, no Docker-in-Docker needed; or use `docker build` on a Docker host):
+/kaniko/executor \
+  --context dir://. \
+  --dockerfile ./Dockerfile.qwen-selfconsist.kaniko \
+  --destination docker.io/hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+```
+
+The image is large (~17GB compressed — the CUDA PyTorch base dominates; the model is only ~2.7GB).
 See [`docs/runpod-operations.md`](docs/runpod-operations.md) and [`docs/release-process.md`](docs/release-process.md).
 
 ### Architecture & docs
@@ -140,5 +166,8 @@ See [`docs/runpod-operations.md`](docs/runpod-operations.md) and [`docs/release-
   agent/tool registries, how to extend). Read this to build on Neko Core beyond the contest.
 - [`docs/harness-architecture.md`](docs/harness-architecture.md) — layered pipeline + contracts
 - [`docs/evaluation-rubric.md`](docs/evaluation-rubric.md) — scoring model
-- [`docs/local-gemma-runtime.md`](docs/local-gemma-runtime.md) — local Gemma runtime
+- [`docs/local-gemma-runtime.md`](docs/local-gemma-runtime.md) — local llama.cpp GGUF runtime mechanics
+  (written for Gemma; the same `local_llamacpp` path now serves the ≤5B Qwen3-4B GGUF)
+- [`notes/2026-06-16-le5b-rules-and-model-policy.md`](notes/2026-06-16-le5b-rules-and-model-policy.md) —
+  the ≤5B rules pivot, config-driven model policy, and measured Qwen3-4B results
 - [`docs/submission-readiness.md`](docs/submission-readiness.md) — submission checklist

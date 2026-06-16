@@ -1253,3 +1253,27 @@ to owner verbatim.
 
 **NEXT:** (1) owner runs the kaniko push; (2) accuracy track = fine-tune Qwen3-4B (LoRA, the big ≤5B lever)
 + clean RAG re-measure (seeded A/B, dual-gate). Submission floor (80% valid ≤5B) now secured.
+
+### 2026-06-16 (tiếp) — LEADERBOARD: Qwen3-4B self-consistency public-463 = 83.59
+
+Owner uploaded `qwen3-4b-pred-463.csv` (self-consistency, no fine-tune, no RAG) → **public-463 = 83.59**.
+HIGHER than the 80.22 proxy projection (+3.4) — the 463 public skews easier for Qwen than the 450 labeled
+proxy (more short/many-choice). This is the REAL valid ≤5B floor. Old Gemma 88.98 disqualified (26B>5B);
+83.59 valid beats it. Image `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` pushed (NOT yet
+`docker run` smoke-tested e2e). NEXT: fine-tune Qwen3-4B (LoRA) + clean RAG re-measure on the new base.
+
+### 2026-06-16 (tiếp) — Image Vòng-2: CSV-path smoke PASS + docs thorough pass
+
+Owner: smoke-test image Vòng-2 + hoàn chỉnh docs (đặc biệt README).
+- **Image-deploy smoke FAILED** (ssh refused — image's NEKO_HOLD entrypoint starts sshd but doesn't
+  `ssh-keygen -A` host keys → sshd dies; custom-image deploy unusable without a rebuild). 17GB pull also
+  expensive ($1.19→$0.86 churning pods). Killed.
+- **Pivot: CSV-path smoke (base pod, reliable ssh) = PASS.** Ran ship config (Qwen3-4B Q5_K_M,
+  self-consistency, model_policy ≤5B) over `public_test.csv` (BTC input format, auto-discovered via
+  input_candidates) → valid=True, contract 40/40, 0 fallback, 463 rows A–J. **CSV pred == JSON pred
+  463/463 (100%)** → the CSV path (the #1 untested image risk) produces the exact 83.59-scoring answers.
+  Cost ~$0.10; balance $0.86→$0.76.
+- Literal `docker run` of the image: verified-by-composition (build doctor pass + proven entrypoint +
+  CSV smoke + 83.59 run); 100% literal proof = `docker run` on a Docker+GPU host (README has the command).
+- **README thorough pass:** project structure → Qwen ≤5B; build-recipe with kaniko command; "Kết quả đã
+  đo" (83.59 + CSV/A–J details + CSV-smoke verification); doc links incl. the ≤5B pivot note.
