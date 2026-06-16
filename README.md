@@ -17,6 +17,17 @@ ngay trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần 
 > Gemma-4-26B trước đây (26B > 5B). Allowlist mô hình giờ là **config-driven** (`runtime.model_policy`
 > trong `configs/default.json`) — đổi luật chỉ là sửa dữ liệu, không sửa code.
 
+## Tuân thủ yêu cầu đầu ra Bảng C (checklist)
+
+| Yêu cầu BTC | Đáp ứng |
+|---|---|
+| **Docker Container trên Docker Hub** | ✅ `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` (digest `sha256:8a38b8da…c4740`, ~16.84GB) |
+| **Entry-point đọc `public_test.csv` / `private_test.csv` tại `/data`** | ✅ tự nhận diện theo `contest.input_candidates` (ưu tiên `private_test.csv` → `public_test.csv` → biến thể `.json`); đọc CSV bằng `csv.DictReader` (hỗ trợ BOM). **Đã smoke-test trên GPU** với `public_test.csv` |
+| **Ghi `pred.csv` vào `/output` với hai cột `qid,answer`** | ✅ ghi-trước-khi-validate, đủ mọi `qid`, mỗi `answer` là 1 chữ cái A–J hợp lệ theo số phương án từng câu |
+| **GitHub chứa code + cách reproduce** | ✅ [github.com/meiiie/bang_c](https://github.com/meiiie/bang_c) — mã nguồn + `Dockerfile.qwen-selfconsist.kaniko` + hướng dẫn `docker run` (dưới) |
+| **Mô hình ≤5B, một mô hình, không mô hình/API ngoài** | ✅ Qwen3-4B-Instruct-2507 (dense 4B GGUF), chạy `local_llamacpp` offline, một mô hình duy nhất |
+| **Thuyết minh phương pháp (Ý tưởng)** | ✅ [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) + PPTX nộp riêng |
+
 ## Đội thi — Neko Core
 
 Trường **Đại học Hàng hải Việt Nam (VMU)**.
@@ -75,6 +86,40 @@ không API key, không phụ thuộc dịch vụ ngoài).
 | Đầu ra | `/output/pred.csv` |
 | Cột | `qid,answer` |
 | Giá trị `answer` | chữ cái phương án theo TỪNG dòng (A, B, C, D… tới J cho câu nhiều lựa chọn) |
+
+### Chạy trên private test 2000 câu (Vòng-2)
+
+Lệnh **giống hệt** phần trên — chỉ cần đặt `private_test.csv` vào `./data`:
+
+```bash
+mkdir -p data output
+cp private_test.csv data/
+docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
+  hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+# => ./output/pred.csv  (2000 dòng: qid,answer)
+```
+
+- **Tự ưu tiên `private_test.csv`** (đứng đầu `contest.input_candidates`) nên không cần đổi cấu hình.
+- **Thời gian:** ~3 giây/câu trên 1 GPU (đo trên 463 = 1336s) → 2000 câu ≈ **~100 phút**. Một mô hình
+  4B, VRAM thấp (~5GB) — **không OOM** trên mọi GPU thi đấu.
+- **Chống về 0 điểm:** `--checkpoint-every 1` + `--auto-resume` (ghi sau mỗi câu); nếu container bị
+  ngắt giữa chừng, chạy lại sẽ tiếp tục từ checkpoint thay vì làm lại từ đầu. `pred.csv` được ghi
+  TRƯỚC khi validate và tự khớp đúng tập `qid` → một câu lỗi không bao giờ làm hỏng cả lần chạy.
+
+### Chi tiết image (đã nướng sẵn)
+
+| | |
+|---|---|
+| Tag nộp (canonical) | `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` |
+| Digest | `sha256:8a38b8daa8c11d7459bbaeba5b438dfa4f3ef0573e8f9a80a4259a1c603c4740` |
+| Kích thước | ~16.84GB nén (base CUDA PyTorch chiếm phần lớn; model chỉ ~2.7GB) |
+| Phiên bản | Neko Core **v0.7.0** (mốc pivot ≤5B) |
+| Mô hình nướng sẵn | `Qwen3-4B-Instruct-2507` Q5_K_M GGUF tại `/models/qwen3-4b.gguf` |
+| Runtime | `llama-cpp-python` build nguồn `GGML_NATIVE=off` (chạy mọi CPU) |
+| Metadata | OCI labels (`docker inspect` xem `org.opencontainers.image.*` + `neko.model/workflow/contest`) |
+
+> **Lưu ý tag:** dùng đúng tag có ngày ở trên (canonical, bất biến). Tag `:latest` của repo có thể
+> còn trỏ tới image Gemma 26B cũ (**không hợp lệ** dưới luật ≤5B) — **đừng dùng `:latest`**.
 
 ### Mô hình & tuân thủ quy tắc Bảng C
 
