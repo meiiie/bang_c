@@ -15,7 +15,7 @@ ARG MODEL_FILE=Qwen3-4B-Instruct-2507-Q5_K_M.gguf
 LABEL org.opencontainers.image.title="Neko Core — HackAIthon 2026 Bang C (≤5B)" \
       org.opencontainers.image.description="Offline self-contained multiple-choice solver. Reads /data/{private,public}_test.csv (or .json), runs Qwen3-4B-Instruct-2507 GGUF self-consistency, writes /output/pred.csv (qid,answer). No network, no API key." \
       org.opencontainers.image.source="https://github.com/meiiie/bang_c" \
-      org.opencontainers.image.version="0.7.0" \
+      org.opencontainers.image.version="0.7.1" \
       org.opencontainers.image.vendor="Neko Core — Vietnam Maritime University (VMU)" \
       neko.model="Qwen3-4B-Instruct-2507 Q5_K_M GGUF (dense, <=5B)" \
       neko.workflow="self-consistency" \
@@ -40,12 +40,15 @@ COPY requirements.txt requirements-local.txt ./
 # Portable runtime: source-build llama-cpp-python with CUDA + GGML_NATIVE=off so the image runs on
 # ANY judge CPU. The prebuilt cu124 wheel SIGILLs during INFERENCE on older CPUs (verified on RunPod
 # community hosts) -> the container would crash and write no pred.csv. GGML_NATIVE=off emits a portable
-# binary with runtime CPU feature dispatch. -j capped to avoid nvcc OOM on small builders.
+# binary with runtime CPU feature dispatch.
+# CMAKE_CUDA_ARCHITECTURES bakes native SASS for sm_75/80/86/89/90/120 (T4, A100, Ampere, Ada, H100,
+# Blackwell) so the image runs on every modern NVIDIA GPU (the default build only did 86/89/120 and would
+# fail on A100/H100/T4). Needs a big-RAM builder (~100GB at -j8 for 6 archs); RunPod 3090 hosts have 251GB.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends cmake build-essential git \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
-    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off" FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=8 \
+    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=75;80;86;89;90;120" FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=8 \
        python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
 
 # Qwen3-4B-Instruct-2507 Q5_K_M (the answering model, GPU). ~2.7GB.
