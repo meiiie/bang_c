@@ -1,7 +1,13 @@
 # Bang C Submission Readiness
 
 Status: active
-Last updated: 2026-06-13
+Last updated: 2026-06-18
+
+> **⚠️ CẬP NHẬT 2026-06-18 — bài nộp đã đổi sang ≤5B.** BTC chuyển luật sang **≤5B tham số**, nên mô
+> hình Gemma-4-26B (mô tả bên dưới, lịch sử) **không còn hợp lệ**. Bài nộp hiện tại = **Qwen3-4B-Instruct-2507**
+> trong image `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` = `:v0.7.1` = `:latest` (digest
+> `sha256:e9aada9b…011c`, 17.36GB, CUDA arch sm_75/80/86/89/90/120 → mọi GPU NVIDIA), public-463 = **83.59**.
+> Hợp đồng I/O + cách reproduce: **`README.md`** là nguồn chính. Mục bên dưới giữ để tham chiếu lịch sử.
 
 ## Vòng-1 deliverables checklist (per the official rules — "Yêu cầu đầu ra")
 

@@ -167,3 +167,20 @@ step**, but it is RAM-bound:
   is fine for a final/low-volume run.
 - Either way the **final artifact converts to GGUF** (llama.cpp) for the offline x86+CUDA Docker
   image — the eval container is not Apple Silicon, so training device ≠ serving device.
+
+## GPU-arch portability ("ẩn số #2") — RESOLVED 2026-06-18 (image v0.7.1)
+
+The shipped image's CUDA wheel must carry native SASS for the judge's GPU arch, else CUDA errors
+"no kernel image" → 0 score. **Measured** (crane export + cuobjdump) that the v0.7.0 image (a48b63bc)
+had SASS only for **sm_86/89/120 (consumer)** + no PTX → would FAIL on **A100 (sm_80), H100 (sm_90),
+T4 (sm_75)**. **Fixed in v0.7.1**: `CMAKE_CUDA_ARCHITECTURES=75;80;86;89;90;120` in
+`Dockerfile.qwen-selfconsist.kaniko` (plain syntax, no build-gate), built on a **128GB-RAM** pod
+(the 6-arch -j8 compile needs ~140GB; smaller hosts OOM). Pushed `:qwen3-4b-selfconsist-20260616` =
+`:v0.7.1` = `:latest` = `sha256:e9aada9b…011c` (17.36GB). **VERIFIED** on the pushed image:
+libggml-cuda.so SASS = sm_75/80/86/89/90/120 (T4, A100, Ampere, Ada, H100, Blackwell-consumer).
+- **Covered:** every realistic 2026 datacenter/workstation NVIDIA GPU.
+- **NOT covered (low risk, no PTX):** V100 (sm_70), B200 datacenter (sm_100), future archs > sm_120.
+- **Lessons:** build the wheel OBSERVABLY (ssh-alive pod, watch RAM/CPU) — kaniko is blind (kills sshd);
+  the compile-in-image PROVEN Dockerfile + a plain arch list + big RAM + NO cuobjdump build-gate is what
+  worked (3 prior blind-kaniko attempts failed on a PTX-gate and a prebuilt-wheel COPY path). A contest
+  needs native SASS for the realistic range, not PTX forward-compat to unknown-future archs.
