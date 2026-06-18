@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .config import HarnessConfig
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 DEFAULT_BRAND_NAME = "Neko Core"
 DEFAULT_BRAND_SLUG = "neko-core"
 DEFAULT_ASCII_LOGO = (

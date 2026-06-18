@@ -21,7 +21,7 @@ ngay trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần 
 
 | Yêu cầu BTC | Đáp ứng |
 |---|---|
-| **Docker Container trên Docker Hub** | ✅ `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` (= `:v0.7.1` = `:latest`, digest `sha256:e9aada9b…011c`, ~17.36GB) |
+| **Docker Container trên Docker Hub** | ✅ `hacamy12345/neko-core:qwen3-4b-selfconsist-20260618` (= `:v0.7.2` = `:latest`, digest `sha256:39c7891c…575eaf`, ~17.62GB) |
 | **Entry-point đọc `public_test.csv` / `private_test.csv` tại `/data`** | ✅ tự nhận diện theo `contest.input_candidates` (ưu tiên `private_test.csv` → `public_test.csv` → biến thể `.json`); đọc CSV bằng `csv.DictReader` (hỗ trợ BOM). **Đã smoke-test trên GPU** với `public_test.csv` |
 | **Ghi `pred.csv` vào `/output` với hai cột `qid,answer`** | ✅ ghi-trước-khi-validate, đủ mọi `qid`, mỗi `answer` là 1 chữ cái A–J hợp lệ theo số phương án từng câu |
 | **GitHub chứa code + cách reproduce** | ✅ [github.com/meiiie/bang_c](https://github.com/meiiie/bang_c) — mã nguồn + `Dockerfile.qwen-selfconsist.kaniko` + hướng dẫn `docker run` (dưới) |
@@ -48,7 +48,7 @@ Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô 
 
 | | |
 |---|---|
-| GPU | **NVIDIA** (≥ 6GB VRAM; image dùng ~5GB) + driver hợp CUDA 12.8. Wheel nướng native SASS cho **sm_75/80/86/89/90/120** → chạy **T4, A100, H100, Ampere, Ada, Blackwell** (đã verify `cuobjdump` trên image đã push) |
+| GPU | **NVIDIA** (≥ 6GB VRAM; image dùng ~5GB — server BTC 16GB thừa sức) + driver hợp CUDA 12.8 (R525+). Wheel nướng native SASS cho **sm_70/75/80/86/89/90/120** (V100, T4, A100, Ampere, Ada, H100, Blackwell) **+ PTX floor compute_60** → **mọi GPU ≥ Pascal (kể cả P100) tự JIT lúc load** = không 0-điểm dù BTC dùng GPU nào |
 | Docker | Docker Engine/Desktop + **NVIDIA Container Toolkit** (cho cờ `--gpus all`) |
 | Dung lượng | ~20GB trống (image ~17GB nén) |
 | Mạng | chỉ cần lúc `docker pull`; **lúc chạy hoàn toàn offline** |
@@ -58,26 +58,26 @@ Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô 
 
 ```bash
 # 1) Kéo image (mô hình ≤5B nướng sẵn; ~17GB nén — phần lớn là base CUDA PyTorch)
-docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 
 # 2) Đặt đề thi vào ./data rồi chạy
 mkdir -p data output
 cp private_test.csv data/                       # (hoặc public_test.csv)
 docker run --rm --gpus all \
   -v "$PWD/data:/data" -v "$PWD/output:/output" \
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 # => ./output/pred.csv   (hai cột: qid,answer)
 ```
 
 **Windows (PowerShell)** — chỉ khác cách viết đường dẫn mount:
 
 ```powershell
-docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 mkdir data, output -Force
 copy private_test.csv data\
 docker run --rm --gpus all `
   -v "${PWD}\data:/data" -v "${PWD}\output:/output" `
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 ```
 
 Container tự động dò file đề trong `/data` (thứ tự `private_test.csv` → `public_test.csv` → biến thể
@@ -120,7 +120,7 @@ demo_002,"Thủ đô của Việt Nam là?",Hà Nội,Huế,Đà Nẵng,TP. Hồ
 
 ```bash
 docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 cat output/pred.csv
 # Kỳ vọng:
 #   qid,answer
@@ -140,7 +140,7 @@ Lệnh **giống hệt** phần trên — chỉ cần đặt `private_test.csv` 
 mkdir -p data output
 cp private_test.csv data/
 docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 # => ./output/pred.csv  (2000 dòng: qid,answer)
 ```
 
@@ -155,16 +155,16 @@ docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
 
 | | |
 |---|---|
-| Tag (3 tag, cùng 1 digest) | `:qwen3-4b-selfconsist-20260616` = `:v0.7.1` = `:latest` |
-| Digest | `sha256:e9aada9bdc43a97ce2f28ba604ddb261a2175ed66ddd72790ead4a304fad011c` |
-| Kích thước | ~17.36GB nén (base CUDA PyTorch chiếm phần lớn; model chỉ ~2.7GB) |
-| Phiên bản | Neko Core **v0.7.1** (arch-portable: mọi GPU NVIDIA) |
+| Tag (3 tag, cùng 1 digest) | `:qwen3-4b-selfconsist-20260618` = `:v0.7.2` = `:latest` |
+| Digest | `sha256:39c7891cefce0bf77caad6540dbdb2fec431684d318f7e58aabdf79939575eaf` |
+| Kích thước | ~17.62GB nén (base CUDA PyTorch chiếm phần lớn; model chỉ ~2.7GB) |
+| Phiên bản | Neko Core **v0.7.2** (arch-portable: mọi GPU NVIDIA) |
 | Mô hình nướng sẵn | `Qwen3-4B-Instruct-2507` Q5_K_M GGUF tại `/models/qwen3-4b.gguf` |
-| Runtime | `llama-cpp-python` build nguồn `GGML_NATIVE=off` (mọi CPU) + CUDA native SASS sm_75/80/86/89/90/120 (mọi GPU NVIDIA: T4→A100→H100→Blackwell) |
-| Metadata | OCI labels (`docker inspect` xem `org.opencontainers.image.*` + `neko.model/workflow/contest` + `neko.cuda_arch`) |
+| Runtime | `llama-cpp-python` build nguồn `GGML_NATIVE=off` (mọi CPU) + CUDA native SASS sm_70/75/80/86/89/90/120 + PTX floor compute_60 (mọi GPU NVIDIA ≥ Pascal: P100/V100→T4→A100→H100→Blackwell) |
+| Metadata | OCI labels (`docker inspect` xem `org.opencontainers.image.*` + `neko.model/workflow/contest`) |
 
-> Cả ba tag (`:qwen3-4b-selfconsist-20260616`, `:v0.7.1`, `:latest`) đều trỏ cùng digest `e9aada9b…011c`
-> = image ≤5B Qwen3-4B v0.7.1. Tag có ngày là canonical (bất biến) — nên pin nó khi nộp.
+> Cả ba tag (`:qwen3-4b-selfconsist-20260618`, `:v0.7.2`, `:latest`) đều trỏ cùng digest `39c7891c…575eaf`
+> = image ≤5B Qwen3-4B v0.7.2. Tag có ngày là canonical (bất biến) — nên pin nó khi nộp.
 
 ### Mô hình & tuân thủ quy tắc Bảng C
 
@@ -172,6 +172,9 @@ docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
   thủ luật Bảng C mới (2026-06-16): **≤5B tham số, mở mô hình, một mô hình duy nhất, không mô hình/API
   ngoài**. Allowlist là **config-driven** (`runtime.model_policy`): `{"aliases":["*"],"max_params_b":5.0}`
   ép mọi mô hình ≤5B; cờ `count_active_for_moe` để chốt total-vs-active cho MoE nếu cần.
+- **BTC xác nhận chính thức (2026-06-18):** (1) server chấm **16GB VRAM**; (2) **≤5B tính theo TỔNG tham số**
+  (nên MoE 26B-tổng bị loại; Qwen3-4B dense 4B-tổng hợp lệ); (3) **chỉ 1 model LLM ≤5B, KHÔNG embedding/rerank**.
+  → Bài nộp này tuân thủ tuyệt đối: đúng 1 LLM Qwen3-4B, không model phụ, dùng ~5GB/16GB, **không RAG/rerank**.
 - **Không gắn cứng đáp án public-test**; mọi đòn bẩy phải tổng quát hoá cho bộ private 2000 câu.
 
 ### Kết quả đã đo (minh bạch)
@@ -243,7 +246,7 @@ overlay. No public-test answers are baked into any layer.
 /kaniko/executor \
   --context dir://. \
   --dockerfile ./Dockerfile.qwen-selfconsist.kaniko \
-  --destination docker.io/hacamy12345/neko-core:qwen3-4b-selfconsist-20260616
+  --destination docker.io/hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 ```
 
 The image is large (~17GB compressed — the CUDA PyTorch base dominates; the model is only ~2.7GB).

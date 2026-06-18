@@ -5,9 +5,18 @@ Last updated: 2026-06-18
 
 > **⚠️ CẬP NHẬT 2026-06-18 — bài nộp đã đổi sang ≤5B.** BTC chuyển luật sang **≤5B tham số**, nên mô
 > hình Gemma-4-26B (mô tả bên dưới, lịch sử) **không còn hợp lệ**. Bài nộp hiện tại = **Qwen3-4B-Instruct-2507**
-> trong image `hacamy12345/neko-core:qwen3-4b-selfconsist-20260616` = `:v0.7.1` = `:latest` (digest
-> `sha256:e9aada9b…011c`, 17.36GB, CUDA arch sm_75/80/86/89/90/120 → mọi GPU NVIDIA), public-463 = **83.59**.
+> trong image `hacamy12345/neko-core:qwen3-4b-selfconsist-20260618` = `:v0.7.2` = `:latest` (digest
+> `sha256:39c7891c…575eaf`, 17.62GB, CUDA arch sm_70/75/80/86/89/90/120 + PTX floor compute_60 → mọi GPU NVIDIA), public-463 = **83.59**.
 > Hợp đồng I/O + cách reproduce: **`README.md`** là nguồn chính. Mục bên dưới giữ để tham chiếu lịch sử.
+>
+> **✅ RÀ SOÁT CUỐI + KHÓA (2026-06-18):** đã verify đầy đủ contract BTC — (1) cả 3 tag trên Docker Hub
+> (`:qwen3-4b-selfconsist-20260618` = `:v0.7.2` = `:latest`) cùng resolve về digest `sha256:39c7891c…575eaf`,
+> khớp README/Dockerfile; (2) `Dockerfile.qwen-selfconsist.kaniko` bake đúng Qwen3-4B-Instruct-2507 Q5_K_M
+> (dense 4B ≤5B), ENV `local_llamacpp`, KHÔNG bật `NEKO_LOCAL_SERVER_MODE` → nhánh MTP Gemma-26B trong
+> entrypoint là dead-code (không bao giờ chạy, không vi phạm ≤5B); (3) ENTRYPOINT/CMD đọc `/data` → ghi
+> `/output/pred.csv (qid,answer)`, offline, no API; (4) policy overlay ép `max_params_b=5.0`; (5) arch
+> sm_70–120 (+PTX compute_60) + `GGML_NATIVE=off` (mọi GPU/CPU judge). **Bài nộp v0.7.2 ĐÃ KHÓA, không cần đổi gì.**
+> Fine-tune đã thử (v1/v2) → không thắng base, không ship: `notes/2026-06-18-finetune-verdict.md`.
 
 ## Vòng-1 deliverables checklist (per the official rules — "Yêu cầu đầu ra")
 
