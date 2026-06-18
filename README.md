@@ -122,10 +122,12 @@ demo_002,"Thủ đô của Việt Nam là?",Hà Nội,Huế,Đà Nẵng,TP. Hồ
 docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
   hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
 cat output/pred.csv
-# Kỳ vọng:
+# Kỳ vọng: 2 dòng dạng "qid,answer", mỗi đáp án là 1 chữ cái A–D hợp lệ, ví dụ:
 #   qid,answer
-#   demo_001,B
+#   demo_001,A
 #   demo_002,A
+# (Đáp án cụ thể của 2 câu toy này KHÔNG quan trọng và có thể đổi giữa các lần chạy
+#  do self-consistency lấy mẫu — chỉ cần FORMAT pred.csv đúng là pipeline OK.)
 ```
 
 Nếu ra đúng `pred.csv` hai cột `qid,answer` với đáp án A–D → pipeline chạy chuẩn trên máy đó. (Máy

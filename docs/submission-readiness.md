@@ -16,6 +16,11 @@ Last updated: 2026-06-18
 > entrypoint là dead-code (không bao giờ chạy, không vi phạm ≤5B); (3) ENTRYPOINT/CMD đọc `/data` → ghi
 > `/output/pred.csv (qid,answer)`, offline, no API; (4) policy overlay ép `max_params_b=5.0`; (5) arch
 > sm_70–120 (+PTX compute_60) + `GGML_NATIVE=off` (mọi GPU/CPU judge). **Bài nộp v0.7.2 ĐÃ KHÓA, không cần đổi gì.**
+>
+> **✅ LITERAL SMOKE-TEST (2026-06-18):** kéo nguyên image v0.7.2 từ Docker Hub (crane export đủ 38 layer) trên
+> 1 GPU sạch → `cuobjdump libggml-cuda.so` xác nhận native SASS `sm_60/70/75/80/86/89/90/120` (P100→Blackwell,
+> gồm **sm_70 V100**) → chroot chạy entrypoint thật trên test CSV (rc=0, ~30s) → `pred.csv` hợp lệ `qid,answer`.
+> Pull + model + arch + chạy end-to-end đều PASS — bài nộp đã kiểm chứng literal trên máy sạch.
 > Fine-tune đã thử (v1/v2) → không thắng base, không ship: `notes/2026-06-18-finetune-verdict.md`.
 
 ## Vòng-1 deliverables checklist (per the official rules — "Yêu cầu đầu ra")
