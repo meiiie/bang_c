@@ -9,7 +9,7 @@ description = "Neko Core config-first inference harness for HackAIthon 2026 Bang
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "requests==2.32.4"
+  "requests==2.34.2"
 ]
 
 [project.optional-dependencies]
