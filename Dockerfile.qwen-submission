@@ -57,13 +57,15 @@ WORKDIR /code
 
 COPY requirements.txt requirements-local.txt ./
 # Portable in-process llama.cpp compiled against CUDA 12.2: GGML_NATIVE=off (no SIGILL on
-# older judge CPUs) + native SASS for sm_70/75/80/86/89/90 (V100, T4, A100, Ampere, Ada,
-# Hopper) PLUS a compute_60 PTX floor so any GPU >= sm_60 (incl. Pascal P100) JIT-compiles
-# at load. BTC judge server = 16GB VRAM (most likely T4 sm_75).
+# older judge CPUs) + a single compute_60 VIRTUAL (PTX) target. ANY GPU >= sm_60
+# (P100/V100/T4/Ampere/Ada/Hopper) JIT-compiles the PTX to native SASS at model load --
+# one-time, during build_chat_client, OUTSIDE predict.py's per-item timed loop, so it does
+# NOT affect the Time score. One PTX target minimizes per-nvcc RAM and compile time on a
+# modest build host (PTX is forward-compatible, so this covers every judge GPU).
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
-    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=60-virtual;70;75;80;86;89;90" \
-       FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=2 \
+    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=60-virtual" \
+       FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=3 \
        python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
 
 # Bake the answering model (~2.7GB) so grading is fully offline.
@@ -71,17 +73,23 @@ RUN MODEL_REPO="${MODEL_REPO}" MODEL_FILE="${MODEL_FILE}" python -c \
     "import os, shutil; from pathlib import Path; from huggingface_hub import hf_hub_download; d=Path('/models'); d.mkdir(parents=True, exist_ok=True); m=hf_hub_download(repo_id=os.environ['MODEL_REPO'], filename=os.environ['MODEL_FILE'], local_dir=d); shutil.copy(m, d/'qwen3-4b.gguf'); print('model:', m)" \
     && test -s "${HACKC_LOCAL_MODEL_PATH}"
 
+# Keep the app OUTSIDE /code: the judge mounts the test into /code (a dir mount would
+# otherwise HIDE the baked-in code). Code lives in /app; it reads /code/private_test.json
+# and writes /code/submission.csv + /code/submission_time.csv (the mounted, writable dir).
+WORKDIR /app
+ENV PYTHONPATH=/app/src
+
 COPY src ./src
 COPY configs ./configs
 COPY docker/qwen-selfconsist.neko-core.json ./.neko-core/config.json
 COPY predict.py inference.sh ./
 COPY README.md ./
 
-RUN mkdir -p /data /output \
+RUN mkdir -p /data /output /code \
     && chmod +x inference.sh \
     && test -s "${HACKC_LOCAL_MODEL_PATH}" \
     && python -m py_compile predict.py \
     && python -m hackaithon_c.run --doctor
 
 # BTC contract: read /code/private_test.json -> write submission.csv + submission_time.csv
-CMD ["bash", "inference.sh"]
+CMD ["bash", "/app/inference.sh"]
