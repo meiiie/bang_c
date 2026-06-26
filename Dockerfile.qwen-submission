@@ -57,14 +57,14 @@ WORKDIR /code
 
 COPY requirements.txt requirements-local.txt ./
 # In-process llama.cpp compiled against CUDA 12.8: GGML_NATIVE=off (runtime CPU feature
-# dispatch -> no SIGILL on the judge CPU) + native Blackwell SASS (sm_120, the RTX 5060 Ti
-# judge GPU) PLUS a compute_75 PTX floor that forward-JITs to any GPU >= sm_75 (incl. sm_120)
-# at model load -- one-time, during build_chat_client, OUTSIDE predict.py's per-item timed
-# loop, so no Time-score impact. (We build without a local Blackwell card; native sm_120 +
-# a PTX floor is the most robust target for the 5060 Ti per BTC's CUDA-12.8 requirement.)
+# dispatch -> no SIGILL on the judge CPU). PTX-only targets (compute_75 + compute_120): the
+# RTX 5060 Ti (sm_120) JIT-compiles the compute_120 PTX to native sm_120 at model load --
+# one-time, during build_chat_client, OUTSIDE predict.py's per-item timed loop, so no Time-
+# score impact. PTX codegen builds far faster than native Blackwell SASS, and JIT from the
+# same arch (sm_120 PTX -> sm_120) is reliable; compute_75 also covers any GPU >= sm_75.
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
-    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=75-virtual;120" \
+    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=75-virtual;120-virtual" \
        FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=3 \
        python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
 
