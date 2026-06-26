@@ -5,13 +5,13 @@
 #   - writes submission.csv            (qid,answer)
 #   - writes submission_time.csv       (qid,answer,time  -- per-sample seconds)
 #
-# Base: CUDA 12.2 (BTC-mandated, matches the judge server driver). Python 3.11
-# (parity with the validated harness). One open dense model: Qwen3-4B-Instruct-2507
-# Q5_K_M GGUF (<=5B), in-process via llama.cpp built GGML_NATIVE=off (runtime CPU
-# feature dispatch -> no SIGILL on older judge CPUs) with multi-arch CUDA + a
-# compute_60 PTX floor so it runs on the judge's exact GPU. Fully offline at grade
-# time; the model is baked in during build. No network, no API key, no second model.
-FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
+# Base: CUDA 12.8 (BTC-mandated: the judge GPU is an RTX 5060 Ti = Blackwell sm_120,
+# which requires CUDA >= 12.8). Python 3.11. One open dense model: Qwen3-4B-Instruct-2507
+# Q5_K_M GGUF (<=5B), in-process via llama.cpp built GGML_NATIVE=off (runtime CPU feature
+# dispatch -> no SIGILL on the judge CPU) with native Blackwell sm_120 SASS plus a PTX
+# floor. Fully offline at grade time; the model is baked in during build. No network,
+# no API key, no second model.
+FROM nvidia/cuda:12.8.1-devel-ubuntu22.04
 
 ARG MODEL_REPO=unsloth/Qwen3-4B-Instruct-2507-GGUF
 ARG MODEL_FILE=Qwen3-4B-Instruct-2507-Q5_K_M.gguf
@@ -19,10 +19,10 @@ ARG MODEL_FILE=Qwen3-4B-Instruct-2507-Q5_K_M.gguf
 LABEL org.opencontainers.image.title="Neko Core - HackAIthon 2026 Bang C R2 (<=5B)" \
       org.opencontainers.image.description="Offline multiple-choice solver. Reads /code/private_test.json, runs Qwen3-4B-Instruct-2507 GGUF (k=1 CoT), writes submission.csv + submission_time.csv. No network/API/second model." \
       org.opencontainers.image.source="https://github.com/meiiie/bang_c" \
-      org.opencontainers.image.version="0.8.0" \
+      org.opencontainers.image.version="0.8.2" \
       org.opencontainers.image.vendor="Neko Core - Vietnam Maritime University (VMU)" \
       neko.model="Qwen3-4B-Instruct-2507 Q5_K_M GGUF (dense, <=5B)" \
-      neko.cuda="12.2" \
+      neko.cuda="12.8" \
       neko.contest="HackAIthon 2026 Bang C R2"
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -56,15 +56,15 @@ RUN apt-get update \
 WORKDIR /code
 
 COPY requirements.txt requirements-local.txt ./
-# Portable in-process llama.cpp compiled against CUDA 12.2: GGML_NATIVE=off (no SIGILL on
-# older judge CPUs) + a single compute_60 VIRTUAL (PTX) target. ANY GPU >= sm_60
-# (P100/V100/T4/Ampere/Ada/Hopper) JIT-compiles the PTX to native SASS at model load --
-# one-time, during build_chat_client, OUTSIDE predict.py's per-item timed loop, so it does
-# NOT affect the Time score. One PTX target minimizes per-nvcc RAM and compile time on a
-# modest build host (PTX is forward-compatible, so this covers every judge GPU).
+# In-process llama.cpp compiled against CUDA 12.8: GGML_NATIVE=off (runtime CPU feature
+# dispatch -> no SIGILL on the judge CPU) + native Blackwell SASS (sm_120, the RTX 5060 Ti
+# judge GPU) PLUS a compute_75 PTX floor that forward-JITs to any GPU >= sm_75 (incl. sm_120)
+# at model load -- one-time, during build_chat_client, OUTSIDE predict.py's per-item timed
+# loop, so no Time-score impact. (We build without a local Blackwell card; native sm_120 +
+# a PTX floor is the most robust target for the 5060 Ti per BTC's CUDA-12.8 requirement.)
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
-    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=60-virtual" \
+    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=75-virtual;120" \
        FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=3 \
        python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
 
