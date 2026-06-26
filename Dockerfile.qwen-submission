@@ -63,7 +63,7 @@ COPY requirements.txt requirements-local.txt ./
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
     && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=60-virtual;70;75;80;86;89;90" \
-       FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=6 \
+       FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=2 \
        python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
 
 # Bake the answering model (~2.7GB) so grading is fully offline.
