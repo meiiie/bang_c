@@ -1,0 +1,87 @@
+# HackAIthon 2026 - Bang C, Round 2 FINAL submission image.
+#
+# Implements the BTC submission contract:
+#   - reads  /code/private_test.json   (mounted by the judge at grade time)
+#   - writes submission.csv            (qid,answer)
+#   - writes submission_time.csv       (qid,answer,time  -- per-sample seconds)
+#
+# Base: CUDA 12.2 (BTC-mandated, matches the judge server driver). Python 3.11
+# (parity with the validated harness). One open dense model: Qwen3-4B-Instruct-2507
+# Q5_K_M GGUF (<=5B), in-process via llama.cpp built GGML_NATIVE=off (runtime CPU
+# feature dispatch -> no SIGILL on older judge CPUs) with multi-arch CUDA + a
+# compute_60 PTX floor so it runs on the judge's exact GPU. Fully offline at grade
+# time; the model is baked in during build. No network, no API key, no second model.
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
+
+ARG MODEL_REPO=unsloth/Qwen3-4B-Instruct-2507-GGUF
+ARG MODEL_FILE=Qwen3-4B-Instruct-2507-Q5_K_M.gguf
+
+LABEL org.opencontainers.image.title="Neko Core - HackAIthon 2026 Bang C R2 (<=5B)" \
+      org.opencontainers.image.description="Offline multiple-choice solver. Reads /code/private_test.json, runs Qwen3-4B-Instruct-2507 GGUF (k=1 CoT), writes submission.csv + submission_time.csv. No network/API/second model." \
+      org.opencontainers.image.source="https://github.com/meiiie/bang_c" \
+      org.opencontainers.image.version="0.8.0" \
+      org.opencontainers.image.vendor="Neko Core - Vietnam Maritime University (VMU)" \
+      neko.model="Qwen3-4B-Instruct-2507 Q5_K_M GGUF (dense, <=5B)" \
+      neko.cuda="12.2" \
+      neko.contest="HackAIthon 2026 Bang C R2"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/code/src \
+    HACKC_DATA_DIR=/data \
+    HACKC_OUTPUT_DIR=/output \
+    HACKC_PROVIDER=local_llamacpp \
+    HACKC_LOCAL_MODEL_ID=qwen3-4b-instruct-2507 \
+    HACKC_LOCAL_MODEL_PATH=/models/qwen3-4b.gguf \
+    HACKC_LLAMACPP_N_CTX=8192 \
+    HACKC_LLAMACPP_N_GPU_LAYERS=-1 \
+    CUDACXX=/usr/local/cuda/bin/nvcc \
+    PATH=/usr/local/cuda/bin:/usr/local/bin:${PATH}
+
+# Python 3.11 (deadsnakes) + build toolchain for the CUDA llama.cpp source build.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+         software-properties-common ca-certificates gnupg curl \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+         python3.11 python3.11-dev python3.11-distutils \
+         cmake build-essential git \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/local/bin/python \
+    && ln -sf /usr/bin/python3.11 /usr/local/bin/python3 \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+
+WORKDIR /code
+
+COPY requirements.txt requirements-local.txt ./
+# Portable in-process llama.cpp compiled against CUDA 12.2: GGML_NATIVE=off (no SIGILL on
+# older judge CPUs) + native SASS for sm_70/75/80/86/89/90 (V100, T4, A100, Ampere, Ada,
+# Hopper) PLUS a compute_60 PTX floor so any GPU >= sm_60 (incl. Pascal P100) JIT-compiles
+# at load. BTC judge server = 16GB VRAM (most likely T4 sm_75).
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir -r requirements.txt "huggingface-hub>=0.32,<1" \
+    && CMAKE_ARGS="-DGGML_CUDA=on -DGGML_NATIVE=off -DCMAKE_CUDA_ARCHITECTURES=60-virtual;70;75;80;86;89;90" \
+       FORCE_CMAKE=1 CMAKE_BUILD_PARALLEL_LEVEL=6 \
+       python -m pip install --no-cache-dir --no-binary llama-cpp-python "llama-cpp-python>=0.3.9,<0.4"
+
+# Bake the answering model (~2.7GB) so grading is fully offline.
+RUN MODEL_REPO="${MODEL_REPO}" MODEL_FILE="${MODEL_FILE}" python -c \
+    "import os, shutil; from pathlib import Path; from huggingface_hub import hf_hub_download; d=Path('/models'); d.mkdir(parents=True, exist_ok=True); m=hf_hub_download(repo_id=os.environ['MODEL_REPO'], filename=os.environ['MODEL_FILE'], local_dir=d); shutil.copy(m, d/'qwen3-4b.gguf'); print('model:', m)" \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}"
+
+COPY src ./src
+COPY configs ./configs
+COPY docker/qwen-selfconsist.neko-core.json ./.neko-core/config.json
+COPY predict.py inference.sh ./
+COPY README.md ./
+
+RUN mkdir -p /data /output \
+    && chmod +x inference.sh \
+    && test -s "${HACKC_LOCAL_MODEL_PATH}" \
+    && python -m py_compile predict.py \
+    && python -m hackaithon_c.run --doctor
+
+# BTC contract: read /code/private_test.json -> write submission.csv + submission_time.csv
+CMD ["bash", "inference.sh"]

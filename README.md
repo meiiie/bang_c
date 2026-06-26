@@ -5,28 +5,94 @@
 
 ![Neko Core banner](docs/assets/neko-core-banner.png)
 
-Trạng thái: bài dự thi **HackAIthon 2026 — Bảng C (Innovator)**
+Trạng thái: bài dự thi **HackAIthon 2026 — Bảng C (Innovator) · Vòng 2**
 
-**Neko Core** là một harness suy luận *config-first*, đóng gói thành **một Docker image offline,
-tự chứa**: đọc đề trắc nghiệm tại `/data`, chạy mô hình **Qwen3-4B-Instruct-2507 (GGUF, dense ≤5B)**
-ngay trong container, rồi ghi kết quả ra `/output/pred.csv`. Không cần API key, không cần mạng — đúng
-"Yêu cầu đầu ra" của Bảng C.
+**Neko Core** là một harness suy luận *config-first*, đóng gói thành **một Docker image offline, tự
+chứa**. Theo đúng *Submission Guideline* của Ban Tổ chức (BTC) Vòng 2, container:
 
-> **Cập nhật quy tắc 2026-06-16:** Ban Tổ chức chuyển sang **giới hạn ≤5B tham số, mở lựa chọn mô
-> hình**. Mô hình thi đấu vì vậy là **Qwen3-4B-Instruct-2507** (dense 4B, ≤5B rõ ràng), thay cho
-> Gemma-4-26B trước đây (26B > 5B). Allowlist mô hình giờ là **config-driven** (`runtime.model_policy`
-> trong `configs/default.json`) — đổi luật chỉ là sửa dữ liệu, không sửa code.
+- **đọc** đề trắc nghiệm tại **`/code/private_test.json`** (BTC mount vào khi chấm),
+- chạy mô hình **Qwen3-4B-Instruct-2507 (GGUF Q5_K_M, dense ≤5B)** ngay trong container,
+- **ghi** kết quả ra **`submission.csv`** (`qid,answer`) và **`submission_time.csv`**
+  (`qid,answer,time` — thời gian suy luận **từng câu**).
 
-## Tuân thủ yêu cầu đầu ra Bảng C (checklist)
+Không cần API key, không cần mạng, không mô hình/dịch vụ ngoài.
+
+> **Quy tắc ≤5B (2026-06-16):** BTC giới hạn **≤5B tham số, mở lựa chọn mô hình**. Mô hình thi đấu là
+> **Qwen3-4B-Instruct-2507** (dense 4B, ≤5B rõ ràng). Allowlist là **config-driven**
+> (`runtime.model_policy` trong `configs/default.json`) — đổi luật chỉ là sửa dữ liệu, không sửa code.
+
+---
+
+## Pipeline Flow
+
+```text
+  /code/private_test.json                (BTC mount; JSON list: qid, question, choices[])
+        │
+        ▼
+  loader.py        ── đọc JSON/CSV, chuẩn hoá NFC, trích phương án ──► Problem(qid, question, choices)
+        │
+        ▼
+  classifier.py    ── nhận diện dạng câu (reading / calculation / negative / many-choice …)
+        │
+        ▼
+  prompting.py     ── dựng prompt chain-of-thought theo dạng câu (đa ngôn ngữ, trung lập)
+        │
+        ▼
+  solver.py        ── chiến lược "self-consistency" k=1 (1 mẫu CoT/câu) ──► 1 chữ cái đáp án
+        │                (đã đo voting k>1 KHÔNG tăng điểm → chốt k=1 để tối ưu Time)
+        ▼
+  normalize.py     ── trích đáp án nghiêm ngặt (ANSWER: <letter>) + ép về A/B/C/D… hợp lệ
+        │
+        ▼
+  repair (evaluation.py) ── đảm bảo MỌI qid có 1 đáp án hợp lệ (chống-0-điểm)
+        │
+        ▼
+  predict.py       ── đo time.perf_counter() từng câu, ghi 2 file:
+                         submission.csv        (qid,answer)
+                         submission_time.csv   (qid,answer,time)
+```
+
+Entry-point là **`predict.py`** (gọi qua **`inference.sh`** — `CMD ["bash","inference.sh"]`). Nó tái
+dùng nguyên đường giải đã được kiểm thử của harness (`solve_problem` + `repair_predictions_for_contract`),
+chỉ thêm hợp đồng I/O của BTC và **đo thời gian từng câu** (vòng `for` theo từng item như BTC đề nghị).
+
+## Data Processing
+
+- **Đầu vào** là JSON dạng list, mỗi phần tử `{qid, question, choices[]}` (đúng định dạng public test
+  BTC cấp). `loader.py` còn nhận CSV (`csv.DictReader`, chịu BOM) và tên cột không phân biệt hoa/thường
+  (`qid/id`, `question/prompt`, `choices/options` hoặc các cột chữ cái `A,B,C,D…`).
+- **Chuẩn hoá Unicode NFC**: tiếng Việt tổ hợp (NFD) tách token khác với dạng dựng sẵn (NFC) → mọi
+  `question`/`choices` được `unicodedata.normalize("NFC", …)` để ổn định suy luận.
+- **Không thu thập / huấn luyện dữ liệu** cho đường nộp này: image self-consistency thuần, không dùng
+  tập huấn luyện ngoài, không gắn cứng đáp án public-test (mọi đòn bẩy phải tổng quát cho private 2000 câu).
+
+## Resource Initialization
+
+- **Mô hình**: tải sẵn **lúc build** từ Hugging Face (`unsloth/Qwen3-4B-Instruct-2507-GGUF`,
+  `Qwen3-4B-Instruct-2507-Q5_K_M.gguf`) vào `/models/qwen3-4b.gguf` — **lúc chấm hoàn toàn offline**,
+  không tải gì thêm.
+- **Runtime suy luận**: `llama-cpp-python` được **build từ nguồn** với CUDA (`GGML_NATIVE=off` để chạy
+  trên mọi CPU; native SASS `sm_70/75/80/86/89/90` + **PTX floor `compute_60`** để mọi GPU ≥ Pascal tự
+  JIT lúc load). Biên dịch trên **base CUDA 12.2** đúng yêu cầu phần cứng BTC.
+- **KHÔNG cần Vector Database / Indexing / RAG**: đường nộp này cố tình tối giản (robust > 1pp accuracy) —
+  không corpus, không embedding, không rerank. Không có tài nguyên ngoài nào cần khởi tạo.
+
+---
+
+## Tuân thủ Submission Guideline (Vòng 2)
 
 | Yêu cầu BTC | Đáp ứng |
 |---|---|
-| **Docker Container trên Docker Hub** | ✅ `hacamy12345/neko-core:qwen3-4b-selfconsist-20260618` (= `:v0.7.2` = `:latest`, digest `sha256:39c7891c…575eaf`, ~17.62GB) |
-| **Entry-point đọc `public_test.csv` / `private_test.csv` tại `/data`** | ✅ tự nhận diện theo `contest.input_candidates` (ưu tiên `private_test.csv` → `public_test.csv` → biến thể `.json`); đọc CSV bằng `csv.DictReader` (hỗ trợ BOM). **Đã smoke-test trên GPU** với `public_test.csv` |
-| **Ghi `pred.csv` vào `/output` với hai cột `qid,answer`** | ✅ ghi-trước-khi-validate, đủ mọi `qid`, mỗi `answer` là 1 chữ cái A–J hợp lệ theo số phương án từng câu |
-| **GitHub chứa code + cách reproduce** | ✅ [github.com/meiiie/bang_c](https://github.com/meiiie/bang_c) — mã nguồn + `Dockerfile.qwen-selfconsist.kaniko` + hướng dẫn `docker run` (dưới) |
-| **Mô hình ≤5B, một mô hình, không mô hình/API ngoài** | ✅ Qwen3-4B-Instruct-2507 (dense 4B GGUF), chạy `local_llamacpp` offline, một mô hình duy nhất |
-| **Thuyết minh phương pháp (Ý tưởng)** | ✅ [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) + PPTX nộp riêng |
+| **Base image CUDA 12.2** | ✅ `nvidia/cuda:12.2.2-devel-ubuntu22.04` ([`Dockerfile.qwen-submission`](Dockerfile.qwen-submission)) |
+| **Dockerfile build từ base sạch, model tải lúc build** | ✅ model tải từ HF trong layer build; image self-contained |
+| **Entry-point `predict.py` đọc `/code/private_test.json`** | ✅ [`predict.py`](predict.py) (fallback robust sang `/data/*_test.{json,csv}`) |
+| **`inference.sh` chạy pipeline đầu-cuối** | ✅ [`inference.sh`](inference.sh) — `CMD ["bash","inference.sh"]` |
+| **Ghi `submission.csv` (`qid,answer`)** | ✅ ghi-trước-validate, đủ mọi `qid`, mỗi đáp án 1 chữ cái hợp lệ |
+| **Ghi `submission_time.csv` (`qid,answer,time`)** | ✅ đo `time.perf_counter()` **từng câu** lúc chạy |
+| **`requirements.txt`** | ✅ [`requirements.txt`](requirements.txt) (+ `llama-cpp-python` build CUDA trong Dockerfile) |
+| **README: Pipeline / Data / Resource Init** | ✅ ba mục ở trên |
+| **GitHub public + DockerHub image** | ✅ [github.com/meiiie/bang_c](https://github.com/meiiie/bang_c) · `hacamy12345/neko-core:qwen3-4b-r2-cuda122-20260626` |
+| **Mô hình ≤5B, một mô hình, không model/API ngoài** | ✅ Qwen3-4B-Instruct-2507 dense 4B, `local_llamacpp` offline |
 
 ## Đội thi — Neko Core
 
@@ -40,229 +106,148 @@ Trường **Đại học Hàng hải Việt Nam (VMU)**.
 | Phạm Thị Thu Thảo | KTN63ĐH | Thành viên |
 | Nghiêm Thị Mỹ Linh | KPM63ĐH | Thành viên |
 
-## Cách tái lập kết quả trong container (Ban Tổ chức đọc phần này)
+## Cách tái lập kết quả (Ban Tổ chức đọc phần này)
 
-Bài nộp là **một Docker image offline duy nhất, đã nướng sẵn mô hình bên trong**.
+Bài nộp là **một Docker image offline, đã nướng sẵn mô hình bên trong**. Hợp đồng đúng theo Submission
+Guideline: container đọc `/code/private_test.json` và ghi `submission.csv` + `submission_time.csv`.
 
 **Yêu cầu môi trường:**
 
 | | |
 |---|---|
-| GPU | **NVIDIA** (≥ 6GB VRAM; image dùng ~5GB — server BTC 16GB thừa sức) + driver hợp CUDA 12.8 (R525+). Wheel nướng native SASS cho **sm_70/75/80/86/89/90/120** (V100, T4, A100, Ampere, Ada, H100, Blackwell) **+ PTX floor compute_60** → **mọi GPU ≥ Pascal (kể cả P100) tự JIT lúc load** = không 0-điểm dù BTC dùng GPU nào |
-| Docker | Docker Engine/Desktop + **NVIDIA Container Toolkit** (cho cờ `--gpus all`) |
-| Dung lượng | ~20GB trống (image ~17GB nén) |
+| GPU | **NVIDIA** ≥ 6GB VRAM (image dùng ~5GB — server BTC 16GB thừa). Driver hợp **CUDA 12.2**. Multi-arch SASS `sm_70…90` + PTX floor `compute_60` → mọi GPU ≥ Pascal chạy được |
+| Docker | Docker Engine + **NVIDIA Container Toolkit** (cho `--gpus all`) |
+| Dung lượng | ~20GB trống cho image |
 | Mạng | chỉ cần lúc `docker pull`; **lúc chạy hoàn toàn offline** |
-| OS | Linux/macOS (khuyến nghị) hoặc Windows (Docker Desktop + WSL2) |
 
-**Linux / macOS (bash):**
+**Chạy đúng như BTC chấm** (mount đề vào `/code/private_test.json`):
 
 ```bash
-# 1) Kéo image (mô hình ≤5B nướng sẵn; ~17GB nén — phần lớn là base CUDA PyTorch)
-docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
+docker pull hacamy12345/neko-core:qwen3-4b-r2-cuda122-20260626
 
-# 2) Đặt đề thi vào ./data rồi chạy
-mkdir -p data output
-cp private_test.csv data/                       # (hoặc public_test.csv)
-docker run --rm --gpus all \
-  -v "$PWD/data:/data" -v "$PWD/output:/output" \
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
-# => ./output/pred.csv   (hai cột: qid,answer)
+# Đặt private_test.json vào ./code rồi mount cả thư mục vào /code
+mkdir -p code
+cp private_test.json code/
+docker run --rm --gpus all -v "$PWD/code:/code" \
+  hacamy12345/neko-core:qwen3-4b-r2-cuda122-20260626
+# => ./code/submission.csv         (qid,answer)
+#    ./code/submission_time.csv     (qid,answer,time)
 ```
 
-**Windows (PowerShell)** — chỉ khác cách viết đường dẫn mount:
+**Windows (PowerShell):**
 
 ```powershell
-docker pull hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
-mkdir data, output -Force
-copy private_test.csv data\
-docker run --rm --gpus all `
-  -v "${PWD}\data:/data" -v "${PWD}\output:/output" `
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
+docker pull hacamy12345/neko-core:qwen3-4b-r2-cuda122-20260626
+mkdir code -Force
+copy private_test.json code\
+docker run --rm --gpus all -v "${PWD}\code:/code" `
+  hacamy12345/neko-core:qwen3-4b-r2-cuda122-20260626
 ```
 
-Container tự động dò file đề trong `/data` (thứ tự `private_test.csv` → `public_test.csv` → biến thể
-`.json`), chạy workflow mặc định `self-consistency`, và ghi `/output/pred.csv`. `pred.csv` được **ghi
-TRƯỚC khi kiểm tra hợp đồng** và tự khớp đúng tập `qid` đầu vào, nên một câu lỗi không bao giờ làm hỏng
-(về 0) cả lần chạy. Mọi thứ chạy **offline** — không web, không API key, không dịch vụ ngoài.
-
-> Image **dựng sạch từ chính commit này** (`Dockerfile.qwen-selfconsist.kaniko`), không gắn cứng đáp án
-> public-test trong bất kỳ layer nào. Runtime `llama-cpp-python` build nguồn `GGML_NATIVE=off` → **chạy
-> trên mọi CPU** (wheel prebuilt SIGILL trên CPU cũ). Mô hình nướng sẵn: `Qwen3-4B-Instruct-2507` Q5_K_M
-> GGUF. Workflow `self-consistency` được chọn vì **robust > 1pp accuracy** — rủi ro thật của Bảng C là
-> container về 0 điểm (OOM/timeout/crash), không phải sai vài câu; RAG và LoRA fine-tune để ở image kế tiếp.
->
-> _(Image cũ `gemma26b-q4-portable-20260614` đạt 88.98 trên public-463 nhưng dùng mô hình 26B — **không
-> còn hợp lệ** dưới luật ≤5B; giữ chỉ để tham chiếu lịch sử.)_
+Container tự dò đề (`/code/private_test.json` → fallback `/data/*_test.{json,csv}`), chạy workflow
+`self-consistency` (k=1 CoT), và ghi 2 file kết quả vào `/code` (đồng thời `/output` để dự phòng).
+`submission.csv` được **ghi đủ mọi `qid`** và mỗi đáp án là 1 chữ cái hợp lệ — một câu lỗi không bao
+giờ làm hỏng (về 0) cả lần chạy. Mọi thứ **offline**.
 
 ### Hợp đồng đầu vào / đầu ra
 
 | Hạng mục | Giá trị |
 |---|---|
-| File đầu vào | `/data/private_test.csv` (hoặc `public_test.csv`; cũng nhận `.json`) |
-| Cột đầu vào | `qid`, `question`, và phương án — **một trong hai**: cột `choices` (danh sách JSON, hoặc ngăn bằng `\|\|\|`/tab), **hoặc** các cột chữ cái `A,B,C,D,…` |
-| File đầu ra | `/output/pred.csv` |
-| Cột đầu ra | `qid,answer` |
-| Giá trị `answer` | một chữ cái theo số phương án của TỪNG câu (A, B, C, D… tới J cho câu nhiều lựa chọn) |
+| File đầu vào | `/code/private_test.json` (JSON list `{qid, question, choices[]}`) |
+| File đầu ra | `submission.csv` — cột `qid,answer` |
+| File đầu ra | `submission_time.csv` — cột `qid,answer,time` (giây/câu, đo lúc chạy) |
+| Giá trị `answer` | 1 chữ cái theo số phương án của TỪNG câu (A, B, C, D…) |
 
-Loader đọc CSV bằng `csv.DictReader` (chịu BOM) và nhận tên cột không phân biệt hoa/thường; xem
-`contest.input_candidates` trong `configs/default.json` cho thứ tự dò file.
-
-### Tự kiểm thử nhanh (chạy đúng trên máy bất kỳ?)
-
-Để xác nhận container chạy đúng trên **một máy khác** mà chưa có đề thật, tạo một file mẫu rồi chạy y
-hệt lệnh trên. Lưu thành `data/private_test.csv`:
-
-```csv
-qid,question,A,B,C,D
-demo_001,"2 + 2 = ?",3,4,5,6
-demo_002,"Thủ đô của Việt Nam là?",Hà Nội,Huế,Đà Nẵng,TP. Hồ Chí Minh
-```
+### Tự kiểm thử nhanh
 
 ```bash
-docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
-cat output/pred.csv
-# Kỳ vọng: 2 dòng dạng "qid,answer", mỗi đáp án là 1 chữ cái A–D hợp lệ, ví dụ:
-#   qid,answer
-#   demo_001,A
-#   demo_002,A
-# (Đáp án cụ thể của 2 câu toy này KHÔNG quan trọng và có thể đổi giữa các lần chạy
-#  do self-consistency lấy mẫu — chỉ cần FORMAT pred.csv đúng là pipeline OK.)
+# Tạo code/private_test.json mẫu rồi chạy y hệt lệnh trên:
+cat > code/private_test.json <<'JSON'
+[
+  {"qid":"test_0001","question":"2 + 2 = ?","choices":["3","4","5","6"]},
+  {"qid":"test_0002","question":"Thủ đô của Việt Nam?","choices":["Hà Nội","Huế","Đà Nẵng","TP.HCM"]}
+]
+JSON
+docker run --rm --gpus all -v "$PWD/code:/code" \
+  hacamy12345/neko-core:qwen3-4b-r2-cuda122-20260626
+cat code/submission.csv code/submission_time.csv
+# Kỳ vọng: submission.csv 2 dòng "qid,answer"; submission_time.csv 2 dòng "qid,answer,time".
 ```
 
-Nếu ra đúng `pred.csv` hai cột `qid,answer` với đáp án A–D → pipeline chạy chuẩn trên máy đó. (Máy
-không có GPU vẫn chạy được nhưng RẤT chậm — bỏ `--gpus all` để thử CPU với file mẫu nhỏ; bộ 2000 câu
-thì bắt buộc GPU.)
+### Chạy private test 2000 câu (Vòng 2)
 
-### Chạy trên private test 2000 câu (Vòng-2)
+Lệnh **giống hệt** — chỉ cần `private_test.json` thật trong `./code`. Pipeline sequential, đo thời gian
+từng câu. Một mô hình 4B, VRAM ~5GB — không OOM trên GPU thi đấu.
 
-Lệnh **giống hệt** phần trên — chỉ cần đặt `private_test.csv` vào `./data`:
+## Mô hình & tuân thủ quy tắc Bảng C
 
-```bash
-mkdir -p data output
-cp private_test.csv data/
-docker run --rm --gpus all -v "$PWD/data:/data" -v "$PWD/output:/output" \
-  hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
-# => ./output/pred.csv  (2000 dòng: qid,answer)
-```
-
-- **Tự ưu tiên `private_test.csv`** (đứng đầu `contest.input_candidates`) nên không cần đổi cấu hình.
-- **Thời gian:** ~3 giây/câu trên 1 GPU (đo trên 463 = 1336s) → 2000 câu ≈ **~100 phút**. Một mô hình
-  4B, VRAM thấp (~5GB) — **không OOM** trên mọi GPU thi đấu.
-- **Chống về 0 điểm:** `--checkpoint-every 1` + `--auto-resume` (ghi sau mỗi câu); nếu container bị
-  ngắt giữa chừng, chạy lại sẽ tiếp tục từ checkpoint thay vì làm lại từ đầu. `pred.csv` được ghi
-  TRƯỚC khi validate và tự khớp đúng tập `qid` → một câu lỗi không bao giờ làm hỏng cả lần chạy.
-
-### Chi tiết image (đã nướng sẵn)
-
-| | |
-|---|---|
-| Tag (3 tag, cùng 1 digest) | `:qwen3-4b-selfconsist-20260618` = `:v0.7.2` = `:latest` |
-| Digest | `sha256:39c7891cefce0bf77caad6540dbdb2fec431684d318f7e58aabdf79939575eaf` |
-| Kích thước | ~17.62GB nén (base CUDA PyTorch chiếm phần lớn; model chỉ ~2.7GB) |
-| Phiên bản | Neko Core **v0.7.2** (arch-portable: mọi GPU NVIDIA) |
-| Mô hình nướng sẵn | `Qwen3-4B-Instruct-2507` Q5_K_M GGUF tại `/models/qwen3-4b.gguf` |
-| Runtime | `llama-cpp-python` build nguồn `GGML_NATIVE=off` (mọi CPU) + CUDA native SASS sm_70/75/80/86/89/90/120 + PTX floor compute_60 (mọi GPU NVIDIA ≥ Pascal: P100/V100→T4→A100→H100→Blackwell) |
-| Metadata | OCI labels (`docker inspect` xem `org.opencontainers.image.*` + `neko.model/workflow/contest`) |
-
-> Cả ba tag (`:qwen3-4b-selfconsist-20260618`, `:v0.7.2`, `:latest`) đều trỏ cùng digest `39c7891c…575eaf`
-> = image ≤5B Qwen3-4B v0.7.2. Tag có ngày là canonical (bất biến) — nên pin nó khi nộp.
-
-### Mô hình & tuân thủ quy tắc Bảng C
-
-- LLM: **Qwen3-4B-Instruct-2507** (dense 4B, GGUF Q5_K_M), chạy local qua llama.cpp (offline). Tuân
-  thủ luật Bảng C mới (2026-06-16): **≤5B tham số, mở mô hình, một mô hình duy nhất, không mô hình/API
-  ngoài**. Allowlist là **config-driven** (`runtime.model_policy`): `{"aliases":["*"],"max_params_b":5.0}`
-  ép mọi mô hình ≤5B; cờ `count_active_for_moe` để chốt total-vs-active cho MoE nếu cần.
-- **BTC xác nhận chính thức (2026-06-18):** (1) server chấm **16GB VRAM**; (2) **≤5B tính theo TỔNG tham số**
-  (nên MoE 26B-tổng bị loại; Qwen3-4B dense 4B-tổng hợp lệ); (3) **chỉ 1 model LLM ≤5B, KHÔNG embedding/rerank**.
-  → Bài nộp này tuân thủ tuyệt đối: đúng 1 LLM Qwen3-4B, không model phụ, dùng ~5GB/16GB, **không RAG/rerank**.
-- **Không gắn cứng đáp án public-test**; mọi đòn bẩy phải tổng quát hoá cho bộ private 2000 câu.
+- LLM: **Qwen3-4B-Instruct-2507** (dense 4B, GGUF Q5_K_M), chạy local qua llama.cpp (offline). Tuân thủ
+  luật ≤5B: **≤5B tham số, mở mô hình, một mô hình duy nhất, không mô hình/API ngoài, không embedding/rerank**.
+  Allowlist config-driven (`runtime.model_policy`): `{"aliases":["*"],"max_params_b":5.0}`.
+- **BTC xác nhận (2026-06-18):** server chấm 16GB VRAM; ≤5B tính theo TỔNG tham số; chỉ 1 LLM ≤5B,
+  không embedding/rerank. → Bài nộp tuân thủ tuyệt đối (1 LLM Qwen3-4B, ~5GB/16GB, không RAG/rerank).
+- **Không gắn cứng đáp án public-test.**
 
 ### Kết quả đã đo (minh bạch)
 
-- **Public-463 leaderboard: 83.59** — Qwen3-4B self-consistency, đo thật trên leaderboard chính thức.
-  Đây là bản ≤5B **chưa fine-tune, chưa RAG** (sàn an toàn). Đường tăng điểm tiếp theo: fine-tune
-  (LoRA) + RAG có kiểm soát — xem [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md).
-- **Hợp đồng đầu ra:** mỗi lần chạy harness tự kiểm `valid=True` + ghi `pred.csv` đủ mọi `qid`, đúng
-  hai cột, mỗi đáp án là chữ cái A–J hợp lệ theo số phương án của TỪNG câu (49/463 câu có > 4 phương án).
-  Container đọc CSV (`csv.DictReader`, hỗ trợ BOM) **và** JSON; thứ tự tìm: `private_test.csv` →
-  `public_test.csv` → `private_test.json` → `public_test.json` (`contest.input_candidates`).
-- **Đã smoke-test đường CSV (GPU, 2026-06-16):** chạy ship config trên `public_test.csv` (đúng format
-  BTC) → `pred.csv` hợp lệ (463 dòng, 0 fallback, contract 40/40) và **trùng khớp 463/463 (100%)** với
-  bản pred JSON đã đạt 83.59 → loader đọc CSV BTC cho ra đúng đáp án ghi điểm.
+- **Public-463 leaderboard: 83.59** — Qwen3-4B self-consistency (cùng engine, đo trên leaderboard chính
+  thức). Bản ≤5B chưa fine-tune, chưa RAG (sàn an toàn). Hướng tăng điểm: LoRA fine-tune + RAG có kiểm
+  soát — xem [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md).
+- **Về tên "self-consistency":** strategy mang tên module này nhưng cấu hình `self_consistency_samples=1`
+  ⇒ chạy đúng bằng **chain-of-thought k=1** (1 mẫu/câu). Đã đo voting k=5 không cải thiện → chốt k=1 để
+  tối ưu điểm Time.
 
 ### Tài liệu thuyết minh phương pháp (chấm điểm Ý tưởng)
 
-- [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) — **Tiếng Việt** (bản chi tiết)
+- [`docs/method-writeup-vi.md`](docs/method-writeup-vi.md) — Tiếng Việt (chi tiết)
 - [`docs/method-writeup.md`](docs/method-writeup.md) — English
-
-> Bản trình bày **PPTX** được nộp riêng theo kênh của Ban Tổ chức.
+- Bản trình bày **PPTX** nộp riêng theo kênh BTC.
 
 ---
 
 ## Developer reference (English)
 
-Neko Core is a **config-first** harness: model/provider selection, thresholds, and rubric weights
-live in `configs/default.json`, not in source. The submitted container is intentionally minimal and
-offline; development tracing/eval lives outside the shipped artifact.
+Neko Core is a **config-first** harness: model/provider selection, thresholds, and rubric weights live
+in `configs/default.json`, not in source. The submitted container is intentionally minimal and offline.
 
 ### Project structure
 
 ```text
+predict.py             BTC Round-2 entry: /code/private_test.json -> submission.csv + submission_time.csv
+inference.sh           CMD ["bash","inference.sh"] -> python3 predict.py
+Dockerfile.qwen-submission   The Round-2 contest image (CUDA 12.2, Qwen3-4B Q5_K_M baked in)
 src/hackaithon_c/      Harness: loader -> classifier -> prompting -> solver -> normalizer
-                       -> contract validation -> pred.csv exporter (+ config, calibration, checkpoint)
-configs/default.json   Config-first runtime: providers, model paths, profiles, thresholds, rubric,
-                       runtime.model_policy (the config-driven ≤5B model allowlist)
-docker/                neko-entrypoint.sh (reads /data, writes /output/pred.csv)
-                       + qwen-selfconsist.neko-core.json (the baked ≤5B image config overlay)
-Dockerfile.qwen-selfconsist.kaniko   The ≤5B contest image build (Kaniko, self-contained Qwen3-4B Q5_K_M)
-scripts/               Build + dev helpers
-tests/                 Unit tests (run: python -m unittest discover -s tests)
+                       -> contract validation -> exporter (+ config, calibration, checkpoint)
+configs/default.json   Config-first runtime: providers, model paths, thresholds, runtime.model_policy
+docker/                neko-entrypoint.sh + qwen-selfconsist.neko-core.json (baked ≤5B config overlay)
+tests/                 Unit tests (python -m unittest discover -s tests)
 docs/                  Method write-up, architecture, evaluation rubric
-notes/                 Measured-result analysis (the leaders + the rejected levers, with numbers)
+notes/                 Measured-result analysis (leaders + rejected levers, with numbers)
+```
+
+### Build the contest image (reproducibility)
+
+```bash
+# From this commit. Source-builds llama-cpp-python (GGML_NATIVE=OFF, CUDA 12.2 multi-arch)
+# and bakes Qwen3-4B-Instruct-2507 Q5_K_M GGUF. No public-test answers baked into any layer.
+docker build -f Dockerfile.qwen-submission \
+  -t hacamy12345/neko-core:qwen3-4b-r2-cuda122-20260626 .
 ```
 
 ### Run locally (development)
 
-```powershell
-.\scripts\bootstrap.ps1          # create .venv, install editable package, fast checks
-.\neko.ps1 --doctor              # environment + contract diagnostics
-.\neko.ps1 --workflow self-consistency --input <public-test.json> --run-dir run --auto-resume
-.\neko.ps1 --check-submission <pred.csv>   # validate name/header/qids/per-row letters
-```
-
-`--check-submission` derives the valid answer letters per row from the input (no hard-coded A–D).
-NVIDIA is an optional **development-only** provider (`--profile nvidia-gemma31b-api` + `NVIDIA_API_KEY`);
-the contest path stays `local_llamacpp` with the baked GGUF.
-
-### Build the contest image (reproducibility)
-
-The submitted image is built from this commit by `Dockerfile.qwen-selfconsist.kaniko` — it source-builds
-`llama-cpp-python` with `GGML_NATIVE=OFF` (so the binary runs on any judge CPU) and bakes
-`Qwen3-4B-Instruct-2507` Q5_K_M GGUF + the harness + the `docker/qwen-selfconsist.neko-core.json` config
-overlay. No public-test answers are baked into any layer.
-
 ```bash
-# Build + push (Kaniko, no Docker-in-Docker needed; or use `docker build` on a Docker host):
-/kaniko/executor \
-  --context dir://. \
-  --dockerfile ./Dockerfile.qwen-selfconsist.kaniko \
-  --destination docker.io/hacamy12345/neko-core:qwen3-4b-selfconsist-20260618
+# No-model wiring/format test (deterministic heuristic, no GPU):
+NEKO_DRY_RUN=1 python predict.py path/to/public-test.json
+# -> submission.csv + submission_time.csv (validates I/O + per-sample timing)
 ```
 
-The image is large (~17GB compressed — the CUDA PyTorch base dominates; the model is only ~2.7GB).
-See [`docs/runpod-operations.md`](docs/runpod-operations.md) and [`docs/release-process.md`](docs/release-process.md).
+`NEKO_INPUT` overrides the input path; `NEKO_OUTPUT_DIR` overrides where the CSVs are written.
 
 ### Architecture & docs
 
-- [`docs/AGENTIC-CLI-DEVELOPER-GUIDE.md`](docs/AGENTIC-CLI-DEVELOPER-GUIDE.md) — **deep guide** for
-  developing Neko Core as a reusable AI Agentic CLI (providers/API setup, env vars, workflows,
-  agent/tool registries, how to extend). Read this to build on Neko Core beyond the contest.
+- [`docs/AGENTIC-CLI-DEVELOPER-GUIDE.md`](docs/AGENTIC-CLI-DEVELOPER-GUIDE.md) — deep guide for Neko Core
 - [`docs/harness-architecture.md`](docs/harness-architecture.md) — layered pipeline + contracts
 - [`docs/evaluation-rubric.md`](docs/evaluation-rubric.md) — scoring model
-- [`docs/local-gemma-runtime.md`](docs/local-gemma-runtime.md) — local llama.cpp GGUF runtime mechanics
-  (written for Gemma; the same `local_llamacpp` path now serves the ≤5B Qwen3-4B GGUF)
 - [`notes/2026-06-16-le5b-rules-and-model-policy.md`](notes/2026-06-16-le5b-rules-and-model-policy.md) —
-  the ≤5B rules pivot, config-driven model policy, and measured Qwen3-4B results
-- [`docs/submission-readiness.md`](docs/submission-readiness.md) — submission checklist
+  the ≤5B rules pivot + config-driven model policy + measured Qwen3-4B results

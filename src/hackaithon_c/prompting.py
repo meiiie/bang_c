@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, replace
 from functools import lru_cache
@@ -29,6 +30,31 @@ Think step by step to find the single best option. Pay attention to:
 - negation (words meaning "not", "incorrect", "except", "false") — these flip the target;
 - any calculation the question requires — compute it before comparing to the options.
 Use only the information in the question and its options.
+Finish with a final line in exactly this format:
+ANSWER: <letter>
+where <letter> is one of the available option letters."""
+
+
+# Experimental (env HACKC_REASONING_STYLE=elimination): Step-Back + Generated-Knowledge +
+# Eliminate-Then-Select + primary-cause ranking. Targets the dominant measured error mode
+# (Vietnamese "chủ yếu/ý nghĩa/so sánh/phủ định" questions where several options are partly
+# true). SOTA basis: Step-Back (DeepMind +7-11% MMLU sci), Eliminate-Then-Select (+4.3%),
+# Generated-Knowledge prompting. Kept concise to bound inference Time. NOT shipped by default.
+REASONING_SYSTEM_PROMPT_ELIM = """You are a careful exam solver for multiple-choice questions
+(often Vietnamese THPT: history, geography, civics, biology, physics, chemistry, math).
+Read the question in its own language; do not assume any particular language.
+
+Solve with this disciplined procedure, and keep every step to one short line:
+1. PRINCIPLE: name the concept/rule the question tests (step back to the general principle).
+2. KEY FACTS: recall the specific facts needed (dates, places, definitions, formulas).
+   If a calculation is required, compute it now.
+3. ELIMINATE: examine EACH option once; mark KEEP or OUT with a brief reason (OUT if false,
+   off-topic, or not what is asked). Negation ("không/except/sai/không phải/incorrect") flips
+   the target — then KEEP the false/unsupported option instead.
+4. SELECT: if the question asks for the MAIN / PRIMARY / most important / "chủ yếu" / decisive
+   factor or key significance (several options may be partly true), among the KEEP options pick
+   the one that is the most DIRECT, decisive, or root cause — not a true-but-secondary one.
+5. Commit to exactly one letter.
 Finish with a final line in exactly this format:
 ANSWER: <letter>
 where <letter> is one of the available option letters."""
@@ -177,6 +203,18 @@ def build_reasoning_prompt(
     an optional short `reasoning` string shown before the answer line.
     """
     parts: list[str] = _exemplar_parts(exemplars)
+    if os.environ.get("HACKC_REASONING_STYLE", "").strip().lower() == "elimination":
+        parts.append(
+            "Solve this multiple-choice question using the procedure in the system message "
+            "(principle -> key facts -> eliminate each option -> select the primary). Be concise.\n\n"
+            f"{_format_problem(problem)}\n\n"
+            f"Available letters: {_letters(problem)}\n"
+            "End your answer with a line: ANSWER: <letter>"
+        )
+        user_prompt = "\n\n---\n\n".join(parts)
+        return PromptBundle(
+            REASONING_SYSTEM_PROMPT_ELIM, user_prompt, "reasoning_elim", max_tokens=max_tokens
+        )
     parts.append(
         "Solve this multiple-choice question. Reason briefly, then commit to one letter.\n\n"
         f"{_format_problem(problem)}\n\n"
